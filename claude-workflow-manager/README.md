@@ -36,7 +36,7 @@ CLAUDE_API_KEY=your_claude_api_key_here
 
 3. Start the application with Docker Compose:
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 4. Access the application:
