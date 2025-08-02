@@ -4,6 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
 import os
 import asyncio
+import subprocess
 from typing import Dict, List, Optional
 import json
 import uuid
@@ -13,6 +14,12 @@ from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, Subagent, L
 from claude_manager import ClaudeCodeManager
 from database import Database
 from prompt_file_manager import PromptFileManager
+
+def get_git_env():
+    """Get git environment with SSH configuration"""
+    env = os.environ.copy()
+    env['GIT_SSH_COMMAND'] = 'ssh -o UserKnownHostsFile=/root/.ssh/known_hosts -o StrictHostKeyChecking=yes'
+    return env
 
 app = FastAPI()
 
@@ -293,14 +300,14 @@ async def sync_prompt_to_repo(prompt_id: str, data: dict):
     
     # Create temp directory and clone repo
     import tempfile
-    import subprocess
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Clone the repository
+        # Clone the repository with SSH support
         subprocess.run(
             ["git", "clone", workflow["git_repo"], temp_dir],
             check=True,
-            capture_output=True
+            capture_output=True,
+            env=get_git_env()
         )
         
         # Initialize file manager and save prompt
@@ -308,12 +315,13 @@ async def sync_prompt_to_repo(prompt_id: str, data: dict):
         prompt_obj = Prompt(**prompt)
         filepath = file_manager.save_prompt_to_file(prompt_obj, sequence, parallel)
         
-        # Push changes back to repo
+        # Push changes back to repo with SSH support
         subprocess.run(
             ["git", "push"],
             cwd=temp_dir,
             check=True,
-            capture_output=True
+            capture_output=True,
+            env=get_git_env()
         )
         
     return {"success": True, "filepath": filepath}
@@ -335,14 +343,14 @@ async def sync_all_prompts_to_repo(workflow_id: str, data: dict):
         return {"success": True, "saved_files": {}}
     
     import tempfile
-    import subprocess
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Clone the repository
+        # Clone the repository with SSH support
         subprocess.run(
             ["git", "clone", workflow["git_repo"], temp_dir],
             check=True,
-            capture_output=True
+            capture_output=True,
+            env=get_git_env()
         )
         
         # Initialize file manager and sync prompts
@@ -350,12 +358,13 @@ async def sync_all_prompts_to_repo(workflow_id: str, data: dict):
         prompt_objects = [Prompt(**p) for p in workflow_prompts]
         saved_files = file_manager.sync_prompts_to_repo(prompt_objects, auto_sequence)
         
-        # Push changes back to repo
+        # Push changes back to repo with SSH support
         subprocess.run(
             ["git", "push"],
             cwd=temp_dir,
             check=True,
-            capture_output=True
+            capture_output=True,
+            env=get_git_env()
         )
         
     return {"success": True, "saved_files": saved_files}
@@ -368,14 +377,14 @@ async def get_prompts_from_repo(workflow_id: str):
         raise HTTPException(status_code=404, detail="Workflow not found")
     
     import tempfile
-    import subprocess
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Clone the repository
+        # Clone the repository with SSH support
         subprocess.run(
             ["git", "clone", "--depth", "1", workflow["git_repo"], temp_dir],
             check=True,
-            capture_output=True
+            capture_output=True,
+            env=get_git_env()
         )
         
         # Load prompts
@@ -396,16 +405,16 @@ async def import_prompts_from_repo(workflow_id: str):
         raise HTTPException(status_code=404, detail="Workflow not found")
     
     import tempfile
-    import subprocess
     
     imported_prompts = []
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Clone the repository
+        # Clone the repository with SSH support
         subprocess.run(
             ["git", "clone", "--depth", "1", workflow["git_repo"], temp_dir],
             check=True,
-            capture_output=True
+            capture_output=True,
+            env=get_git_env()
         )
         
         # Load prompts from repo

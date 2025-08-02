@@ -35,11 +35,15 @@ class ClaudeCodeManager:
             # Create temporary directory for the git repo
             temp_dir = tempfile.mkdtemp()
             
-            # Clone the git repository
+            # Clone the git repository with SSH support
+            env = os.environ.copy()
+            env['GIT_SSH_COMMAND'] = 'ssh -o UserKnownHostsFile=/root/.ssh/known_hosts -o StrictHostKeyChecking=yes'
+            
             subprocess.run(
                 ["git", "clone", instance.git_repo, temp_dir],
                 check=True,
-                capture_output=True
+                capture_output=True,
+                env=env
             )
             
             # Initialize Claude Code session

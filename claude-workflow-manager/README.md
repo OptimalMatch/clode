@@ -34,12 +34,27 @@ cd claude-workflow-manager
 CLAUDE_API_KEY=your_claude_api_key_here
 ```
 
-3. Start the application with Docker Compose:
+3. Set up Git authentication (choose one method):
+
+**For SSH Key Authentication (Recommended):**
+```bash
+# Ensure your SSH keys are in ~/.ssh/ directory
+# The application will automatically mount your SSH keys
+# Your repositories should use SSH URLs like: git@github.com:user/repo.git
+```
+
+**For HTTPS with Personal Access Token:**
+```bash
+# Use repository URLs with embedded tokens:
+# https://username:token@github.com/user/repo.git
+```
+
+4. Start the application with Docker Compose:
 ```bash
 docker compose up -d
 ```
 
-4. Access the application:
+5. Access the application:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
@@ -108,8 +123,29 @@ npm start
 - `REACT_APP_API_URL` - Backend API URL (default: http://localhost:8000)
 - `REACT_APP_WS_URL` - WebSocket URL (default: ws://localhost:8000)
 
+## Git Authentication
+
+The application supports multiple git authentication methods:
+
+### SSH Key Authentication (Recommended)
+- Place your SSH keys in `~/.ssh/` directory
+- Use SSH repository URLs: `git@github.com:user/repo.git`
+- Keys are automatically mounted read-only into the container
+- Supports GitHub, GitLab, and Bitbucket by default
+
+### HTTPS with Personal Access Token
+- Embed tokens in repository URLs: `https://username:token@github.com/user/repo.git`
+- Less secure as tokens may be logged
+- Not recommended for production use
+
+### Public Repositories
+- No authentication required
+- Use standard HTTPS URLs: `https://github.com/user/repo.git`
+
 ## Security Notes
 
 - The default MongoDB credentials in docker-compose.yml should be changed for production
+- SSH keys are mounted read-only for security
 - Ensure proper authentication is implemented before deploying to production
 - Use HTTPS/WSS in production environments
+- For production, consider using git credential helpers instead of embedding tokens in URLs

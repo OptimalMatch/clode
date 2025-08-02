@@ -32,6 +32,8 @@ services:
     volumes:
       - ./backend:/app
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/.ssh:/root/.ssh:ro
+      - ssh_known_hosts:/root/.ssh_known_hosts
     networks:
       - claude-network
 
@@ -63,6 +65,7 @@ services:
 
 volumes:
   mongo_data:
+  ssh_known_hosts:
 
 networks:
   claude-network:
