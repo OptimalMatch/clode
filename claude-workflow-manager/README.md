@@ -5,6 +5,7 @@ A full-stack application for managing Claude Code instances in Git workflows wit
 ## Features
 
 - **Workflow Management**: Create and manage workflows for different Git repositories
+- **Agent Discovery**: Automatically discover and sync subagents from `.claude/agents/` folder in repositories
 - **Prompt Library**: Create reusable prompts with sequential and parallel execution steps
 - **Instance Management**: Spawn multiple Claude Code instances in parallel
 - **Interactive Terminal**: Real-time interaction with each Claude instance
@@ -85,8 +86,16 @@ docker compose up -d
 4. Click "Open Terminal" to interact with running instances
 5. Use the pause/interrupt feature to provide feedback mid-execution
 
+### Agent Discovery
+
+1. Create agent definition files in your repository's `.claude/agents/` folder
+2. Use JSON or YAML format for agent definitions
+3. The system automatically discovers and syncs agents when you trigger discovery
+4. Agents become available as subagents for enhanced prompt execution
+
 ## API Endpoints
 
+### Core Endpoints
 - `POST /api/workflows` - Create a new workflow
 - `GET /api/workflows` - List all workflows
 - `GET /api/workflows/{id}` - Get workflow details
@@ -98,6 +107,12 @@ docker compose up -d
 - `POST /api/instances/{id}/interrupt` - Interrupt a running instance
 - `POST /api/instances/{id}/execute` - Execute a prompt on an instance
 - `WS /ws/{instance_id}` - WebSocket connection for real-time updates
+
+### Agent Discovery Endpoints
+- `POST /api/workflows/{workflow_id}/discover-agents` - Discover and sync agents from repository
+- `GET /api/workflows/{workflow_id}/repo-agents` - Preview agents in repository without syncing
+- `GET /api/agent-format-examples` - Get example agent definition formats
+- `POST /api/workflows/{workflow_id}/auto-discover-agents` - Auto-discover agents on workflow update
 
 ## Development
 
@@ -141,6 +156,112 @@ The application supports multiple git authentication methods:
 ### Public Repositories
 - No authentication required
 - Use standard HTTPS URLs: `https://github.com/user/repo.git`
+
+## Agent Definitions
+
+Define subagents in your repository's `.claude/agents/` folder to enhance Claude's capabilities with specialized roles.
+
+### Agent Definition Format
+
+Create JSON, YAML, or Markdown files in `.claude/agents/` folder:
+
+**JSON Example (`.claude/agents/code_reviewer.json`):**
+```json
+{
+  "name": "code_reviewer",
+  "description": "Specialized agent for code review and quality analysis",
+  "system_prompt": "You are a senior software engineer focused on code quality, best practices, and security. Review code thoroughly and provide constructive feedback.",
+  "capabilities": ["code_review", "security_audit", "refactoring"],
+  "trigger_keywords": ["review", "analyze", "audit", "quality"],
+  "parameters": {
+    "focus_areas": ["security", "performance", "maintainability"],
+    "strictness": "high"
+  },
+  "max_tokens": 4096,
+  "temperature": 0.3
+}
+```
+
+**YAML Example (`.claude/agents/test_generator.yaml`):**
+```yaml
+name: test_generator
+description: Automated test generation and validation agent
+system_prompt: |
+  You are a testing specialist. Generate comprehensive test cases, 
+  including unit tests, integration tests, and edge cases.
+capabilities:
+  - testing
+  - code_review
+trigger_keywords:
+  - test
+  - validate
+  - verify
+parameters:
+  test_frameworks: ["pytest", "jest", "junit"]
+  coverage_target: 90
+max_tokens: 4096
+temperature: 0.2
+```
+
+**Markdown Example (`.claude/agents/code-reviewer.md`):**
+```markdown
+---
+name: code_reviewer
+description: Code quality and review specialist
+capabilities:
+  - code_review
+  - security_audit
+trigger_keywords:
+  - review
+  - audit
+  - quality
+max_tokens: 4096
+temperature: 0.3
+---
+
+# Code Reviewer
+
+You are a senior software engineer focused on code quality, best practices, and security. 
+
+## Your Role
+- Review code for quality, security, and best practices
+- Provide constructive feedback and suggestions
+- Identify potential issues and improvements
+- Ensure code follows team standards
+
+Always be thorough but encouraging in your reviews.
+```
+
+**Simple Markdown Example (`.claude/agents/tech-lead.md`):**
+```markdown
+# Tech Lead
+
+You are an experienced technical leader who guides architecture decisions 
+and mentors junior developers.
+
+Focus on:
+- System design and architecture
+- Code quality and best practices  
+- Team coordination and mentoring
+- Technical strategy and planning
+```
+
+### Available Capabilities
+- `code_review` - Code quality and style analysis
+- `testing` - Test generation and validation
+- `documentation` - Documentation writing and improvement
+- `refactoring` - Code restructuring and optimization
+- `security_audit` - Security vulnerability analysis
+- `performance_optimization` - Performance analysis and improvements
+- `data_analysis` - Data processing and analysis
+- `api_design` - API design and architecture
+- `custom` - Custom specialized capabilities
+
+### Agent Discovery Workflow
+1. Add agent definition files to `.claude/agents/` in your repository
+2. Call `POST /api/workflows/{workflow_id}/discover-agents` to sync agents
+3. Agents become available as subagents for enhanced prompt execution
+4. Reference agents by name or trigger keywords in your prompts
 
 ## Security Notes
 

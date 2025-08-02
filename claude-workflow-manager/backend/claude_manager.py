@@ -1,10 +1,9 @@
 import asyncio
-import docker
 import os
 import json
 from typing import Dict, Optional, List
 from fastapi import WebSocket
-from claude_code import ClaudeCodeSession
+from claude_code_sdk import query
 import subprocess
 import tempfile
 from models import ClaudeInstance, InstanceStatus, PromptStep, Subagent, InstanceLog, LogType
@@ -15,9 +14,8 @@ from datetime import datetime
 
 class ClaudeCodeManager:
     def __init__(self):
-        self.instances: Dict[str, ClaudeCodeSession] = {}
+        self.instances: Dict[str, dict] = {}  # Store instance info instead of session objects
         self.websockets: Dict[str, WebSocket] = {}
-        self.docker_client = docker.from_env()
         self.db = Database()
         
     async def spawn_instance(self, instance: ClaudeInstance):
@@ -46,13 +44,16 @@ class ClaudeCodeManager:
                 env=env
             )
             
-            # Initialize Claude Code session
-            session = ClaudeCodeSession(
-                api_key=os.getenv("CLAUDE_API_KEY"),
-                working_directory=temp_dir
-            )
+            # Store instance information
+            instance_info = {
+                "id": instance.id,
+                "working_directory": temp_dir,
+                "git_repo": instance.git_repo,
+                "workflow_id": instance.workflow_id,
+                "status": InstanceStatus.READY
+            }
             
-            self.instances[instance.id] = session
+            self.instances[instance.id] = instance_info
             
             # Update instance status
             await self.db.update_instance_status(instance.id, InstanceStatus.READY)
@@ -95,8 +96,8 @@ class ClaudeCodeManager:
             })
     
     async def execute_prompt(self, instance_id: str, prompt_content: str) -> bool:
-        session = self.instances.get(instance_id)
-        if not session:
+        instance_info = self.instances.get(instance_id)
+        if not instance_info:
             return False
         
         try:
@@ -119,7 +120,7 @@ class ClaudeCodeManager:
                 # Log input with detected subagents
                 await self._log_event(
                     instance_id=instance_id,
-                    workflow_id=session.workflow_id if hasattr(session, 'workflow_id') else None,
+                    workflow_id=instance_info.get("workflow_id"),
                     log_type=LogType.INPUT,
                     content=enhanced_content,
                     step_id=step.get("id"),
@@ -134,16 +135,29 @@ class ClaudeCodeManager:
                 for subagent_name in detected_subagents:
                     await self._log_event(
                         instance_id=instance_id,
-                        workflow_id=session.workflow_id if hasattr(session, 'workflow_id') else None,
+                        workflow_id=instance_info.get("workflow_id"),
                         log_type=LogType.SUBAGENT,
                         content=f"Activating subagent: {subagent_name}",
                         subagent_name=subagent_name,
                         step_id=step.get("id")
                     )
                 
-                # Execute the step and measure time
+                # Execute the step and measure time using claude-code-sdk
                 start_time = time.time()
-                response = await session.send_message(enhanced_content)
+                
+                # Change to the working directory for this instance
+                original_cwd = os.getcwd()
+                os.chdir(instance_info["working_directory"])
+                
+                response_parts = []
+                try:
+                    async for message in query(prompt=enhanced_content):
+                        response_parts.append(str(message))
+                finally:
+                    # Always restore original working directory
+                    os.chdir(original_cwd)
+                
+                response = "\n".join(response_parts)
                 execution_time = int((time.time() - start_time) * 1000)
                 
                 # Estimate tokens (rough approximation)
@@ -152,7 +166,7 @@ class ClaudeCodeManager:
                 # Log the response
                 await self._log_event(
                     instance_id=instance_id,
-                    workflow_id=session.workflow_id if hasattr(session, 'workflow_id') else None,
+                    workflow_id=instance_info.get("workflow_id"),
                     log_type=LogType.OUTPUT,
                     content=response,
                     step_id=step.get("id"),
@@ -184,18 +198,17 @@ class ClaudeCodeManager:
             return False
     
     async def interrupt_instance(self, instance_id: str, feedback: str) -> bool:
-        session = self.instances.get(instance_id)
-        if not session:
+        instance_info = self.instances.get(instance_id)
+        if not instance_info:
             return False
         
         try:
-            # Send interrupt signal to Claude Code
-            await session.interrupt()
+            # Note: claude-code-sdk doesn't have a built-in interrupt mechanism
+            # We can simulate this by updating status and sending feedback
             
             # Send feedback if provided
             if feedback:
-                await session.send_message(feedback)
-                await self.db.add_instance_log(instance_id, "input", feedback)
+                await self.send_input(instance_id, feedback)
             
             # Update status
             await self.db.update_instance_status(instance_id, InstanceStatus.PAUSED)
@@ -227,23 +240,36 @@ class ClaudeCodeManager:
             del self.websockets[instance_id]
     
     async def send_input(self, instance_id: str, input_text: str):
-        session = self.instances.get(instance_id)
-        if not session:
+        instance_info = self.instances.get(instance_id)
+        if not instance_info:
             return
         
         try:
             # Log input
             await self._log_event(
                 instance_id=instance_id,
-                workflow_id=session.workflow_id if hasattr(session, 'workflow_id') else None,
+                workflow_id=instance_info.get("workflow_id"),
                 log_type=LogType.INPUT,
                 content=input_text,
                 metadata={"source": "user_interaction"}
             )
             
-            # Send input to Claude Code and measure time
+            # Send input to Claude Code and measure time using claude-code-sdk
             start_time = time.time()
-            response = await session.send_message(input_text)
+            
+            # Change to the working directory for this instance
+            original_cwd = os.getcwd()
+            os.chdir(instance_info["working_directory"])
+            
+            response_parts = []
+            try:
+                async for message in query(prompt=input_text):
+                    response_parts.append(str(message))
+            finally:
+                # Always restore original working directory
+                os.chdir(original_cwd)
+            
+            response = "\n".join(response_parts)
             execution_time = int((time.time() - start_time) * 1000)
             
             # Estimate tokens
@@ -252,7 +278,7 @@ class ClaudeCodeManager:
             # Log output
             await self._log_event(
                 instance_id=instance_id,
-                workflow_id=session.workflow_id if hasattr(session, 'workflow_id') else None,
+                workflow_id=instance_info.get("workflow_id"),
                 log_type=LogType.OUTPUT,
                 content=response,
                 tokens_used=tokens_used,
@@ -270,7 +296,7 @@ class ClaudeCodeManager:
             # Log error
             await self._log_event(
                 instance_id=instance_id,
-                workflow_id=session.workflow_id if hasattr(session, 'workflow_id') else None,
+                workflow_id=instance_info.get("workflow_id"),
                 log_type=LogType.ERROR,
                 content=f"Error processing input: {str(e)}",
                 metadata={"input": input_text}

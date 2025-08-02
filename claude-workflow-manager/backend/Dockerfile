@@ -6,7 +6,12 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     openssh-client \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code CLI globally
+RUN npm install -g @anthropic-ai/claude-code
 
 # Set up SSH configuration
 RUN mkdir -p /root/.ssh && \

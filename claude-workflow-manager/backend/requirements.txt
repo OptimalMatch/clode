@@ -10,7 +10,6 @@ celery==5.3.4
 anthropic==0.25.0
 claude-code-sdk==0.0.19
 gitpython==3.1.41
-docker==7.0.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-dotenv==1.0.0

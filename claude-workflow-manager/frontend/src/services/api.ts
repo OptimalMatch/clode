@@ -186,3 +186,25 @@ export const promptFileApi = {
     return response.data;
   },
 };
+
+export const agentDiscoveryApi = {
+  discoverAndSyncAgents: async (workflowId: string) => {
+    const response = await api.post(`/api/workflows/${workflowId}/discover-agents`);
+    return response.data;
+  },
+  
+  previewRepoAgents: async (workflowId: string) => {
+    const response = await api.get(`/api/workflows/${workflowId}/repo-agents`);
+    return response.data;
+  },
+  
+  getFormatExamples: async () => {
+    const response = await api.get('/api/agent-format-examples');
+    return response.data;
+  },
+  
+  autoDiscoverAgents: async (workflowId: string) => {
+    const response = await api.post(`/api/workflows/${workflowId}/auto-discover-agents`);
+    return response.data;
+  },
+};

@@ -2,6 +2,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
+from bson import ObjectId
 from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics
 
 class Database:
@@ -39,7 +40,7 @@ class Database:
         await self.db.logs.create_index([("instance_id", 1), ("timestamp", -1)])
         await self.db.logs.create_index([("workflow_id", 1), ("timestamp", -1)])
         await self.db.logs.create_index("type")
-        await self.db.logs.create_text_index("content")
+        await self.db.logs.create_index([("content", "text")])
         
         # Subagents indexes
         await self.db.subagents.create_index("name", unique=True)
@@ -65,11 +66,17 @@ class Database:
         return workflows
     
     async def get_workflow(self, workflow_id: str) -> Optional[Dict]:
-        workflow = await self.db.workflows.find_one({"_id": workflow_id})
-        if workflow:
-            workflow["id"] = str(workflow["_id"])
-            del workflow["_id"]
-        return workflow
+        try:
+            # Convert string ID to ObjectId for MongoDB query
+            object_id = ObjectId(workflow_id) if ObjectId.is_valid(workflow_id) else workflow_id
+            workflow = await self.db.workflows.find_one({"_id": object_id})
+            if workflow:
+                workflow["id"] = str(workflow["_id"])
+                del workflow["_id"]
+            return workflow
+        except Exception as e:
+            print(f"Error retrieving workflow {workflow_id}: {e}")
+            return None
     
     # Prompt methods
     async def create_prompt(self, prompt: Prompt) -> str:
@@ -90,14 +97,19 @@ class Database:
         return prompts
     
     async def update_prompt(self, prompt_id: str, prompt: Prompt) -> bool:
-        prompt_dict = prompt.dict()
-        prompt_dict["updated_at"] = datetime.utcnow()
-        
-        result = await self.db.prompts.update_one(
-            {"_id": prompt_id},
-            {"$set": prompt_dict}
-        )
-        return result.modified_count > 0
+        try:
+            prompt_dict = prompt.dict()
+            prompt_dict["updated_at"] = datetime.utcnow()
+            
+            object_id = ObjectId(prompt_id) if ObjectId.is_valid(prompt_id) else prompt_id
+            result = await self.db.prompts.update_one(
+                {"_id": object_id},
+                {"$set": prompt_dict}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error updating prompt {prompt_id}: {e}")
+            return False
     
     # Instance methods
     async def create_instance(self, instance: ClaudeInstance) -> str:
@@ -262,11 +274,16 @@ class Database:
         return subagents
     
     async def get_subagent(self, subagent_id: str) -> Optional[Dict]:
-        subagent = await self.db.subagents.find_one({"_id": subagent_id})
-        if subagent:
-            subagent["id"] = str(subagent["_id"])
-            del subagent["_id"]
-        return subagent
+        try:
+            object_id = ObjectId(subagent_id) if ObjectId.is_valid(subagent_id) else subagent_id
+            subagent = await self.db.subagents.find_one({"_id": object_id})
+            if subagent:
+                subagent["id"] = str(subagent["_id"])
+                del subagent["_id"]
+            return subagent
+        except Exception as e:
+            print(f"Error retrieving subagent {subagent_id}: {e}")
+            return None
     
     async def get_subagent_by_name(self, name: str) -> Optional[Dict]:
         subagent = await self.db.subagents.find_one({"name": name})
@@ -276,15 +293,25 @@ class Database:
         return subagent
     
     async def update_subagent(self, subagent_id: str, subagent: Subagent) -> bool:
-        subagent_dict = subagent.dict()
-        subagent_dict["updated_at"] = datetime.utcnow()
-        
-        result = await self.db.subagents.update_one(
-            {"_id": subagent_id},
-            {"$set": subagent_dict}
-        )
-        return result.modified_count > 0
+        try:
+            subagent_dict = subagent.dict()
+            subagent_dict["updated_at"] = datetime.utcnow()
+            
+            object_id = ObjectId(subagent_id) if ObjectId.is_valid(subagent_id) else subagent_id
+            result = await self.db.subagents.update_one(
+                {"_id": object_id},
+                {"$set": subagent_dict}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error updating subagent {subagent_id}: {e}")
+            return False
     
     async def delete_subagent(self, subagent_id: str) -> bool:
-        result = await self.db.subagents.delete_one({"_id": subagent_id})
-        return result.deleted_count > 0
+        try:
+            object_id = ObjectId(subagent_id) if ObjectId.is_valid(subagent_id) else subagent_id
+            result = await self.db.subagents.delete_one({"_id": object_id})
+            return result.deleted_count > 0
+        except Exception as e:
+            print(f"Error deleting subagent {subagent_id}: {e}")
+            return False

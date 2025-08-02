@@ -14,6 +14,7 @@ from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, Subagent, L
 from claude_manager import ClaudeCodeManager
 from database import Database
 from prompt_file_manager import PromptFileManager
+from agent_discovery import AgentDiscovery
 
 def get_git_env():
     """Get git environment with SSH configuration"""
@@ -33,6 +34,7 @@ app.add_middleware(
 
 db = Database()
 claude_manager = ClaudeCodeManager()
+agent_discovery = AgentDiscovery(db)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -379,13 +381,27 @@ async def get_prompts_from_repo(workflow_id: str):
     import tempfile
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Clone the repository with SSH support
-        subprocess.run(
-            ["git", "clone", "--depth", "1", workflow["git_repo"], temp_dir],
-            check=True,
-            capture_output=True,
-            env=get_git_env()
-        )
+        try:
+            print(f"🔍 GIT OPERATION: Starting repo-prompts clone for repo: {workflow['git_repo']}")
+            print(f"📁 GIT OPERATION: Using temp directory: {temp_dir}")
+            
+            # Clone the repository with SSH support
+            result = subprocess.run(
+                ["git", "clone", "--depth", "1", workflow["git_repo"], temp_dir],
+                check=True,
+                capture_output=True,
+                env=get_git_env()
+            )
+            print(f"✅ GIT OPERATION: Git clone completed successfully")
+            print(f"📊 GIT OPERATION: Clone stdout: {result.stdout.decode()}")
+            if result.stderr:
+                print(f"⚠️  GIT OPERATION: Clone stderr: {result.stderr.decode()}")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ GIT OPERATION: Error cloning repository {workflow['git_repo']}")
+            print(f"❌ GIT OPERATION: Return code: {e.returncode}")
+            print(f"❌ GIT OPERATION: stdout: {e.stdout.decode() if e.stdout else 'None'}")
+            print(f"❌ GIT OPERATION: stderr: {e.stderr.decode() if e.stderr else 'None'}")
+            raise
         
         # Load prompts
         file_manager = PromptFileManager(temp_dir)
@@ -455,13 +471,85 @@ async def import_prompts_from_repo(workflow_id: str):
             # Add to workflow
             workflow["prompts"] = workflow.get("prompts", []) + [prompt_id]
         
-        # Update workflow
-        await db.update_workflow(workflow_id, Workflow(**workflow))
+        # Note: workflow update method would be needed here if we want to track agent associations
     
     return {
         "success": True,
         "imported_count": len(imported_prompts),
         "imported_prompts": imported_prompts
+    }
+
+# Agent Discovery endpoints
+@app.post("/api/workflows/{workflow_id}/discover-agents")
+async def discover_agents_from_repo(workflow_id: str):
+    """Discover and sync subagents from the workflow's git repository .claude/agents/ folder"""
+    workflow = await db.get_workflow(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    result = await agent_discovery.discover_and_sync_agents(
+        workflow["git_repo"], 
+        workflow_id
+    )
+    
+    if result["success"]:
+        return result
+    else:
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed to discover agents"))
+
+@app.get("/api/workflows/{workflow_id}/repo-agents")
+async def get_agents_from_repo(workflow_id: str):
+    """Get available agents from the workflow's git repository without syncing to database"""
+    workflow = await db.get_workflow(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    try:
+        discovered_agents = await agent_discovery.discover_agents_from_repo(
+            workflow["git_repo"], 
+            workflow_id
+        )
+        
+        return {
+            "success": True,
+            "agents": [
+                {
+                    "name": agent.name,
+                    "description": agent.description,
+                    "capabilities": [cap.value for cap in agent.capabilities],
+                    "trigger_keywords": agent.trigger_keywords,
+                    "max_tokens": agent.max_tokens,
+                    "temperature": agent.temperature
+                }
+                for agent in discovered_agents
+            ],
+            "count": len(discovered_agents)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to discover agents: {str(e)}")
+
+@app.get("/api/agent-format-examples")
+async def get_agent_format_examples():
+    """Get example agent definition formats for .claude/agents/ folder"""
+    return agent_discovery.get_example_agent_format()
+
+@app.post("/api/workflows/{workflow_id}/auto-discover-agents")
+async def auto_discover_agents_on_workflow_update(workflow_id: str):
+    """Automatically discover agents when workflow is updated (can be called on workflow creation/update)"""
+    workflow = await db.get_workflow(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    # Check if auto-discovery is enabled for this workflow
+    # This could be a workflow setting in the future
+    result = await agent_discovery.discover_and_sync_agents(
+        workflow["git_repo"], 
+        workflow_id
+    )
+    
+    return {
+        "workflow_id": workflow_id,
+        "auto_discovery_result": result
     }
 
 if __name__ == "__main__":

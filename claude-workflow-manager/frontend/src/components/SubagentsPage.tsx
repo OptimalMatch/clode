@@ -26,9 +26,9 @@ import {
   ListItemText,
   ListItemSecondaryAction,
 } from '@mui/material';
-import { Add, Edit, Delete, Code, Description } from '@mui/icons-material';
+import { Add, Edit, Delete, Code, Description, SmartToy, Info } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { subagentApi } from '../services/api';
+import { subagentApi, agentDiscoveryApi } from '../services/api';
 import { Subagent, SubagentCapability } from '../types';
 
 const capabilityLabels: Record<SubagentCapability, string> = {
@@ -48,6 +48,7 @@ const SubagentsPage: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedSubagent, setSelectedSubagent] = useState<Subagent | null>(null);
+  const [showExamples, setShowExamples] = useState(false);
   const [newSubagent, setNewSubagent] = useState<Partial<Subagent>>({
     name: '',
     description: '',
@@ -63,6 +64,12 @@ const SubagentsPage: React.FC = () => {
   const { data: subagents = [], isLoading } = useQuery({
     queryKey: ['subagents'],
     queryFn: subagentApi.getAll,
+  });
+
+  const { data: formatExamples } = useQuery({
+    queryKey: ['agent-format-examples'],
+    queryFn: agentDiscoveryApi.getFormatExamples,
+    enabled: showExamples,
   });
 
   const createMutation = useMutation({
@@ -159,24 +166,67 @@ const SubagentsPage: React.FC = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4">Subagents</Typography>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => setOpen(true)}
-        >
-          New Subagent
-        </Button>
+        <Box>
+          <Typography variant="h4">Subagents</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Manage AI specialists that enhance Claude's capabilities with specialized knowledge and skills
+          </Typography>
+        </Box>
+        <Box>
+          <Button
+            variant="outlined"
+            startIcon={<Info />}
+            onClick={() => setShowExamples(true)}
+            sx={{ mr: 2 }}
+          >
+            Agent Examples
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => setOpen(true)}
+          >
+            New Subagent
+          </Button>
+        </Box>
       </Box>
+
+      {subagents.length > 0 && (
+        <Box sx={{ mb: 3, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <SmartToy sx={{ mr: 1, color: 'info.dark' }} />
+            <Typography variant="subtitle1" color="info.dark">
+              Agent Discovery Available
+            </Typography>
+          </Box>
+          <Typography variant="body2" color="info.dark">
+            You can also auto-discover agents from your repository's `.claude/agents/` folder. 
+            Use the <SmartToy sx={{ fontSize: '1rem', mx: 0.5 }} /> button on workflow cards to scan and import agents.
+          </Typography>
+        </Box>
+      )}
 
       <Grid container spacing={3}>
         {subagents.map((subagent: Subagent) => (
           <Grid item xs={12} md={6} key={subagent.id}>
             <Card>
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Code sx={{ mr: 1 }} />
-                  <Typography variant="h6">{subagent.name}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Code sx={{ mr: 1 }} />
+                    <Typography variant="h6">{subagent.name}</Typography>
+                  </Box>
+                  {/* Placeholder for discovered agent indicator - could be enhanced with metadata */}
+                  {subagent.name.includes('_') && (
+                    <Chip 
+                      icon={<SmartToy />} 
+                      label="Repository" 
+                      size="small" 
+                      color="secondary" 
+                      variant="outlined"
+                      title="This agent may have been discovered from a repository"
+                    />
+                  )}
                 </Box>
                 <Typography variant="body2" color="text.secondary" gutterBottom>
                   {subagent.description}
@@ -349,6 +399,66 @@ const SubagentsPage: React.FC = () => {
           <Button onClick={handleSave} variant="contained">
             {editMode ? 'Update' : 'Create'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Agent Examples Dialog */}
+      <Dialog open={showExamples} onClose={() => setShowExamples(false)} maxWidth="lg" fullWidth>
+        <DialogTitle>
+          <Box display="flex" alignItems="center">
+            <SmartToy sx={{ mr: 2 }} />
+            Agent Definition Examples
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" paragraph>
+            Create agent definition files in your repository's `.claude/agents/` folder to automatically 
+            discover and import specialized AI agents.
+          </Typography>
+          
+          {formatExamples && (
+            <Box>
+              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
+                JSON Format Example:
+              </Typography>
+              <Box sx={{ 
+                bgcolor: 'grey.100', 
+                p: 2, 
+                borderRadius: 1, 
+                overflow: 'auto',
+                fontFamily: 'monospace',
+                fontSize: '0.875rem'
+              }}>
+                <pre>{JSON.stringify(formatExamples.json_example, null, 2)}</pre>
+              </Box>
+
+              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
+                YAML Format Example:
+              </Typography>
+              <Box sx={{ 
+                bgcolor: 'grey.100', 
+                p: 2, 
+                borderRadius: 1, 
+                overflow: 'auto',
+                fontFamily: 'monospace',
+                fontSize: '0.875rem'
+              }}>
+                <pre>{formatExamples.yaml_example}</pre>
+              </Box>
+
+              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
+                Available Capabilities:
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {Object.entries(capabilityLabels).map(([key, label]) => (
+                  <Chip key={key} label={`${key} (${label})`} variant="outlined" size="small" />
+                ))}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowExamples(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

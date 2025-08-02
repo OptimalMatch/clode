@@ -14,18 +14,20 @@ import {
   Grid,
   IconButton,
 } from '@mui/material';
-import { Add, PlayArrow, FolderOpen } from '@mui/icons-material';
+import { Add, PlayArrow, FolderOpen, SmartToy } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { workflowApi } from '../services/api';
 import { Workflow } from '../types';
 import PromptFileManager from './PromptFileManager';
+import AgentDiscovery from './AgentDiscovery';
 
 const WorkflowsPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [fileManagerOpen, setFileManagerOpen] = useState(false);
+  const [agentDiscoveryOpen, setAgentDiscoveryOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [newWorkflow, setNewWorkflow] = useState<Partial<Workflow>>({
     name: '',
@@ -99,6 +101,16 @@ const WorkflowsPage: React.FC = () => {
                 >
                   <FolderOpen />
                 </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    setSelectedWorkflow(workflow);
+                    setAgentDiscoveryOpen(true);
+                  }}
+                  title="Discover Agents"
+                >
+                  <SmartToy />
+                </IconButton>
               </CardActions>
             </Card>
           </Grid>
@@ -149,6 +161,18 @@ const WorkflowsPage: React.FC = () => {
           open={fileManagerOpen}
           onClose={() => {
             setFileManagerOpen(false);
+            setSelectedWorkflow(null);
+          }}
+          workflowId={selectedWorkflow.id!}
+          workflowName={selectedWorkflow.name}
+        />
+      )}
+
+      {agentDiscoveryOpen && selectedWorkflow && (
+        <AgentDiscovery
+          open={agentDiscoveryOpen}
+          onClose={() => {
+            setAgentDiscoveryOpen(false);
             setSelectedWorkflow(null);
           }}
           workflowId={selectedWorkflow.id!}
