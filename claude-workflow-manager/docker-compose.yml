@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: claude-workflow-mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: claudeworkflow123
+      MONGO_INITDB_DATABASE: claude_workflows
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - claude-network
+
+  backend:
+    build: ./backend
+    container_name: claude-workflow-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      MONGODB_URL: mongodb://admin:claudeworkflow123@mongodb:27017/claude_workflows?authSource=admin
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    volumes:
+      - ./backend:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - claude-network
+
+  frontend:
+    build: ./frontend
+    container_name: claude-workflow-frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: http://localhost:8000
+      REACT_APP_WS_URL: ws://localhost:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - claude-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: claude-workflow-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - claude-network
+
+volumes:
+  mongo_data:
+
+networks:
+  claude-network:
+    driver: bridge

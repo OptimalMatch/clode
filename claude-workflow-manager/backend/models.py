@@ -1,0 +1,114 @@
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+from datetime import datetime
+from enum import Enum
+
+class ExecutionMode(str, Enum):
+    SEQUENTIAL = "sequential"
+    PARALLEL = "parallel"
+
+class InstanceStatus(str, Enum):
+    INITIALIZING = "initializing"
+    READY = "ready"
+    RUNNING = "running"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class SubagentCapability(str, Enum):
+    CODE_REVIEW = "code_review"
+    TESTING = "testing"
+    DOCUMENTATION = "documentation"
+    REFACTORING = "refactoring"
+    SECURITY_AUDIT = "security_audit"
+    PERFORMANCE_OPTIMIZATION = "performance_optimization"
+    DATA_ANALYSIS = "data_analysis"
+    API_DESIGN = "api_design"
+    CUSTOM = "custom"
+
+class Subagent(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: str
+    system_prompt: str
+    capabilities: List[SubagentCapability]
+    trigger_keywords: List[str] = []
+    parameters: Dict[str, Any] = {}
+    max_tokens: Optional[int] = 4096
+    temperature: Optional[float] = 0.7
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class PromptStep(BaseModel):
+    id: str
+    content: str
+    execution_mode: ExecutionMode = ExecutionMode.SEQUENTIAL
+    dependencies: List[str] = []
+    subagent_refs: List[str] = []  # References to subagent names
+    metadata: Dict[str, Any] = {}
+
+class Prompt(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: str
+    steps: List[PromptStep]
+    tags: List[str] = []
+    detected_subagents: List[str] = []  # Auto-detected subagent names
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class Workflow(BaseModel):
+    id: Optional[str] = None
+    name: str
+    git_repo: str
+    branch: str = "main"
+    prompts: List[str] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class ClaudeInstance(BaseModel):
+    id: str
+    workflow_id: str
+    prompt_id: Optional[str] = None
+    git_repo: str
+    status: InstanceStatus
+    container_id: Optional[str] = None
+    output: List[Dict[str, Any]] = []
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    error: Optional[str] = None
+
+class LogType(str, Enum):
+    INPUT = "input"
+    OUTPUT = "output"
+    ERROR = "error"
+    STATUS = "status"
+    SYSTEM = "system"
+    SUBAGENT = "subagent"
+    TOOL_USE = "tool_use"
+    COMPLETION = "completion"
+
+class InstanceLog(BaseModel):
+    id: Optional[str] = None
+    instance_id: str
+    workflow_id: str
+    prompt_id: Optional[str] = None
+    timestamp: datetime
+    type: LogType
+    content: str
+    metadata: Dict[str, Any] = {}
+    tokens_used: Optional[int] = None
+    execution_time_ms: Optional[int] = None
+    subagent_name: Optional[str] = None
+    step_id: Optional[str] = None
+
+class LogAnalytics(BaseModel):
+    instance_id: str
+    total_interactions: int
+    total_tokens: int
+    total_execution_time_ms: int
+    error_count: int
+    subagents_used: List[str]
+    interaction_timeline: List[Dict[str, Any]]
+    average_response_time_ms: float
+    success_rate: float
