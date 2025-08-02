@@ -33,6 +33,12 @@ cd claude-workflow-manager
 ```bash
 # Create .env file in the root directory
 CLAUDE_API_KEY=your_claude_api_key_here
+
+# Optional: Customize the prompts folder name (defaults to "claude_prompts")
+CLAUDE_PROMPTS_FOLDER=claude_prompts
+
+# Optional: Customize the agents folder path (defaults to ".claude/agents")
+CLAUDE_AGENTS_FOLDER=.claude/agents
 ```
 
 3. Set up Git authentication (choose one method):
@@ -76,7 +82,18 @@ docker compose up -d
 3. Add prompt steps with execution modes:
    - **Sequential**: Steps execute one after another
    - **Parallel**: Steps can execute simultaneously
-4. Save the prompt for reuse
+4. Write step content in **Markdown format**
+5. Toggle between **Edit** and **Preview** modes to see formatted content
+6. Save the prompt for reuse
+
+### Managing Repository Prompts
+
+The system scans your Git repository for prompts in the configured folder (default: `claude_prompts/`). You can:
+
+1. Create prompt files directly in your repository
+2. Use the "Sync Prompts" feature to export database prompts to your repository
+3. Use the "Import Prompts" feature to load prompts from your repository
+4. Configure a custom prompts folder using the `CLAUDE_PROMPTS_FOLDER` environment variable
 
 ### Managing Instances
 
@@ -88,10 +105,11 @@ docker compose up -d
 
 ### Agent Discovery
 
-1. Create agent definition files in your repository's `.claude/agents/` folder
-2. Use JSON or YAML format for agent definitions
-3. The system automatically discovers and syncs agents when you trigger discovery
-4. Agents become available as subagents for enhanced prompt execution
+1. Create agent definition files in your repository's agents folder (default: `.claude/agents/`)
+2. Use JSON, YAML, or Markdown format for agent definitions
+3. Configure a custom agents folder using the `CLAUDE_AGENTS_FOLDER` environment variable
+4. The system automatically discovers and syncs agents when you trigger discovery
+5. Agents become available as subagents for enhanced prompt execution
 
 ## API Endpoints
 
@@ -159,11 +177,11 @@ The application supports multiple git authentication methods:
 
 ## Agent Definitions
 
-Define subagents in your repository's `.claude/agents/` folder to enhance Claude's capabilities with specialized roles.
+Define subagents in your repository's agents folder (configurable via `CLAUDE_AGENTS_FOLDER`, defaults to `.claude/agents/`) to enhance Claude's capabilities with specialized roles.
 
 ### Agent Definition Format
 
-Create JSON, YAML, or Markdown files in `.claude/agents/` folder:
+Create JSON, YAML, or Markdown files in your configured agents folder:
 
 **JSON Example (`.claude/agents/code_reviewer.json`):**
 ```json

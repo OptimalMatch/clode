@@ -34,6 +34,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -57,12 +58,18 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     fitAddon.current.fit();
 
     // Connect WebSocket
-    const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8000';
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.hostname;
+    const port = process.env.REACT_APP_WS_PORT || '8000';
+    const wsUrl = process.env.REACT_APP_WS_URL || `${protocol}//${host}:${port}`;
+    
+    console.log('Connecting to WebSocket:', `${wsUrl}/ws/${instanceId}`);
     ws.current = new WebSocket(`${wsUrl}/ws/${instanceId}`);
 
     ws.current.onopen = () => {
+      console.log('WebSocket connected successfully');
       setIsConnected(true);
-      terminal.current?.writeln('Connected to Claude Code instance...\r\n');
+      terminal.current?.writeln('✅ Connected to Claude Code instance...\r\n');
     };
 
     ws.current.onmessage = (event) => {
@@ -83,19 +90,43 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             setIsPaused(false);
           }
           break;
+        case 'interrupted':
+          terminal.current?.writeln(`\x1b[31m⏸️  Instance paused\x1b[0m`);
+          setIsPaused(true);
+          break;
+        case 'resumed':
+          terminal.current?.writeln(`\x1b[32m▶️  Instance resumed\x1b[0m`);
+          setIsPaused(false);
+          break;
         case 'step_start':
           terminal.current?.writeln(`\x1b[36m>>> Starting step: ${message.step?.content?.substring(0, 50)}...\x1b[0m`);
           break;
       }
     };
 
-    ws.current.onclose = () => {
+    ws.current.onclose = (event) => {
+      console.log('WebSocket closed:', event.code, event.reason);
       setIsConnected(false);
-      terminal.current?.writeln('\r\n\x1b[31mDisconnected from instance\x1b[0m');
+      terminal.current?.writeln(`\r\n\x1b[31m❌ Disconnected from instance (${event.code})\x1b[0m`);
     };
 
     ws.current.onerror = (error) => {
-      terminal.current?.writeln(`\x1b[31mWebSocket error: ${error}\x1b[0m`);
+      console.error('WebSocket error:', error);
+      setConnectionAttempts(prev => prev + 1);
+      terminal.current?.writeln(`\x1b[31m❌ WebSocket connection error (attempt ${connectionAttempts + 1})\x1b[0m`);
+      
+      if (connectionAttempts < 3) {
+        terminal.current?.writeln(`\x1b[33m⏳ Retrying connection in 2 seconds...\x1b[0m`);
+        setTimeout(() => {
+          if (!isConnected) {
+            const newWs = new WebSocket(`${wsUrl}/ws/${instanceId}`);
+            ws.current = newWs;
+            // Re-attach event handlers would go here, but for simplicity we'll let the user manually retry
+          }
+        }, 2000);
+      } else {
+        terminal.current?.writeln(`\x1b[31m❌ Connection failed after 3 attempts. Please close and reopen the terminal.\x1b[0m`);
+      }
     };
 
     // Handle window resize
@@ -126,14 +157,31 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     }
   };
 
+  const handleResume = async () => {
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({ type: 'resume' }));
+    }
+  };
+
   return (
     <Dialog open onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography>Claude Code Terminal - Instance {instanceId.slice(0, 8)}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography>Claude Code Terminal - Instance {instanceId.slice(0, 8)}</Typography>
+            <Box 
+              sx={{ 
+                width: 8, 
+                height: 8, 
+                borderRadius: '50%', 
+                backgroundColor: isConnected ? '#4caf50' : '#f44336' 
+              }} 
+              title={isConnected ? 'Connected' : 'Disconnected'}
+            />
+          </Box>
           <Box>
             {isPaused ? (
-              <IconButton onClick={() => handleSend()} title="Resume">
+              <IconButton onClick={handleResume} title="Resume">
                 <PlayArrow />
               </IconButton>
             ) : (

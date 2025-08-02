@@ -14,11 +14,11 @@ class PromptFileManager:
     - Numeric prefix: Sequential execution order (1, 2, 3...)
     - Letter suffix: Parallel execution within the same numeric group (A, B, C...)
     - Descriptive name: Human-readable prompt purpose
-    - Example: 1A-base-infrastructure.md, 2A-core-models.md, 2B-reference-models.md
+    - Example: 1A-base-infrastructure.md, 2A_core_models.md, 2B-reference-models.md
     """
     
-    PROMPTS_FOLDER = "prompts"
-    FILE_PATTERN = re.compile(r'^(\d+)([A-Z])-(.+)\.(md|yaml|json)$')
+    PROMPTS_FOLDER = os.getenv("CLAUDE_PROMPTS_FOLDER", "claude_prompts")
+    FILE_PATTERN = re.compile(r'^(\d+)([A-Z])[-_](.+)\.(md|yaml|json)$')
     
     def __init__(self, repo_path: str):
         self.repo_path = repo_path
@@ -39,19 +39,20 @@ This folder contains planning prompts for Claude Code execution.
 
 ## Naming Convention
 
-Files follow the pattern: `{number}{letter}-{description}.{ext}`
+Files follow the pattern: `{number}{letter}-{description}.{ext}` or `{number}{letter}_{description}.{ext}`
 
 - **Number**: Sequential execution order (1, 2, 3...)
 - **Letter**: Parallel execution within the same numeric group (A, B, C...)
-- **Description**: Human-readable prompt purpose (kebab-case)
+- **Separator**: Either `-` (hyphen) or `_` (underscore)
+- **Description**: Human-readable prompt purpose
 - **Extension**: .md (Markdown), .yaml, or .json
 
 ## Examples
 
-- `1A-base-infrastructure.md` - First step, can run alone
-- `2A-core-models.md` - Second step, first parallel task
+- `1A-base-infrastructure.md` - First step, can run alone (hyphen style)
+- `2A_core_models.md` - Second step, first parallel task (underscore style)
 - `2B-reference-models.md` - Second step, runs parallel with 2A
-- `3A-first-order-services.md` - Third step, depends on step 2 completion
+- `3A_first_order_services.md` - Third step, depends on step 2 completion
 
 ## Execution Order
 
@@ -142,18 +143,36 @@ execution_groups: {}
     
     def load_prompts_from_repo(self) -> List[Dict]:
         """Load all prompts from the repository"""
+        print(f"🔍 PROMPT DISCOVERY: Configured prompts folder: '{self.PROMPTS_FOLDER}'")
+        print(f"📁 PROMPT DISCOVERY: Looking for prompts at: {self.prompts_path}")
+        
         if not os.path.exists(self.prompts_path):
+            print(f"❌ PROMPT DISCOVERY: Prompts folder not found: {self.prompts_path}")
             return []
+        
+        print(f"✅ PROMPT DISCOVERY: Found prompts folder: {self.prompts_path}")
+        
+        # List all files in the prompts directory
+        all_files = sorted(os.listdir(self.prompts_path))
+        print(f"📁 PROMPT DISCOVERY: Found {len(all_files)} files in prompts folder:")
+        for f in all_files:
+            file_path = os.path.join(self.prompts_path, f)
+            file_type = 'file' if os.path.isfile(file_path) else 'directory'
+            print(f"   - {f} ({file_type})")
         
         prompts = []
         
-        for filename in sorted(os.listdir(self.prompts_path)):
+        for filename in all_files:
             if filename == "README.md":
+                print(f"⏭️  PROMPT DISCOVERY: Skipping {filename} (README file)")
                 continue
                 
             parsed = self.parse_filename(filename)
             if not parsed:
+                print(f"⏭️  PROMPT DISCOVERY: Skipping {filename} (doesn't match pattern {self.FILE_PATTERN.pattern})")
                 continue
+            
+            print(f"📄 PROMPT DISCOVERY: Processing prompt file: {filename}")
                 
             sequence, parallel, description, ext = parsed
             filepath = os.path.join(self.prompts_path, filename)
@@ -182,7 +201,9 @@ execution_groups: {}
                     pass
             
             prompts.append(prompt_data)
+            print(f"✅ PROMPT DISCOVERY: Successfully processed: {filename}")
         
+        print(f"🎯 PROMPT DISCOVERY: Total prompts loaded: {len(prompts)}")
         return prompts
     
     def get_execution_plan(self) -> List[List[Dict]]:

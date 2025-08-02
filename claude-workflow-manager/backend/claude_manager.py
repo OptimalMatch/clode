@@ -13,10 +13,10 @@ import time
 from datetime import datetime
 
 class ClaudeCodeManager:
-    def __init__(self):
+    def __init__(self, db: Database):
         self.instances: Dict[str, dict] = {}  # Store instance info instead of session objects
         self.websockets: Dict[str, WebSocket] = {}
-        self.db = Database()
+        self.db = db
         
     async def spawn_instance(self, instance: ClaudeInstance):
         start_time = time.time()
@@ -224,6 +224,26 @@ class ClaudeCodeManager:
             print(f"Error interrupting instance: {e}")
             return False
     
+    async def resume_instance(self, instance_id: str) -> bool:
+        instance_info = self.instances.get(instance_id)
+        if not instance_info:
+            return False
+        
+        try:
+            # Update status to running
+            await self.db.update_instance_status(instance_id, InstanceStatus.RUNNING)
+            
+            await self._send_websocket_update(instance_id, {
+                "type": "resumed",
+                "status": "running"
+            })
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error resuming instance: {e}")
+            return False
+    
     async def connect_websocket(self, instance_id: str, websocket: WebSocket):
         self.websockets[instance_id] = websocket
         
@@ -405,4 +425,8 @@ Please leverage the above subagent capabilities and follow their system instruct
             step_id=step_id
         )
         
+        if self.db.db is None:
+            print(f"⚠️  CLAUDE MANAGER: Database not connected, skipping log entry: {log_type}")
+            return None
+            
         return await self.db.add_instance_log(log)

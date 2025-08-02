@@ -25,6 +25,11 @@ export const workflowApi = {
     const response = await api.get(`/api/workflows/${id}`);
     return response.data;
   },
+  
+  delete: async (id: string) => {
+    const response = await api.delete(`/api/workflows/${id}`);
+    return response.data;
+  },
 };
 
 export const promptApi = {

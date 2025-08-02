@@ -14,7 +14,7 @@ import {
   Grid,
   IconButton,
 } from '@mui/material';
-import { Add, PlayArrow, FolderOpen, SmartToy } from '@mui/icons-material';
+import { Add, PlayArrow, FolderOpen, SmartToy, Delete } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { workflowApi } from '../services/api';
@@ -28,7 +28,9 @@ const WorkflowsPage: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [fileManagerOpen, setFileManagerOpen] = useState(false);
   const [agentDiscoveryOpen, setAgentDiscoveryOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
+  const [workflowToDelete, setWorkflowToDelete] = useState<Workflow | null>(null);
   const [newWorkflow, setNewWorkflow] = useState<Partial<Workflow>>({
     name: '',
     git_repo: '',
@@ -49,9 +51,29 @@ const WorkflowsPage: React.FC = () => {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: workflowApi.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflows'] });
+      setDeleteDialogOpen(false);
+      setWorkflowToDelete(null);
+    },
+  });
+
   const handleCreate = () => {
     if (newWorkflow.name && newWorkflow.git_repo) {
       createMutation.mutate(newWorkflow as Workflow);
+    }
+  };
+
+  const handleDeleteClick = (workflow: Workflow) => {
+    setWorkflowToDelete(workflow);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (workflowToDelete?.id) {
+      deleteMutation.mutate(workflowToDelete.id);
     }
   };
 
@@ -110,6 +132,14 @@ const WorkflowsPage: React.FC = () => {
                   title="Discover Agents"
                 >
                   <SmartToy />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => handleDeleteClick(workflow)}
+                  title="Delete Workflow"
+                  color="error"
+                >
+                  <Delete />
                 </IconButton>
               </CardActions>
             </Card>
@@ -179,6 +209,34 @@ const WorkflowsPage: React.FC = () => {
           workflowName={selectedWorkflow.name}
         />
       )}
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Delete Workflow</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the workflow "{workflowToDelete?.name}"?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This will permanently delete the workflow and all associated data including instances, logs, prompts, and subagents. This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            variant="contained"
+            color="error"
+            disabled={deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

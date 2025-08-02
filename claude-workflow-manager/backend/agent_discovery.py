@@ -12,6 +12,7 @@ from database import Database
 class AgentDiscovery:
     def __init__(self, db: Database):
         self.db = db
+        self.agents_folder_path = os.getenv("CLAUDE_AGENTS_FOLDER", ".claude/agents")
         
     async def discover_agents_from_repo(self, git_repo: str, workflow_id: str) -> List[Subagent]:
         """
@@ -50,15 +51,15 @@ class AgentDiscovery:
                     for file in files:
                         print(f"{sub_indent}{file}")
                 
-                # Look for .claude/agents/ folder
-                agents_folder = Path(temp_dir) / ".claude" / "agents"
+                # Look for agents folder (configurable via CLAUDE_AGENTS_FOLDER)
+                agents_folder = Path(temp_dir) / self.agents_folder_path
                 print(f"🔍 AGENT DISCOVERY: Looking for agents folder at: {agents_folder}")
                 
                 if not agents_folder.exists():
-                    print(f"❌ AGENT DISCOVERY: No .claude/agents/ folder found")
+                    print(f"❌ AGENT DISCOVERY: No {self.agents_folder_path}/ folder found")
                     return discovered_agents
                 
-                print(f"✅ AGENT DISCOVERY: Found .claude/agents/ folder")
+                print(f"✅ AGENT DISCOVERY: Found {self.agents_folder_path}/ folder")
                 agent_files = list(agents_folder.glob("*"))
                 print(f"📁 AGENT DISCOVERY: Found {len(agent_files)} files in agents folder:")
                 for f in agent_files:
@@ -309,7 +310,7 @@ class AgentDiscovery:
             if not discovered_agents:
                 return {
                     "success": True,
-                    "message": "No agents found in .claude/agents/ folder",
+                    "message": f"No agents found in {self.agents_folder_path}/ folder",
                     "discovered_count": 0,
                     "synced_agents": {}
                 }

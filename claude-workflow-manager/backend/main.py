@@ -22,7 +22,27 @@ def get_git_env():
     env['GIT_SSH_COMMAND'] = 'ssh -o UserKnownHostsFile=/root/.ssh/known_hosts -o StrictHostKeyChecking=yes'
     return env
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("🚀 APPLICATION: Starting up...")
+    try:
+        await db.connect()
+        print("✅ APPLICATION: Database connected successfully")
+    except Exception as e:
+        print(f"❌ APPLICATION: Failed to connect to database: {e}")
+        raise
+    
+    yield
+    
+    print("🔄 APPLICATION: Shutting down...")
+    await db.disconnect()
+    print("✅ APPLICATION: Database disconnected")
+
+db = Database()
+claude_manager = ClaudeCodeManager(db)
+agent_discovery = AgentDiscovery(db)
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,18 +51,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-db = Database()
-claude_manager = ClaudeCodeManager()
-agent_discovery = AgentDiscovery(db)
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await db.connect()
-    yield
-    await db.disconnect()
-
-app.router.lifespan_context = lifespan
 
 @app.get("/")
 async def root():
@@ -64,6 +72,13 @@ async def get_workflow(workflow_id: str):
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     return workflow
+
+@app.delete("/api/workflows/{workflow_id}")
+async def delete_workflow(workflow_id: str):
+    success = await db.delete_workflow(workflow_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Workflow not found or deletion failed")
+    return {"message": f"Workflow {workflow_id} deleted successfully"}
 
 @app.post("/api/prompts")
 async def create_prompt(prompt: Prompt):
@@ -131,6 +146,8 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
                 await claude_manager.send_input(instance_id, message["content"])
             elif message["type"] == "interrupt":
                 await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""))
+            elif message["type"] == "resume":
+                await claude_manager.resume_instance(instance_id)
                 
     except WebSocketDisconnect:
         await claude_manager.disconnect_websocket(instance_id)
@@ -404,6 +421,7 @@ async def get_prompts_from_repo(workflow_id: str):
             raise
         
         # Load prompts
+        print(f"🔍 PROMPT CONFIGURATION: CLAUDE_PROMPTS_FOLDER environment variable: '{os.getenv('CLAUDE_PROMPTS_FOLDER', 'claude_prompts')}'")
         file_manager = PromptFileManager(temp_dir)
         prompts = file_manager.load_prompts_from_repo()
         execution_plan = file_manager.get_execution_plan()
@@ -434,6 +452,7 @@ async def import_prompts_from_repo(workflow_id: str):
         )
         
         # Load prompts from repo
+        print(f"🔍 PROMPT CONFIGURATION: CLAUDE_PROMPTS_FOLDER environment variable: '{os.getenv('CLAUDE_PROMPTS_FOLDER', 'claude_prompts')}'")
         file_manager = PromptFileManager(temp_dir)
         repo_prompts = file_manager.load_prompts_from_repo()
         

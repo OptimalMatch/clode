@@ -22,11 +22,12 @@ import {
   FormControl,
   InputLabel,
 } from '@mui/material';
-import { Add, Edit, Delete, SmartToy, Save } from '@mui/icons-material';
+import { Add, Edit, Delete, SmartToy, Save, Visibility, VisibilityOff } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { promptApi, subagentApi, workflowApi } from '../services/api';
 import { Prompt, PromptStep, Subagent, Workflow } from '../types';
 import PromptFileManager from './PromptFileManager';
+import ReactMarkdown from 'react-markdown';
 
 const PromptsPage: React.FC = () => {
   const queryClient = useQueryClient();
@@ -48,6 +49,8 @@ const PromptsPage: React.FC = () => {
   });
   const [fileManagerOpen, setFileManagerOpen] = useState(false);
   const [fileManagerPrompt, setFileManagerPrompt] = useState<{id: string; name: string; workflowId: string; workflowName: string} | null>(null);
+  const [stepPreviewMode, setStepPreviewMode] = useState<{[key: string]: boolean}>({});
+  const [stepEditingMode, setStepEditingMode] = useState(false);
 
   const { data: prompts = [], isLoading } = useQuery({
     queryKey: ['prompts'],
@@ -98,6 +101,8 @@ const PromptsPage: React.FC = () => {
       dependencies: [],
       subagent_refs: [],
     });
+    setStepPreviewMode({});
+    setStepEditingMode(true); // Default to edit mode for new step
   };
 
   const handleAddStep = async () => {
@@ -149,6 +154,22 @@ const PromptsPage: React.FC = () => {
     setNewPrompt(prompt);
     setEditMode(true);
     setOpen(true);
+    // Initialize preview mode for existing steps (default to preview)
+    const initialPreviewState: {[key: string]: boolean} = {};
+    prompt.steps?.forEach((step, index) => {
+      const stepKey = `${step.id || index}`;
+      initialPreviewState[stepKey] = true; // Default to preview mode
+    });
+    setStepPreviewMode(initialPreviewState);
+    setStepEditingMode(true); // Default to edit mode for new step
+  };
+
+  const handleNewPrompt = () => {
+    setEditMode(false);
+    setSelectedPrompt(null);
+    setStepPreviewMode({});
+    setStepEditingMode(true); // Default to edit mode for new step
+    setOpen(true);
   };
 
   const handleSyncToRepo = (prompt: Prompt) => {
@@ -181,7 +202,7 @@ const PromptsPage: React.FC = () => {
         <Button
           variant="contained"
           startIcon={<Add />}
-          onClick={() => setOpen(true)}
+          onClick={handleNewPrompt}
         >
           New Prompt
         </Button>
@@ -278,30 +299,136 @@ const PromptsPage: React.FC = () => {
             Steps
           </Typography>
           <List>
-            {newPrompt.steps?.map((step, index) => (
-              <ListItem key={step.id}>
-                <ListItemText
-                  primary={`Step ${index + 1} (${step.execution_mode})`}
-                  secondary={step.content}
-                />
-              </ListItem>
-            ))}
+            {newPrompt.steps?.map((step, index) => {
+              const stepKey = `${step.id || index}`;
+              const isPreviewMode = stepPreviewMode[stepKey] ?? true; // Default to preview mode
+              
+              return (
+                <ListItem key={step.id} sx={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Step {index + 1} ({step.execution_mode})
+                    </Typography>
+                    <IconButton
+                      size="small"
+                      onClick={() => setStepPreviewMode(prev => ({ ...prev, [stepKey]: !isPreviewMode }))}
+                      title={isPreviewMode ? "Edit" : "Preview"}
+                    >
+                      {isPreviewMode ? <Edit /> : <Visibility />}
+                    </IconButton>
+                  </Box>
+                  <Box sx={{ width: '100%' }}>
+                    {isPreviewMode ? (
+                      <Box sx={{ 
+                        border: '1px solid #e0e0e0', 
+                        borderRadius: 1, 
+                        p: 2, 
+                        backgroundColor: '#fafafa',
+                        minHeight: '100px',
+                        '& h1, & h2, & h3, & h4, & h5, & h6': { margin: '0.5rem 0' },
+                        '& p': { margin: '0.5rem 0' },
+                        '& ul, & ol': { margin: '0.5rem 0', paddingLeft: '1.5rem' },
+                        '& blockquote': { 
+                          borderLeft: '3px solid #ccc', 
+                          paddingLeft: '1rem', 
+                          margin: '0.5rem 0',
+                          fontStyle: 'italic'
+                        },
+                        '& code': { 
+                          backgroundColor: '#f5f5f5',
+                          padding: '0.2rem 0.4rem',
+                          borderRadius: '3px',
+                          fontFamily: 'monospace'
+                        },
+                        '& pre': {
+                          backgroundColor: '#f5f5f5',
+                          padding: '1rem',
+                          borderRadius: '4px',
+                          overflow: 'auto'
+                        }
+                      }}>
+                        <ReactMarkdown>{step.content || '*No content*'}</ReactMarkdown>
+                      </Box>
+                    ) : (
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={6}
+                        value={step.content}
+                        onChange={(e) => {
+                          const updatedSteps = [...(newPrompt.steps || [])];
+                          updatedSteps[index] = { ...step, content: e.target.value };
+                          setNewPrompt({ ...newPrompt, steps: updatedSteps });
+                        }}
+                        variant="outlined"
+                        placeholder="Enter step content in Markdown..."
+                      />
+                    )}
+                  </Box>
+                </ListItem>
+              );
+            })}
           </List>
 
           <Box sx={{ mt: 2 }}>
-            <TextField
-              margin="dense"
-              label="Step Content"
-              fullWidth
-              multiline
-              rows={3}
-              variant="outlined"
-              value={currentStep.content}
-              onChange={(e) =>
-                setCurrentStep({ ...currentStep, content: e.target.value })
-              }
-              sx={{ mb: 2 }}
-            />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="subtitle2">New Step Content</Typography>
+              <IconButton
+                size="small"
+                onClick={() => setStepEditingMode(!stepEditingMode)}
+                title={stepEditingMode ? "Preview" : "Edit"}
+              >
+                {stepEditingMode ? <Visibility /> : <Edit />}
+              </IconButton>
+            </Box>
+            {stepEditingMode ? (
+              <TextField
+                margin="dense"
+                label="Step Content"
+                fullWidth
+                multiline
+                rows={6}
+                variant="outlined"
+                value={currentStep.content}
+                onChange={(e) =>
+                  setCurrentStep({ ...currentStep, content: e.target.value })
+                }
+                sx={{ mb: 2 }}
+                placeholder="Enter step content in Markdown..."
+              />
+            ) : (
+              <Box sx={{ 
+                border: '1px solid #e0e0e0', 
+                borderRadius: 1, 
+                p: 2, 
+                backgroundColor: '#fafafa',
+                minHeight: '150px',
+                mb: 2,
+                '& h1, & h2, & h3, & h4, & h5, & h6': { margin: '0.5rem 0' },
+                '& p': { margin: '0.5rem 0' },
+                '& ul, & ol': { margin: '0.5rem 0', paddingLeft: '1.5rem' },
+                '& blockquote': { 
+                  borderLeft: '3px solid #ccc', 
+                  paddingLeft: '1rem', 
+                  margin: '0.5rem 0',
+                  fontStyle: 'italic'
+                },
+                '& code': { 
+                  backgroundColor: '#f5f5f5',
+                  padding: '0.2rem 0.4rem',
+                  borderRadius: '3px',
+                  fontFamily: 'monospace'
+                },
+                '& pre': {
+                  backgroundColor: '#f5f5f5',
+                  padding: '1rem',
+                  borderRadius: '4px',
+                  overflow: 'auto'
+                }
+              }}>
+                <ReactMarkdown>{currentStep.content || '*Enter content above to see preview*'}</ReactMarkdown>
+              </Box>
+            )}
             <FormControl fullWidth sx={{ mb: 2 }}>
               <InputLabel>Execution Mode</InputLabel>
               <Select

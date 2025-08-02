@@ -11,11 +11,26 @@ class Database:
         self.db = None
         
     async def connect(self):
-        self.client = AsyncIOMotorClient(os.getenv("MONGODB_URL"))
-        self.db = self.client.claude_workflows
-        
-        # Create indexes
-        await self._create_indexes()
+        try:
+            mongodb_url = os.getenv("MONGODB_URL")
+            print(f"📊 DATABASE: Connecting to MongoDB at: {mongodb_url}")
+            
+            self.client = AsyncIOMotorClient(mongodb_url)
+            self.db = self.client.claude_workflows
+            
+            # Test the connection
+            await self.client.admin.command('ping')
+            print("✅ DATABASE: MongoDB connection successful")
+            
+            # Create indexes
+            await self._create_indexes()
+            print("✅ DATABASE: Indexes created successfully")
+            
+        except Exception as e:
+            print(f"❌ DATABASE: Failed to connect to MongoDB: {e}")
+            self.client = None
+            self.db = None
+            raise
     
     async def disconnect(self):
         if self.client:
@@ -77,6 +92,50 @@ class Database:
         except Exception as e:
             print(f"Error retrieving workflow {workflow_id}: {e}")
             return None
+    
+    async def delete_workflow(self, workflow_id: str) -> bool:
+        """
+        Delete a workflow and all associated data (instances, logs, prompts, subagents)
+        """
+        try:
+            # Convert string ID to ObjectId for MongoDB query
+            object_id = ObjectId(workflow_id) if ObjectId.is_valid(workflow_id) else workflow_id
+            
+            # Check if workflow exists
+            workflow = await self.db.workflows.find_one({"_id": object_id})
+            if not workflow:
+                print(f"Workflow {workflow_id} not found")
+                return False
+            
+            # Delete associated instances
+            instances_result = await self.db.instances.delete_many({"workflow_id": workflow_id})
+            print(f"Deleted {instances_result.deleted_count} instances for workflow {workflow_id}")
+            
+            # Delete associated logs
+            logs_result = await self.db.logs.delete_many({"workflow_id": workflow_id})
+            print(f"Deleted {logs_result.deleted_count} logs for workflow {workflow_id}")
+            
+            # Delete associated prompts
+            prompts_result = await self.db.prompts.delete_many({"workflow_id": workflow_id})
+            print(f"Deleted {prompts_result.deleted_count} prompts for workflow {workflow_id}")
+            
+            # Delete associated subagents
+            subagents_result = await self.db.subagents.delete_many({"workflow_id": workflow_id})
+            print(f"Deleted {subagents_result.deleted_count} subagents for workflow {workflow_id}")
+            
+            # Finally, delete the workflow itself
+            workflow_result = await self.db.workflows.delete_one({"_id": object_id})
+            
+            if workflow_result.deleted_count == 1:
+                print(f"Successfully deleted workflow {workflow_id}")
+                return True
+            else:
+                print(f"Failed to delete workflow {workflow_id}")
+                return False
+                
+        except Exception as e:
+            print(f"Error deleting workflow {workflow_id}: {e}")
+            return False
     
     # Prompt methods
     async def create_prompt(self, prompt: Prompt) -> str:
@@ -150,6 +209,9 @@ class Database:
         )
     
     async def add_instance_log(self, log: InstanceLog) -> str:
+        if self.db is None:
+            raise RuntimeError("Database not connected. Please ensure the database connection is established.")
+            
         log_dict = log.dict()
         log_dict["timestamp"] = log_dict.get("timestamp", datetime.utcnow())
         
