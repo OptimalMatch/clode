@@ -115,6 +115,18 @@ class ClaudeCodeManager:
                 except:
                     pass  # Ignore parsing errors
             
+            # Log completion event to database
+            instance_info = self.instances.get(instance_id, {})
+            await self._log_event(
+                instance_id=instance_id,
+                workflow_id=instance_info.get("workflow_id", ""),
+                prompt_id=instance_info.get("prompt_id"),
+                log_type=LogType.COMPLETION,
+                content=f"Claude CLI execution completed with exit code: {return_code}",
+                tokens_used=tokens_used,
+                execution_time_ms=execution_time
+            )
+            
             # Send completion message
             await self._send_websocket_update(instance_id, {
                 "type": "completion",
@@ -498,6 +510,8 @@ class ClaudeCodeManager:
         """Monitor an ongoing Claude CLI process and stream its output to newly connected WebSockets"""
         self._log_with_timestamp(f"🔍 Starting to monitor ongoing process for instance {instance_id}")
         
+        stdout_lines = []  # Collect lines to extract token usage later
+        
         try:
             # Read any remaining output from the running process
             while process.poll() is None:  # Process is still running
@@ -508,6 +522,7 @@ class ClaudeCodeManager:
                     if line:
                         line = line.strip()
                         if line:
+                            stdout_lines.append(line)  # Collect for token extraction
                             self._log_with_timestamp(f"📤 Ongoing stream line: {line}")
                             
                             # Process this line and send to WebSocket
@@ -542,15 +557,40 @@ class ClaudeCodeManager:
                 
                 self._log_with_timestamp(f"✅ Monitored Claude CLI process completed with exit code: {return_code}")
                 
+                # Extract token usage from the last result event if available
+                tokens_used = None
+                if stdout_lines:
+                    # Check the last line for result event with token usage
+                    try:
+                        last_line = stdout_lines[-1]
+                        if isinstance(last_line, str):
+                            result_event = json.loads(last_line)
+                            if result_event.get('type') == 'result':
+                                tokens_used = result_event.get('token_usage', {}).get('total_tokens', None)
+                    except:
+                        pass  # Ignore parsing errors
+                
                 # Clean up
                 if instance_id in self.running_processes:
                     del self.running_processes[instance_id]
+                
+                # Log completion event to database
+                instance_info = self.instances.get(instance_id, {})
+                await self._log_event(
+                    instance_id=instance_id,
+                    workflow_id=instance_info.get("workflow_id", ""),
+                    prompt_id=instance_info.get("prompt_id"),
+                    log_type=LogType.COMPLETION,
+                    content=f"Monitored Claude CLI process completed with exit code: {return_code}",
+                    tokens_used=tokens_used,
+                    execution_time_ms=execution_time
+                )
                 
                 # Send completion message
                 await self._send_websocket_update(instance_id, {
                     "type": "completion",
                     "execution_time_ms": execution_time,
-                    "tokens_used": None  # We don't have token info for ongoing processes
+                    "tokens_used": tokens_used
                 })
                 
         except Exception as e:
