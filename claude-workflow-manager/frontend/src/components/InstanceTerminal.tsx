@@ -42,6 +42,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [lastPingTime, setLastPingTime] = useState<Date | null>(null);
   const [wsReadyState, setWsReadyState] = useState<number | null>(null);
   const [markdownContent, setMarkdownContent] = useState<string | null>(null);
+  const [markdownFullWidth, setMarkdownFullWidth] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   // Helper functions
   const getReadyStateText = (state: number): string => {
@@ -73,14 +75,41 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   };
 
   const detectAndExtractMarkdown = (content: string): { hasMarkdown: boolean; markdown: string; plainText: string } => {
-    const markdownRegex = /```markdown\n([\s\S]*?)\n```/g;
-    const match = markdownRegex.exec(content);
+    // First check for wrapped markdown blocks
+    const wrappedMarkdownRegex = /```markdown\n([\s\S]*?)\n```/g;
+    const wrappedMatch = wrappedMarkdownRegex.exec(content);
     
-    if (match) {
+    if (wrappedMatch) {
       return {
         hasMarkdown: true,
-        markdown: match[1],
-        plainText: content.replace(markdownRegex, '[Markdown content detected - Click "View Markdown" to see formatted version]')
+        markdown: wrappedMatch[1],
+        plainText: content.replace(wrappedMarkdownRegex, '[Markdown content detected - displaying formatted version]')
+      };
+    }
+    
+    // Then check for raw markdown content patterns
+    const cleanContent = content.replace(/^💬\s*/, '').trim(); // Remove emoji prefix
+    
+    // Look for common markdown patterns
+    const hasHeaders = /^#{1,6}\s+.+$/m.test(cleanContent);
+    const hasLists = /^[\s]*[-*+]\s+.+$/m.test(cleanContent);
+    const hasNumberedLists = /^[\s]*\d+\.\s+.+$/m.test(cleanContent);
+    const hasCodeBlocks = /```[\s\S]*?```/.test(cleanContent);
+    const hasLinks = /\[.+?\]\(.+?\)/.test(cleanContent);
+    const hasBold = /\*\*.+?\*\*/.test(cleanContent);
+    const hasItalic = /\*.+?\*/.test(cleanContent);
+    const hasBlockquotes = /^>\s+.+$/m.test(cleanContent);
+    
+    // Consider it markdown if it has multiple markdown features
+    const markdownFeatures = [hasHeaders, hasLists, hasNumberedLists, hasCodeBlocks, hasLinks, hasBold, hasItalic, hasBlockquotes];
+    const featureCount = markdownFeatures.filter(Boolean).length;
+    
+    // If it looks like markdown content (has 2+ features or is a substantial file with headers)
+    if (featureCount >= 2 || (hasHeaders && cleanContent.length > 500)) {
+      return {
+        hasMarkdown: true,
+        markdown: cleanContent,
+        plainText: `📋 Markdown content detected - displaying formatted version\n\n${cleanContent.substring(0, 200)}...`
       };
     }
     
@@ -99,6 +128,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         // Show simplified terminal message and set markdown for inline display
         terminal.current.writeln('\x1b[36m📋 Markdown content detected - displaying formatted view below:\x1b[0m');
         setMarkdownContent(markdown);
+        setMarkdownFullWidth(false); // Start in split mode
+        setCopySuccess(false); // Reset copy state
         // Recalculate terminal size after layout change
         setTimeout(() => {
           if (fitAddon.current && terminal.current) {
@@ -115,6 +146,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         terminal.current.writeln(plainText);
         const previouslyHadMarkdown = markdownContent !== null;
         setMarkdownContent(null);
+        setMarkdownFullWidth(false);
+        setCopySuccess(false);
         
         // Recalculate terminal size if we just cleared markdown (layout change)
         if (previouslyHadMarkdown) {
@@ -128,6 +161,38 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               }
             }
           }, 100);
+        }
+      }
+    }
+  };
+
+  const handleCopyMarkdown = async () => {
+    if (markdownContent) {
+      try {
+        await navigator.clipboard.writeText(markdownContent);
+        setCopySuccess(true);
+        console.log('📋 Markdown content copied to clipboard');
+        
+        // Reset success state after 2 seconds
+        setTimeout(() => {
+          setCopySuccess(false);
+        }, 2000);
+      } catch (error) {
+        console.error('❌ Failed to copy markdown to clipboard:', error);
+        // Fallback for older browsers
+        try {
+          const textArea = document.createElement('textarea');
+          textArea.value = markdownContent;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          setCopySuccess(true);
+          setTimeout(() => {
+            setCopySuccess(false);
+          }, 2000);
+        } catch (fallbackError) {
+          console.error('❌ Fallback copy also failed:', fallbackError);
         }
       }
     }
@@ -507,6 +572,24 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Handle markdown view mode changes
+  useEffect(() => {
+    if (fitAddon.current && terminal.current) {
+      // Resize terminal when switching view modes
+      setTimeout(() => {
+        try {
+          if (fitAddon.current && !markdownFullWidth) {
+            // Only fit when terminal is visible
+            fitAddon.current.fit();
+            console.log('🔧 Terminal resized due to markdown view mode change');
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to resize terminal on view mode change:', error);
+        }
+      }, 150); // Slightly longer delay to ensure layout changes are complete
+    }
+  }, [markdownFullWidth]);
+
   const handleSend = () => {
     if (!input.trim()) {
       console.warn('❌ Cannot send - no input provided');
@@ -516,6 +599,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     // Clear previous markdown content when sending new command
     const previouslyHadMarkdown = markdownContent !== null;
     setMarkdownContent(null);
+    setMarkdownFullWidth(false);
+    setCopySuccess(false);
     
     // Recalculate terminal size if we just cleared markdown (layout change)
     if (previouslyHadMarkdown) {
@@ -652,6 +737,60 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               <IconButton onClick={handlePing} title="Test Connection (Ping)" disabled={!isConnected}>
                 🏓
               </IconButton>
+              {markdownContent && (
+                <>
+                  <Button 
+                    variant={markdownFullWidth ? "contained" : "outlined"}
+                    size="small" 
+                    onClick={() => setMarkdownFullWidth(!markdownFullWidth)}
+                    title={markdownFullWidth ? "Show Split View" : "Show Full Width Markdown"}
+                    sx={{ minWidth: 'auto', px: 1 }}
+                  >
+                    {markdownFullWidth ? "📱 Split" : "📖 Full"}
+                  </Button>
+                  <Button 
+                    variant={copySuccess ? "contained" : "outlined"}
+                    size="small" 
+                    onClick={handleCopyMarkdown}
+                    title="Copy raw markdown to clipboard"
+                    sx={{ 
+                      minWidth: 'auto', 
+                      px: 1,
+                      backgroundColor: copySuccess ? '#4caf50' : undefined,
+                      color: copySuccess ? 'white' : undefined,
+                      '&:hover': {
+                        backgroundColor: copySuccess ? '#45a049' : undefined,
+                      }
+                    }}
+                  >
+                    {copySuccess ? "✅ Copied!" : "📋 Copy"}
+                  </Button>
+                  <Button 
+                    variant="outlined" 
+                    size="small" 
+                    onClick={() => {
+                      setMarkdownContent(null);
+                      setMarkdownFullWidth(false);
+                      setCopySuccess(false);
+                      // Refresh terminal after closing markdown
+                      setTimeout(() => {
+                        if (fitAddon.current && terminal.current) {
+                          try {
+                            fitAddon.current.fit();
+                            console.log('🔧 Terminal refreshed after closing markdown');
+                          } catch (error) {
+                            console.warn('⚠️ Failed to refresh terminal after closing markdown:', error);
+                          }
+                        }
+                      }, 100);
+                    }}
+                    title="Close Markdown View"
+                    sx={{ minWidth: 'auto', px: 1 }}
+                  >
+                    ✕ Close
+                  </Button>
+                </>
+              )}
               {isPaused ? (
                 <IconButton onClick={handleResume} title="Resume">
                   <PlayArrow />
@@ -668,21 +807,26 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
           </Box>
         </DialogTitle>
         <DialogContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: markdownContent ? 'row' : 'column', gap: markdownContent ? 1 : 0 }}>
-            {/* Terminal Area */}
+          <Box sx={{ 
+            flex: 1, 
+            display: 'flex', 
+            flexDirection: markdownContent && !markdownFullWidth ? 'row' : 'column', 
+            gap: markdownContent && !markdownFullWidth ? 1 : 0 
+          }}>
+            {/* Terminal Area - Always render but hide when in full-width mode */}
             <Box
               ref={terminalRef}
               sx={{
-                flex: markdownContent ? '0 0 40%' : 1,
+                flex: markdownContent && !markdownFullWidth ? '0 0 25%' : markdownFullWidth ? 0 : 1,
                 backgroundColor: '#000',
                 border: '1px solid #333',
                 borderRadius: 1,
                 minHeight: '400px',
                 height: '400px',
                 position: 'relative',
-                display: 'block',
+                display: markdownFullWidth ? 'none' : 'block', // Hide instead of not rendering
                 overflow: 'hidden',
-                transition: 'flex 0.3s ease, width 0.3s ease', // Smooth transition
+                transition: 'flex 0.3s ease, width 0.3s ease',
                 '& .xterm': {
                   height: '100% !important',
                   width: '100% !important',
@@ -698,19 +842,86 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             {markdownContent && (
               <Paper
                 sx={{
-                  flex: '1',
-                  maxWidth: '60%',
+                  flex: markdownFullWidth ? 1 : '1', // Full width when markdownFullWidth is true
                   height: '400px',
                   overflow: 'auto',
-                  p: 2,
+                  p: 3, // More padding for better readability
                   backgroundColor: 'background.paper',
                   border: '1px solid #333',
                   borderRadius: 1,
+                  fontSize: '14px', // Better font size for reading
+                  lineHeight: 1.6,
+                  '& h1, & h2, & h3, & h4, & h5, & h6': {
+                    marginTop: '1.5em',
+                    marginBottom: '0.5em',
+                  },
+                  '& p': {
+                    marginBottom: '1em',
+                  },
+                  '& pre': {
+                    backgroundColor: '#2d2d2d',
+                    color: '#ffffff',
+                    padding: '1em',
+                    borderRadius: '4px',
+                    overflow: 'auto',
+                    border: '1px solid #444',
+                  },
+                  '& pre code': {
+                    backgroundColor: 'transparent',
+                    color: '#ffffff',
+                    padding: 0,
+                  },
+                  '& code': {
+                    backgroundColor: '#2d2d2d',
+                    color: '#e6e6e6',
+                    padding: '0.2em 0.4em',
+                    borderRadius: '3px',
+                    fontSize: '0.9em',
+                    border: '1px solid #444',
+                  },
+                  '& table': {
+                    borderCollapse: 'collapse',
+                    width: '100%',
+                    marginBottom: '1em',
+                  },
+                  '& th, & td': {
+                    border: '1px solid #ddd',
+                    padding: '8px',
+                    textAlign: 'left',
+                  },
+                  '& th': {
+                    backgroundColor: '#f2f2f2',
+                    fontWeight: 'bold',
+                  },
+                  '& blockquote': {
+                    borderLeft: '4px solid #007acc',
+                    paddingLeft: '1em',
+                    marginLeft: 0,
+                    fontStyle: 'italic',
+                    backgroundColor: '#f8f9fa',
+                    padding: '0.5em 1em',
+                    borderRadius: '4px',
+                  },
+                  '& a': {
+                    color: '#007acc',
+                    textDecoration: 'none',
+                    '&:hover': {
+                      textDecoration: 'underline',
+                    },
+                  },
+                  '& strong': {
+                    fontWeight: 'bold',
+                    color: '#ff9500', // Orange for great contrast on dark backgrounds
+                  },
+                  '& em': {
+                    fontStyle: 'italic',
+                    color: '#333', // Darker for better contrast
+                  },
                 }}
               >
-                <Box sx={{ mb: 1, pb: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <Box sx={{ mb: 2, pb: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
                   <Typography variant="subtitle2" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
-                    📋 Formatted Response
+                    📋 {markdownFullWidth ? 'Full Width Document View' : 'Formatted Response'}
                   </Typography>
                 </Box>
                 <ReactMarkdown>{markdownContent}</ReactMarkdown>
