@@ -1,0 +1,10 @@
+{
+  "short_name": "Claude Workflow Manager",
+  "name": "Claude Workflow Manager",
+  "description": "Manage and execute Claude Code workflows with subagent discovery",
+  "icons": [],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}

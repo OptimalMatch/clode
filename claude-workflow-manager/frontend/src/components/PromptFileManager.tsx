@@ -129,7 +129,16 @@ const PromptFileManager: React.FC<PromptFileManagerProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="md" 
+      fullWidth
+      disableEnforceFocus
+      disableAutoFocus
+      disableRestoreFocus
+      disableScrollLock
+    >
       <DialogTitle>
         Prompt File Management - {workflowName}
       </DialogTitle>

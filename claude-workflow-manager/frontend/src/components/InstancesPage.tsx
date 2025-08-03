@@ -158,7 +158,16 @@ const InstancesPage: React.FC = () => {
         ))}
       </Grid>
 
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={open} 
+        onClose={() => setOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        disableEnforceFocus
+        disableAutoFocus
+        disableRestoreFocus
+        disableScrollLock
+      >
         <DialogTitle>Spawn New Instance</DialogTitle>
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 2 }}>

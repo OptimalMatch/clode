@@ -32,7 +32,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Router>
+        <Router future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
           <Layout>
             <Routes>
               <Route path="/" element={<WorkflowsPage />} />

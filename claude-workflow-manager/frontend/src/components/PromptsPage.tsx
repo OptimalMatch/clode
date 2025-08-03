@@ -266,7 +266,16 @@ const PromptsPage: React.FC = () => {
         ))}
       </Grid>
 
-      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+      <Dialog 
+        open={open} 
+        onClose={handleClose} 
+        maxWidth="md" 
+        fullWidth
+        disableEnforceFocus
+        disableAutoFocus
+        disableRestoreFocus
+        disableScrollLock
+      >
         <DialogTitle>
           {editMode ? 'Edit Prompt' : 'Create New Prompt'}
         </DialogTitle>

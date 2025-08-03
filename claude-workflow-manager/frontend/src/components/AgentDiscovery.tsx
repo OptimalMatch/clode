@@ -191,7 +191,16 @@ const AgentDiscovery: React.FC<AgentDiscoveryProps> = ({
   );
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="lg" 
+      fullWidth
+      disableEnforceFocus
+      disableAutoFocus
+      disableRestoreFocus
+      disableScrollLock
+    >
       <DialogTitle>
         <Box display="flex" alignItems="center">
           <SmartToy sx={{ mr: 2 }} />

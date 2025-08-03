@@ -8,6 +8,7 @@ import subprocess
 from typing import Dict, List, Optional
 import json
 import uuid
+import time
 from datetime import datetime
 
 from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, Subagent, LogType
@@ -148,6 +149,13 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
                 await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""))
             elif message["type"] == "resume":
                 await claude_manager.resume_instance(instance_id)
+            elif message["type"] == "ping":
+                # Respond to ping with pong
+                await websocket.send_json({
+                    "type": "pong",
+                    "timestamp": message.get("timestamp"),
+                    "server_time": time.time()
+                })
                 
     except WebSocketDisconnect:
         await claude_manager.disconnect_websocket(instance_id)

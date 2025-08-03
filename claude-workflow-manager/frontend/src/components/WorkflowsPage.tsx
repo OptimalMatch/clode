@@ -147,7 +147,16 @@ const WorkflowsPage: React.FC = () => {
         ))}
       </Grid>
 
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={open} 
+        onClose={() => setOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        disableEnforceFocus
+        disableAutoFocus
+        disableRestoreFocus
+        disableScrollLock
+      >
         <DialogTitle>Create New Workflow</DialogTitle>
         <DialogContent>
           <TextField
@@ -213,6 +222,10 @@ const WorkflowsPage: React.FC = () => {
       <Dialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
+        disableEnforceFocus
+        disableAutoFocus
+        disableRestoreFocus
+        disableScrollLock
         maxWidth="sm"
         fullWidth
       >

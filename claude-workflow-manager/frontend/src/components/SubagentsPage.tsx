@@ -278,7 +278,16 @@ const SubagentsPage: React.FC = () => {
         ))}
       </Grid>
 
-      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+      <Dialog 
+        open={open} 
+        onClose={handleClose} 
+        maxWidth="md" 
+        fullWidth
+        disableEnforceFocus
+        disableAutoFocus
+        disableRestoreFocus
+        disableScrollLock
+      >
         <DialogTitle>
           {editMode ? 'Edit Subagent' : 'Create New Subagent'}
         </DialogTitle>
@@ -403,7 +412,16 @@ const SubagentsPage: React.FC = () => {
       </Dialog>
 
       {/* Agent Examples Dialog */}
-      <Dialog open={showExamples} onClose={() => setShowExamples(false)} maxWidth="lg" fullWidth>
+      <Dialog 
+        open={showExamples} 
+        onClose={() => setShowExamples(false)} 
+        maxWidth="lg" 
+        fullWidth
+        disableEnforceFocus
+        disableAutoFocus
+        disableRestoreFocus
+        disableScrollLock
+      >
         <DialogTitle>
           <Box display="flex" alignItems="center">
             <SmartToy sx={{ mr: 2 }} />
