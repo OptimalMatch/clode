@@ -178,6 +178,19 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     };
   };
 
+  // Function to check if content is a TODO message that should be filtered from terminal
+  const isTodoMessage = (content: string): boolean => {
+    const todoPatterns = [
+      /📋\s*\*\*Managing TODOs:\*\*/,
+      /📋\s*Managing TODOs:/,
+      /•.*\(pending\)|•.*\(in_progress\)|•.*\(completed\)|•.*\(cancelled\)/,
+      /🔧\s*\*\*Tool result received\*\*.*Todos have been modified/,
+      /Tool result received.*todo/i
+    ];
+    
+    return todoPatterns.some(pattern => pattern.test(content));
+  };
+
   const writeContentToTerminal = (content: string) => {
     console.log('📝 writeContentToTerminal called, isWaitingForResponse:', isWaitingForResponse, 'intervalRef:', !!stopwatchIntervalRef.current);
     
@@ -477,9 +490,13 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             case 'partial_output':
               // Real-time output from Claude with formatting and markdown detection
               if (message.content) {
-                writeContentToTerminal(message.content);
-                // Parse TODO information from the message
+                // Always parse TODO information from the message for the sidebar
                 parseTodosFromMessage(message.content);
+                
+                // Only display in terminal if it's not a TODO message (we have the sidebar now)
+                if (!isTodoMessage(message.content)) {
+                  writeContentToTerminal(message.content);
+                }
               }
               break;
             case 'completion':
