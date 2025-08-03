@@ -89,8 +89,27 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       };
     }
     
-    // Then check for raw markdown content patterns
+    // Skip markdown detection for short streaming messages
     const cleanContent = content.replace(/^💬\s*/, '').trim(); // Remove emoji prefix
+    
+    // Don't trigger markdown for short messages (likely status/progress updates)
+    if (cleanContent.length < 200) {
+      return {
+        hasMarkdown: false,
+        markdown: '',
+        plainText: content
+      };
+    }
+    
+    // Skip markdown for obvious status messages with emojis and short text
+    const isStatusMessage = /^[🚀🔧💬👤✅❌📋🔍📂💻📖🔄✍️].{0,100}(\*\*.*?\*\*).{0,100}$/.test(cleanContent);
+    if (isStatusMessage) {
+      return {
+        hasMarkdown: false,
+        markdown: '',
+        plainText: content
+      };
+    }
     
     // Look for common markdown patterns
     const hasHeaders = /^#{1,6}\s+.+$/m.test(cleanContent);
@@ -102,12 +121,16 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     const hasItalic = /\*.+?\*/.test(cleanContent);
     const hasBlockquotes = /^>\s+.+$/m.test(cleanContent);
     
-    // Consider it markdown if it has multiple markdown features
+    // Consider it markdown if it has multiple markdown features AND is substantial content
     const markdownFeatures = [hasHeaders, hasLists, hasNumberedLists, hasCodeBlocks, hasLinks, hasBold, hasItalic, hasBlockquotes];
     const featureCount = markdownFeatures.filter(Boolean).length;
     
-    // If it looks like markdown content (has 2+ features or is a substantial file with headers)
-    if (featureCount >= 2 || (hasHeaders && cleanContent.length > 500)) {
+    // Require more features for shorter content, or substantial content with headers
+    const isSubstantialMarkdown = (featureCount >= 3 && cleanContent.length > 300) || 
+                                  (hasHeaders && cleanContent.length > 800) ||
+                                  (hasCodeBlocks && cleanContent.length > 400);
+    
+    if (isSubstantialMarkdown) {
       return {
         hasMarkdown: true,
         markdown: cleanContent,

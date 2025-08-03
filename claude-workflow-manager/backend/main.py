@@ -188,7 +188,16 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
                 print(f"📋 Processing message type: {message_type}")
                 
                 if message_type == "input":
-                    await claude_manager.send_input(instance_id, message["content"])
+                    print(f"🔍 MAIN: About to call send_input for instance {instance_id}")
+                    print(f"🔍 MAIN: Input content length: {len(message['content'])} characters")
+                    try:
+                        await claude_manager.send_input(instance_id, message["content"])
+                        print(f"✅ MAIN: send_input completed successfully")
+                    except Exception as e:
+                        print(f"❌ MAIN: send_input failed with exception: {str(e)}")
+                        import traceback
+                        print(f"❌ MAIN: Traceback: {traceback.format_exc()}")
+                        raise
                 elif message_type == "interrupt":
                     await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""))
                 elif message_type == "resume":

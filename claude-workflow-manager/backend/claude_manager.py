@@ -18,6 +18,155 @@ class ClaudeCodeManager:
         self.instances: Dict[str, dict] = {}  # Store instance info instead of session objects
         self.websockets: Dict[str, WebSocket] = {}
         self.db = db
+    
+    def _log_with_timestamp(self, message: str):
+        """Add timestamp to log messages"""
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Include milliseconds
+        print(f"[{timestamp}] {message}")
+    
+    async def _execute_claude_streaming(self, cmd: List[str], instance_id: str):
+        """Execute Claude CLI with real-time streaming output"""
+        self._log_with_timestamp(f"📡 Starting streaming execution...")
+        
+        try:
+            # Start the process
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=os.environ.copy(),
+                bufsize=1,  # Line buffered
+                universal_newlines=True
+            )
+            
+            self._log_with_timestamp(f"🚀 Claude CLI process started (PID: {process.pid})")
+            
+            # Read output line by line in real-time
+            stdout_lines = []
+            start_time = time.time()
+            
+            while True:
+                # Check if process is still running
+                if process.poll() is not None:
+                    # Process finished, read any remaining output
+                    remaining_stdout = process.stdout.read()
+                    if remaining_stdout:
+                        stdout_lines.append(remaining_stdout)
+                        self._log_with_timestamp(f"📤 Final output: {remaining_stdout[:100]}...")
+                    break
+                
+                # Read a line from stdout
+                line = process.stdout.readline()
+                if line:
+                    line = line.strip()
+                    if line:
+                        stdout_lines.append(line)
+                        self._log_with_timestamp(f"📤 Stream line: {line[:100]}...")
+                        
+                        # Process this line immediately
+                        try:
+                            event = json.loads(line)
+                            formatted_msg = self._format_streaming_event(event)
+                            if formatted_msg:
+                                await self._send_websocket_update(instance_id, {
+                                    "type": "partial_output",
+                                    "content": formatted_msg
+                                })
+                                # Store in terminal history
+                                await self.db.append_terminal_history(instance_id, formatted_msg, "output")
+                        except json.JSONDecodeError:
+                            # Not a JSON line, might be error or other output
+                            self._log_with_timestamp(f"⚠️ Non-JSON line: {line}")
+                
+                # Small delay to prevent busy waiting
+                await asyncio.sleep(0.01)
+            
+            # Wait for process to complete
+            return_code = process.wait()
+            execution_time = int((time.time() - start_time) * 1000)
+            
+            self._log_with_timestamp(f"✅ Claude CLI completed with exit code: {return_code}")
+            self._log_with_timestamp(f"⏱️ Total execution time: {execution_time}ms")
+            
+            # Handle stderr if any
+            stderr_output = process.stderr.read()
+            if stderr_output:
+                self._log_with_timestamp(f"⚠️ Stderr: {stderr_output}")
+            
+            # Extract token usage from the last result event if available
+            tokens_used = None
+            if stdout_lines:
+                # Check the last line for result event with token usage
+                try:
+                    last_line = stdout_lines[-1]
+                    if isinstance(last_line, str):
+                        result_event = json.loads(last_line)
+                        if result_event.get('type') == 'result':
+                            tokens_used = result_event.get('token_usage', {}).get('total_tokens', None)
+                except:
+                    pass  # Ignore parsing errors
+            
+            # Send completion message
+            await self._send_websocket_update(instance_id, {
+                "type": "completion",
+                "execution_time_ms": execution_time,
+                "tokens_used": tokens_used
+            })
+            
+            return return_code == 0
+            
+        except Exception as e:
+            self._log_with_timestamp(f"❌ Error in streaming execution: {str(e)}")
+            await self._send_websocket_update(instance_id, {
+                "type": "error",
+                "error": f"Streaming execution failed: {str(e)}"
+            })
+            return False
+    
+    async def _handle_session_recovery(self, instance_id: str, session_id: str, input_text: str):
+        """Handle session recovery when Claude CLI session is invalid"""
+        self._log_with_timestamp(f"⚠️ Session {session_id} is invalid, creating new session...")
+        
+        instance_info = self.instances.get(instance_id)
+        if not instance_info:
+            return
+        
+        # Clear the invalid session from database
+        await self.db.update_instance_session_id(instance_id, "")
+        instance_info["session_created"] = False
+        
+        # Generate new session ID
+        new_session_id = str(uuid.uuid4())
+        instance_info["session_id"] = new_session_id
+        self._log_with_timestamp(f"🆕 Creating new session {new_session_id} (retry)")
+        
+        # Create retry command
+        retry_cmd = [
+            "claude", 
+            "--print",
+            "--verbose",
+            "--output-format", "stream-json",
+            "--permission-mode", "acceptEdits",
+            "--session-id", new_session_id,
+            input_text
+        ]
+        
+        # Try streaming execution again with new session
+        success = await self._execute_claude_streaming(retry_cmd, instance_id)
+        
+        if success:
+            # Save the new session ID and mark as created
+            await self.db.update_instance_session_id(instance_id, new_session_id)
+            instance_info["session_created"] = True
+            self._log_with_timestamp(f"✅ Session recovery successful with session {new_session_id}")
+        else:
+            # Even retry failed
+            self._log_with_timestamp(f"❌ Session recovery failed")
+            await self._send_websocket_update(instance_id, {
+                "type": "error",
+                "error": "Session recovery failed"
+            })
         
     async def spawn_instance(self, instance: ClaudeInstance):
         start_time = time.time()
@@ -382,6 +531,7 @@ class ClaudeCodeManager:
                     print(f"⚠️ Could not list directory contents: {e}")
             
             os.chdir(working_dir)
+            self._log_with_timestamp(f"✅ Changed to working directory: {os.getcwd()}")
             
             try:
                 session_id = instance_info.get("session_id")
@@ -389,10 +539,12 @@ class ClaudeCodeManager:
                 
                 if not session_created:
                     # First command - create session with specific ID
-                    print(f"🆕 Creating new session {session_id}")
+                    self._log_with_timestamp(f"🆕 Creating new session {session_id}")
                     cmd = [
                         "claude", 
                         "--print",
+                        "--verbose",
+                        "--output-format", "stream-json",
                         "--permission-mode", "acceptEdits",
                         "--session-id", session_id,
                         input_text
@@ -402,145 +554,48 @@ class ClaudeCodeManager:
                     await self.db.update_instance_session_id(instance_id, session_id)
                 else:
                     # Subsequent commands - resume existing session
-                    print(f"🔄 Resuming session {session_id}")
+                    self._log_with_timestamp(f"🔄 Resuming session {session_id}")
                     cmd = [
                         "claude", 
                         "--print",
+                        "--verbose",
+                        "--output-format", "stream-json",
                         "--permission-mode", "acceptEdits",
                         "--resume", session_id,
                         input_text
                     ]
                 
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    env=os.environ.copy()
-                )
+                self._log_with_timestamp(f"🚀 About to execute Claude CLI command: {' '.join(cmd)}")
+                self._log_with_timestamp(f"🔍 Command length: {len(cmd)} arguments")
                 
-                if result.returncode == 0:
-                    response = result.stdout.strip()
-                    if response:
-                        # Send the complete response
-                        content = f"💬 {response}"
-                        await self._send_websocket_update(instance_id, {
-                            "type": "partial_output",
-                            "content": content
-                        })
-                        # Store output in terminal history
-                        await self.db.append_terminal_history(instance_id, content, "output")
-                        response_parts = [response]
-                    else:
-                        response_parts = []
-                else:
-                    # Handle claude CLI error
-                    error_msg = result.stderr.strip() if result.stderr else f"Claude CLI failed with exit code {result.returncode}"
-                    stdout_msg = result.stdout.strip() if result.stdout else ""
-                    print(f"❌ Claude CLI error:")
-                    print(f"   Exit code: {result.returncode}")
-                    print(f"   Command: {' '.join(cmd)}")
-                    print(f"   Working dir: {os.getcwd()}")
-                    print(f"   Stderr: {error_msg}")
-                    print(f"   Stdout: {stdout_msg}")
-                    
-                    # Check if this is a session-related error that we can recover from
-                    if session_created and ("No conversation found" in error_msg or "Session ID" in error_msg):
-                        print(f"⚠️ Session {session_id} is invalid, creating new session...")
-                        # Clear the invalid session from database
-                        await self.db.update_instance_session_id(instance_id, "")
-                        instance_info["session_created"] = False
-                        
-                        # Retry with a new session (proper UUID format)
-                        new_session_id = str(uuid.uuid4())
-                        instance_info["session_id"] = new_session_id
-                        print(f"🆕 Creating new session {new_session_id} (retry)")
-                        
-                        retry_cmd = [
-                            "claude", 
-                            "--print",
-                            "--permission-mode", "acceptEdits",
-                            "--session-id", new_session_id,
-                            input_text
-                        ]
-                        
-                        print(f"🔄 Executing retry command: {' '.join(retry_cmd)}")
-                        retry_result = subprocess.run(
-                            retry_cmd,
-                            capture_output=True,
-                            text=True,
-                            env=os.environ.copy()
-                        )
-                        
-                        print(f"📊 Retry result:")
-                        print(f"   Exit code: {retry_result.returncode}")
-                        print(f"   Stderr: {retry_result.stderr.strip() if retry_result.stderr else 'None'}")
-                        print(f"   Stdout: {retry_result.stdout.strip() if retry_result.stdout else 'None'}")
-                        
-                        if retry_result.returncode == 0:
-                            # Save the new session ID and mark as created
-                            await self.db.update_instance_session_id(instance_id, new_session_id)
-                            instance_info["session_created"] = True
-                            
-                            response = retry_result.stdout.strip()
-                            if response:
-                                content = f"💬 {response}"
-                                await self._send_websocket_update(instance_id, {
-                                    "type": "partial_output",
-                                    "content": content
-                                })
-                                await self.db.append_terminal_history(instance_id, content, "output")
-                                response_parts = [response]
-                            else:
-                                response_parts = []
-                        else:
-                            # Even retry failed
-                            retry_error = retry_result.stderr.strip() if retry_result.stderr else f"Retry failed with exit code {retry_result.returncode}"
-                            print(f"❌ Retry also failed: {retry_error}")
-                            await self._send_websocket_update(instance_id, {
-                                "type": "error",
-                                "error": f"Session recovery failed: {retry_error}"
-                            })
-                            await self.db.append_terminal_history(instance_id, f"❌ Error: Session recovery failed: {retry_error}", "error")
-                            return
-                    else:
-                        # Not a session error, or this was already a fresh session attempt
-                        await self._send_websocket_update(instance_id, {
-                            "type": "error",
-                            "error": error_msg
-                        })
-                        # Store error in terminal history
-                        await self.db.append_terminal_history(instance_id, f"❌ Error: {error_msg}", "error")
-                        return
-                    
+                # Use Popen for real-time streaming instead of run()
+                success = await self._execute_claude_streaming(cmd, instance_id)
+                
+                if not success:
+                    # If streaming failed, try session recovery
+                    await self._handle_session_recovery(instance_id, session_id, input_text)
+                    return
+                
+                # Success - streaming handled the output already
+                self._log_with_timestamp(f"✅ Streaming execution completed successfully")
+                
+            except Exception as inner_e:
+                self._log_with_timestamp(f"⚠️ Error in Claude CLI execution: {str(inner_e)}")
+                await self._send_websocket_update(instance_id, {
+                    "type": "error",
+                    "error": f"CLI execution error: {str(inner_e)}"
+                })
+                return
             finally:
-                # Always restore original working directory
+                # Change back to original directory
                 os.chdir(original_cwd)
             
-            response = "\n".join(response_parts)
-            execution_time = int((time.time() - start_time) * 1000)
-            
-            # Estimate tokens
-            tokens_used = len(input_text.split()) + len(response.split())
-            
-            # Log output
-            await self._log_event(
-                instance_id=instance_id,
-                workflow_id=instance_info.get("workflow_id"),
-                log_type=LogType.OUTPUT,
-                content=response,
-                tokens_used=tokens_used,
-                execution_time_ms=execution_time,
-                metadata={"source": "user_interaction"}
-            )
-            
-            # Send completion message (response already sent via partial_output)
-            await self._send_websocket_update(instance_id, {
-                "type": "completion",
-                "execution_time_ms": execution_time,
-                "tokens_used": tokens_used
-            })
-            
         except Exception as e:
+            self._log_with_timestamp(f"❌ EXCEPTION in send_input for instance {instance_id}: {str(e)}")
+            self._log_with_timestamp(f"❌ Exception type: {type(e).__name__}")
+            import traceback
+            self._log_with_timestamp(f"❌ Traceback: {traceback.format_exc()}")
+            
             # Log error
             await self._log_event(
                 instance_id=instance_id,
@@ -554,6 +609,149 @@ class ClaudeCodeManager:
                 "type": "error",
                 "error": str(e)
             })
+            
+            # Store error in terminal history
+            await self.db.append_terminal_history(instance_id, f"❌ Error: {str(e)}", "error")
+    
+    def _parse_streaming_json_response(self, json_output):
+        """Parse streaming JSON response from Claude CLI to extract thought patterns, tool calls, etc."""
+        if not json_output or not json_output.strip():
+            return []
+            
+        formatted_messages = []
+        
+        # Split by lines and parse each JSON object
+        for line in json_output.strip().split('\n'):
+            if not line.strip():
+                continue
+                
+            try:
+                event = json.loads(line)
+                formatted_msg = self._format_streaming_event(event)
+                if formatted_msg:
+                    formatted_messages.append(formatted_msg)
+            except json.JSONDecodeError as e:
+                print(f"⚠️ Failed to parse JSON line: {line[:100]}... Error: {e}")
+                continue
+        
+        return formatted_messages
+    
+    def _format_streaming_event(self, event):
+        """Format individual streaming JSON events for display"""
+        if not isinstance(event, dict):
+            return None
+            
+        event_type = event.get('type', '')
+        
+        # Handle Claude CLI's actual streaming JSON format
+        if event_type == 'system':
+            # System initialization messages
+            subtype = event.get('subtype', '')
+            if subtype == 'init':
+                session_id = event.get('session_id', 'unknown')[:8]  # First 8 chars
+                model = event.get('model', 'unknown')
+                return f"🚀 **System initialized** (Session: {session_id}..., Model: {model})"
+            return f"🔧 **System:** {subtype}"
+                
+        elif event_type == 'assistant':
+            # Assistant messages - Claude's responses
+            message = event.get('message', {})
+            content = message.get('content', [])
+            
+            if isinstance(content, list):
+                formatted_parts = []
+                for block in content:
+                    if isinstance(block, dict):
+                        block_type = block.get('type', '')
+                        if block_type == 'text':
+                            text = block.get('text', '').strip()
+                            if text:
+                                formatted_parts.append(f"💬 {text}")
+                        elif block_type == 'tool_use':
+                            tool_name = block.get('name', 'Unknown')
+                            tool_input = block.get('input', {})
+                            formatted_parts.append(self._format_tool_use(tool_name, tool_input))
+                
+                if formatted_parts:
+                    return '\n'.join(filter(None, formatted_parts))
+                
+        elif event_type == 'user':
+            # User messages or tool results
+            message = event.get('message', {})
+            content = message.get('content', [])
+            
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict):
+                        if item.get('type') == 'tool_result':
+                            tool_id = item.get('tool_use_id', 'unknown')[:8]
+                            return f"🔧 **Tool result received** (ID: {tool_id}...)"
+                        elif item.get('type') == 'text':
+                            text = item.get('text', '').strip()
+                            if text:
+                                return f"👤 **Input:** {text[:100]}..." if len(text) > 100 else f"👤 **Input:** {text}"
+                
+        elif event_type == 'result':
+            # Final result/completion
+            subtype = event.get('subtype', '')
+            duration_ms = event.get('duration_ms', 0)
+            tokens_used = event.get('token_usage', {}).get('total_tokens', 0)
+            
+            if subtype == 'success':
+                duration_sec = duration_ms / 1000 if duration_ms else 0
+                return f"✅ **Task completed** ({duration_sec:.1f}s, {tokens_used} tokens)"
+            else:
+                return f"✅ **Task completed**"
+            
+        elif event_type == 'error':
+            error_msg = event.get('message', 'Unknown error')
+            return f"❌ **Error:** {error_msg}"
+            
+        # Log unknown event types for debugging (but only first occurrence)
+        if not hasattr(self, '_logged_unknown_types'):
+            self._logged_unknown_types = set()
+        if event_type not in self._logged_unknown_types:
+            print(f"🔍 Unknown streaming event type: {event_type}")
+            self._logged_unknown_types.add(event_type)
+        return None
+    
+    def _format_tool_use(self, tool_name, tool_input):
+        """Format tool use for display"""
+        # Handle Claude CLI tool names
+        if tool_name == 'Write':
+            file_path = tool_input.get('file_path', 'unknown')
+            return f"✍️  **Writing file:** `{file_path}`"
+        elif tool_name == 'Read':
+            file_path = tool_input.get('file_path', 'unknown')
+            return f"📖 **Reading file:** `{file_path}`"
+        elif tool_name == 'Edit':
+            file_path = tool_input.get('file_path', 'unknown')
+            return f"🔄 **Editing file:** `{file_path}`"
+        elif tool_name == 'MultiEdit':
+            file_path = tool_input.get('file_path', 'unknown')
+            edits = tool_input.get('edits', [])
+            edit_count = len(edits) if isinstance(edits, list) else 0
+            return f"🔄 **Multi-editing file:** `{file_path}` ({edit_count} edits)"
+        elif tool_name == 'TodoWrite':
+            todos = tool_input.get('todos', [])
+            todo_count = len(todos) if isinstance(todos, list) else 0
+            return f"📋 **Managing TODOs:** {todo_count} items"
+        elif tool_name == 'Grep':
+            query = tool_input.get('query', 'unknown')
+            return f"🔍 **Searching:** `{query}`"
+        elif tool_name == 'LS':
+            path = tool_input.get('path', 'unknown')
+            return f"📂 **Listing directory:** `{path}`"
+        elif tool_name == 'Bash':
+            command = tool_input.get('command', 'unknown')
+            return f"💻 **Running command:** `{command[:50]}...`" if len(command) > 50 else f"💻 **Running command:** `{command}`"
+        elif tool_name == 'Glob':
+            pattern = tool_input.get('pattern', 'unknown')
+            return f"🔍 **Finding files:** `{pattern}`"
+        elif tool_name == 'Task':
+            return f"📝 **Task management**"
+        else:
+            return f"🔧 **Using tool:** {tool_name}"
     
     def _format_claude_message(self, message):
         """Format Claude Code SDK messages for display"""
