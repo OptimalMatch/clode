@@ -17,6 +17,7 @@ class ClaudeCodeManager:
     def __init__(self, db: Database):
         self.instances: Dict[str, dict] = {}  # Store instance info instead of session objects
         self.websockets: Dict[str, WebSocket] = {}
+        self.running_processes: Dict[str, subprocess.Popen] = {}  # Track running Claude CLI processes
         self.db = db
     
     def _log_with_timestamp(self, message: str):
@@ -41,6 +42,9 @@ class ClaudeCodeManager:
             )
             
             self._log_with_timestamp(f"🚀 Claude CLI process started (PID: {process.pid})")
+            
+            # Store the running process so WebSocket connections can attach to it
+            self.running_processes[instance_id] = process
             
             # Read output line by line in real-time
             stdout_lines = []
@@ -86,6 +90,10 @@ class ClaudeCodeManager:
             return_code = process.wait()
             execution_time = int((time.time() - start_time) * 1000)
             
+            # Remove from running processes
+            if instance_id in self.running_processes:
+                del self.running_processes[instance_id]
+            
             self._log_with_timestamp(f"✅ Claude CLI completed with exit code: {return_code}")
             self._log_with_timestamp(f"⏱️ Total execution time: {execution_time}ms")
             
@@ -117,6 +125,10 @@ class ClaudeCodeManager:
             return return_code == 0
             
         except Exception as e:
+            # Clean up running process on error
+            if instance_id in self.running_processes:
+                del self.running_processes[instance_id]
+                
             self._log_with_timestamp(f"❌ Error in streaming execution: {str(e)}")
             await self._send_websocket_update(instance_id, {
                 "type": "error",
@@ -305,105 +317,43 @@ class ClaudeCodeManager:
             })
     
     async def execute_prompt(self, instance_id: str, prompt_content: str) -> bool:
+        """Execute a prompt using the streaming Claude CLI approach"""
+        self._log_with_timestamp(f"📝 EXECUTE_PROMPT: Starting execution for instance {instance_id}")
+        
         instance_info = self.instances.get(instance_id)
         if not instance_info:
+            self._log_with_timestamp(f"❌ EXECUTE_PROMPT: Instance {instance_id} not found in memory")
             return False
         
         try:
             # Update status to running
             await self.db.update_instance_status(instance_id, InstanceStatus.RUNNING)
+            self._log_with_timestamp(f"✅ EXECUTE_PROMPT: Updated instance {instance_id} status to running")
             
-            # Parse prompt steps if structured
-            steps = self._parse_prompt_steps(prompt_content)
+            # Send status update via websocket
+            await self._send_websocket_update(instance_id, {
+                "type": "status",
+                "status": "running",
+                "message": f"Starting Claude CLI execution for prompt"
+            })
             
-            for step in steps:
-                # Send step info via websocket
-                await self._send_websocket_update(instance_id, {
-                    "type": "step_start", 
-                    "step": step
-                })
-                
-                # Check for subagent references and enhance the prompt
-                enhanced_content, detected_subagents = await self._enhance_with_subagents(step["content"])
-                
-                # Log input with detected subagents
-                await self._log_event(
-                    instance_id=instance_id,
-                    workflow_id=instance_info.get("workflow_id"),
-                    log_type=LogType.INPUT,
-                    content=enhanced_content,
-                    step_id=step.get("id"),
-                    metadata={
-                        "original_content": step["content"],
-                        "detected_subagents": detected_subagents,
-                        "enhanced": len(detected_subagents) > 0
-                    }
-                )
-                
-                # Log subagent activations
-                for subagent_name in detected_subagents:
-                    await self._log_event(
-                        instance_id=instance_id,
-                        workflow_id=instance_info.get("workflow_id"),
-                        log_type=LogType.SUBAGENT,
-                        content=f"Activating subagent: {subagent_name}",
-                        subagent_name=subagent_name,
-                        step_id=step.get("id")
-                    )
-                
-                # Execute the step and measure time using claude-code-sdk
-                start_time = time.time()
-                
-                # Change to the working directory for this instance
-                original_cwd = os.getcwd()
-                os.chdir(instance_info["working_directory"])
-                
-                response_parts = []
-                try:
-                    async for message in query(prompt=enhanced_content):
-                        response_parts.append(str(message))
-                finally:
-                    # Always restore original working directory
-                    os.chdir(original_cwd)
-                
-                response = "\n".join(response_parts)
-                execution_time = int((time.time() - start_time) * 1000)
-                
-                # Estimate tokens (rough approximation)
-                tokens_used = len(enhanced_content.split()) + len(response.split())
-                
-                # Log the response
-                await self._log_event(
-                    instance_id=instance_id,
-                    workflow_id=instance_info.get("workflow_id"),
-                    log_type=LogType.OUTPUT,
-                    content=response,
-                    step_id=step.get("id"),
-                    tokens_used=tokens_used,
-                    execution_time_ms=execution_time,
-                    metadata={
-                        "subagents_used": detected_subagents
-                    }
-                )
-                
-                # Send response via websocket
-                await self._send_websocket_update(instance_id, {
-                    "type": "output",
-                    "content": response,
-                    "step_id": step.get("id")
-                })
+            # Log the input to terminal history
+            await self.db.append_terminal_history(instance_id, f"$ Executing prompt: {prompt_content[:100]}...", "input")
             
-            # Update status to completed
-            await self.db.update_instance_status(instance_id, InstanceStatus.COMPLETED)
+            # Use send_input to execute the prompt with streaming Claude CLI
+            await self.send_input(instance_id, prompt_content)
             
+            self._log_with_timestamp(f"✅ EXECUTE_PROMPT: Completed execution for instance {instance_id}")
             return True
             
         except Exception as e:
+            self._log_with_timestamp(f"❌ EXECUTE_PROMPT: Error executing prompt for instance {instance_id}: {str(e)}")
             await self.db.update_instance_status(instance_id, InstanceStatus.FAILED, str(e))
             await self._send_websocket_update(instance_id, {
                 "type": "error",
-                "error": str(e)
+                "error": f"Execute prompt failed: {str(e)}"
             })
+            await self.db.append_terminal_history(instance_id, f"❌ Error: {str(e)}", "error")
             return False
     
     async def interrupt_instance(self, instance_id: str, feedback: str) -> bool:
@@ -467,6 +417,24 @@ class ClaudeCodeManager:
                 print(f"📤 Sending connection data for instance: {instance_id}")
                 await websocket.send_json(connection_data)
                 print(f"✅ Connection data sent successfully for instance: {instance_id}")
+                
+                # Check if there's an ongoing Claude CLI process for this instance
+                if instance_id in self.running_processes:
+                    process = self.running_processes[instance_id]
+                    if process.poll() is None:  # Process is still running
+                        self._log_with_timestamp(f"🔄 Found ongoing Claude CLI process for instance {instance_id} (PID: {process.pid})")
+                        await websocket.send_json({
+                            "type": "status",
+                            "status": "running",
+                            "message": f"Connected to ongoing Claude CLI execution (PID: {process.pid})"
+                        })
+                        
+                        # Start a background task to monitor this ongoing process and stream its output
+                        asyncio.create_task(self._monitor_ongoing_process(instance_id, process))
+                    else:
+                        # Process finished but wasn't cleaned up yet
+                        del self.running_processes[instance_id]
+                        
             else:
                 print(f"⚠️ Instance not found in database: {instance_id}")
                 await websocket.send_json({
@@ -480,6 +448,71 @@ class ClaudeCodeManager:
             if instance_id in self.websockets:
                 del self.websockets[instance_id]
     
+    async def _monitor_ongoing_process(self, instance_id: str, process: subprocess.Popen):
+        """Monitor an ongoing Claude CLI process and stream its output to newly connected WebSockets"""
+        self._log_with_timestamp(f"🔍 Starting to monitor ongoing process for instance {instance_id}")
+        
+        try:
+            # Read any remaining output from the running process
+            while process.poll() is None:  # Process is still running
+                # Try to read a line with a short timeout
+                try:
+                    # Check if there's output available
+                    line = process.stdout.readline()
+                    if line:
+                        line = line.strip()
+                        if line:
+                            self._log_with_timestamp(f"📤 Ongoing stream line: {line}")
+                            
+                            # Process this line and send to WebSocket
+                            try:
+                                event = json.loads(line)
+                                formatted_msg = self._format_streaming_event(event)
+                                if formatted_msg:
+                                    # Send as partial_output and log to history
+                                    await self._send_websocket_update(instance_id, {
+                                        "type": "partial_output",
+                                        "content": formatted_msg
+                                    })
+                                    await self.db.append_terminal_history(instance_id, formatted_msg, "output")
+                            except json.JSONDecodeError:
+                                # Non-JSON line, send as-is
+                                await self._send_websocket_update(instance_id, {
+                                    "type": "partial_output", 
+                                    "content": line
+                                })
+                                await self.db.append_terminal_history(instance_id, line, "output")
+                
+                    # Small delay to prevent busy waiting
+                    await asyncio.sleep(0.01)
+                except Exception as e:
+                    self._log_with_timestamp(f"❌ Error reading ongoing process output: {str(e)}")
+                    break
+            
+            # Process has finished
+            if process.poll() is not None:
+                execution_time = 0  # We don't have start time for ongoing processes
+                return_code = process.returncode
+                
+                self._log_with_timestamp(f"✅ Monitored Claude CLI process completed with exit code: {return_code}")
+                
+                # Clean up
+                if instance_id in self.running_processes:
+                    del self.running_processes[instance_id]
+                
+                # Send completion message
+                await self._send_websocket_update(instance_id, {
+                    "type": "completion",
+                    "execution_time_ms": execution_time,
+                    "tokens_used": None  # We don't have token info for ongoing processes
+                })
+                
+        except Exception as e:
+            self._log_with_timestamp(f"❌ Error monitoring ongoing process for instance {instance_id}: {str(e)}")
+            # Clean up on error
+            if instance_id in self.running_processes:
+                del self.running_processes[instance_id]
+    
     async def disconnect_websocket(self, instance_id: str):
         if instance_id in self.websockets:
             del self.websockets[instance_id]
@@ -488,6 +521,19 @@ class ClaudeCodeManager:
         """Clean up an instance from memory and close any connections"""
         # Disconnect any websocket connections
         await self.disconnect_websocket(instance_id)
+        
+        # Clean up any running processes
+        if instance_id in self.running_processes:
+            process = self.running_processes[instance_id]
+            if process.poll() is None:  # Process is still running
+                self._log_with_timestamp(f"🛑 Terminating running Claude CLI process for instance {instance_id}")
+                process.terminate()
+                try:
+                    process.wait(timeout=5)  # Wait up to 5 seconds for graceful termination
+                except subprocess.TimeoutExpired:
+                    self._log_with_timestamp(f"⚡ Force killing Claude CLI process for instance {instance_id}")
+                    process.kill()
+            del self.running_processes[instance_id]
         
         # Remove instance from memory
         if instance_id in self.instances:
@@ -508,6 +554,8 @@ class ClaudeCodeManager:
             print(f"🗑️ CLAUDE_MANAGER: Cleaned up instance {instance_id} from memory")
     
     async def send_input(self, instance_id: str, input_text: str):
+        self._log_with_timestamp(f"📝 SEND_INPUT: Called for instance {instance_id} with input: {input_text[:100]}...")
+        
         instance_info = self.instances.get(instance_id)
         if not instance_info:
             # Instance not in memory - check database and spawn if needed
@@ -549,9 +597,11 @@ class ClaudeCodeManager:
             
             # Store input in terminal history
             await self.db.append_terminal_history(instance_id, f"$ {input_text}", "input")
+            self._log_with_timestamp(f"💾 SEND_INPUT: Logged input to terminal history for instance {instance_id}")
             
             # Send input to Claude Code and measure time using claude-code-sdk
             start_time = time.time()
+            self._log_with_timestamp(f"🚀 SEND_INPUT: Starting Claude CLI execution for instance {instance_id}")
             
             # Ensure ANTHROPIC_API_KEY is available for subprocess calls
             claude_api_key = os.getenv("CLAUDE_API_KEY")

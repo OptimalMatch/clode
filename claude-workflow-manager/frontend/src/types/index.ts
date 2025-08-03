@@ -70,6 +70,7 @@ export interface WebSocketMessage {
   type: string;
   content?: string;
   status?: string;
+  message?: string;
   error?: string;
   step?: any;
   instance?: ClaudeInstance;

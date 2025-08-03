@@ -514,7 +514,13 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               terminal.current?.writeln(`\x1b[31mError: ${message.error}\x1b[0m`);
               break;
             case 'status':
-              terminal.current?.writeln(`\x1b[33mStatus: ${message.status}\x1b[0m`);
+              if (message.status === 'running' && message.message) {
+                terminal.current?.writeln(`\x1b[33m🔄 ${message.message}\x1b[0m`);
+                terminal.current?.writeln(`\x1b[36m📡 You are now connected to the live output stream...\x1b[0m\r\n`);
+              } else {
+                terminal.current?.writeln(`\x1b[33mStatus: ${message.status}\x1b[0m`);
+              }
+              
               if (message.status === 'paused') {
                 setIsPaused(true);
               } else {
