@@ -445,7 +445,15 @@ async def sync_all_prompts_to_repo(workflow_id: str, data: dict):
     all_prompts = await db.get_prompts()
     workflow_prompts = [p for p in all_prompts if p.get("id") in workflow.get("prompts", [])]
     
+    # If no prompts are explicitly linked to the workflow, use all prompts in the system
     if not workflow_prompts:
+        print(f"📝 SYNC: No prompts explicitly linked to workflow {workflow_id}, using all {len(all_prompts)} prompts")
+        workflow_prompts = all_prompts
+    else:
+        print(f"📝 SYNC: Found {len(workflow_prompts)} prompts linked to workflow {workflow_id}")
+    
+    if not workflow_prompts:
+        print("📝 SYNC: No prompts found to sync")
         return {"success": True, "saved_files": {}}
     
     import tempfile

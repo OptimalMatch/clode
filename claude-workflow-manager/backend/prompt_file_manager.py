@@ -233,6 +233,7 @@ execution_groups: {}
         Sync multiple prompts to the repository
         If auto_sequence is True, automatically assigns sequence numbers
         """
+        print(f"📝 PROMPT_SYNC: Starting sync of {len(prompts)} prompts (auto_sequence={auto_sequence})")
         self.ensure_prompts_folder()
         
         saved_files = {}
@@ -240,10 +241,13 @@ execution_groups: {}
         if auto_sequence:
             # Group prompts by their execution dependencies
             execution_groups = self._group_prompts_by_dependencies(prompts)
+            print(f"📝 PROMPT_SYNC: Created {len(execution_groups)} execution groups")
             
             for seq_num, group in enumerate(execution_groups, 1):
+                print(f"📝 PROMPT_SYNC: Processing group {seq_num} with {len(group)} prompts")
                 for parallel_idx, prompt in enumerate(group):
                     parallel_letter = chr(65 + parallel_idx)  # A, B, C...
+                    print(f"📝 PROMPT_SYNC: Saving prompt '{prompt.name}' as {seq_num}{parallel_letter}")
                     filepath = self.save_prompt_to_file(
                         prompt, seq_num, parallel_letter, commit=False
                     )
@@ -256,9 +260,13 @@ execution_groups: {}
         
         # Commit all changes at once
         if saved_files:
+            print(f"📝 PROMPT_SYNC: Committing {len(saved_files)} files to repository")
             self.repo.index.add(list(saved_files.values()))
             self.repo.index.commit(f"Sync {len(saved_files)} prompts to repository")
+        else:
+            print("📝 PROMPT_SYNC: No files to commit")
         
+        print(f"📝 PROMPT_SYNC: Completed sync - saved files: {saved_files}")
         return saved_files
     
     def _calculate_execution_groups(self, prompt: Prompt) -> List[List[str]]:
