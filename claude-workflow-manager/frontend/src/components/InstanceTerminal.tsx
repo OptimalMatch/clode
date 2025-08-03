@@ -46,8 +46,41 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [copySuccess, setCopySuccess] = useState(false);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
+  const [currentTodos, setCurrentTodos] = useState<Array<{id: string, content: string, status: string, priority?: string}>>([]);
 
   // Helper functions
+  const parseTodosFromMessage = (content: string) => {
+    // Strip ANSI escape codes first
+    const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*m/g, '');
+    const cleanContent = stripAnsi(content);
+    
+    // Look for TODO messages like: "📋 **Managing TODOs:** 2 items\n  • Task 1 (pending) [medium]\n  • Task 2 (completed)"
+    const todoMatch = cleanContent.match(/📋 \*\*Managing TODOs:\*\* (\d+) items?\n((?:\s*• .+\n?)*)/);
+    
+    if (todoMatch) {
+      const todoLines = todoMatch[2].trim().split('\n');
+      const todos = todoLines.map((line, index) => {
+        // Parse line like: "  • Create placeholder files 171.txt to 190.txt in python folder (pending) [medium]"
+        const match = line.match(/^\s*• (.+?) \(([^)]+)\)(?:\s*\[([^\]]+)\])?/);
+        if (match) {
+          const [, content, status, priority] = match;
+          const todo = {
+            id: `todo-${index}`,
+            content: content.trim(),
+            status: status.trim(),
+            priority: priority?.trim()
+          };
+          return todo;
+        }
+        return null;
+      }).filter(Boolean);
+      
+      if (todos.length > 0) {
+        setCurrentTodos(todos as Array<{id: string, content: string, status: string, priority?: string}>);
+      }
+    }
+  };
+
   const getReadyStateText = (state: number): string => {
     switch (state) {
       case WebSocket.CONNECTING: return 'CONNECTING (0)';
@@ -445,6 +478,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               // Real-time output from Claude with formatting and markdown detection
               if (message.content) {
                 writeContentToTerminal(message.content);
+                // Parse TODO information from the message
+                parseTodosFromMessage(message.content);
               }
               break;
             case 'completion':
@@ -714,6 +749,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     setMarkdownContent(null);
     setMarkdownFullWidth(false);
     setCopySuccess(false);
+    // Clear previous TODOs when starting a new command
+    setCurrentTodos([]);
     
     // Reset stopwatch state in case there was a previous hanging request
     if (isWaitingForResponse) {
@@ -831,7 +868,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         sx={{
           width: '90vw',
           maxWidth: '1200px',
-          height: '80vh',
+          height: '90vh',
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: 'background.paper',
@@ -1059,6 +1096,118 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               </Paper>
             )}
           </Box>
+          
+          {/* TODO Tracker - positioned between terminal and input */}
+          {currentTodos.length > 0 && (
+            <Box sx={{ 
+              mt: 1, 
+              mb: 1, 
+              p: 1.5, 
+              backgroundColor: 'rgba(255, 149, 0, 0.05)', 
+              border: '1px solid rgba(255, 149, 0, 0.2)',
+              borderRadius: 1,
+              maxHeight: '200px',
+              minHeight: '60px',
+              overflowY: 'auto'
+            }}>
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  fontWeight: 'bold', 
+                  color: '#ff9500', 
+                  fontSize: '0.85rem',
+                  display: 'block',
+                  mb: 1
+                }}
+              >
+                📋 Active TODOs ({currentTodos.length})
+              </Typography>
+              {currentTodos.map((todo, index) => {
+                const getStatusColor = (status: string) => {
+                  switch (status) {
+                    case 'pending': return '#ff9800'; // Orange
+                    case 'in_progress': return '#2196f3'; // Blue  
+                    case 'completed': return '#4caf50'; // Green
+                    case 'cancelled': return '#f44336'; // Red
+                    default: return '#757575'; // Grey
+                  }
+                };
+                
+                const getStatusIcon = (status: string) => {
+                  switch (status) {
+                    case 'pending': return '⏳';
+                    case 'in_progress': return '🔄';
+                    case 'completed': return '✅';
+                    case 'cancelled': return '❌';
+                    default: return '❓';
+                  }
+                };
+                
+                return (
+                  <Box 
+                    key={`${todo.id}-${index}`}
+                    sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 0.8,
+                      py: 0.4,
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    <Typography 
+                      component="span" 
+                      sx={{ 
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      {getStatusIcon(todo.status)}
+                    </Typography>
+                    <Typography 
+                      component="span" 
+                      sx={{ 
+                        fontSize: '0.8rem',
+                        flex: 1,
+                        color: 'text.primary',
+                        textDecoration: todo.status === 'completed' ? 'line-through' : 'none',
+                        opacity: todo.status === 'completed' ? 0.7 : 1,
+                        fontWeight: 500
+                      }}
+                    >
+                      {todo.content}
+                    </Typography>
+                    <Typography 
+                      component="span" 
+                      sx={{ 
+                        fontSize: '0.7rem',
+                        color: getStatusColor(todo.status),
+                        fontWeight: 'bold',
+                        textTransform: 'uppercase',
+                        px: 0.8,
+                        py: 0.3,
+                        backgroundColor: `${getStatusColor(todo.status)}20`,
+                        borderRadius: 0.8
+                      }}
+                    >
+                      {todo.status}
+                    </Typography>
+                    {todo.priority && (
+                      <Typography 
+                        component="span" 
+                        sx={{ 
+                          fontSize: '0.7rem',
+                          color: 'text.secondary',
+                          fontStyle: 'italic'
+                        }}
+                      >
+                        [{todo.priority}]
+                      </Typography>
+                    )}
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
+          
           <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
             <TextField
               fullWidth
