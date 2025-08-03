@@ -864,17 +864,153 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <Paper
-        sx={{
-          width: '90vw',
-          maxWidth: '1200px',
-          height: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          backgroundColor: 'background.paper',
-        }}
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-      >
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'row', 
+        height: '90vh',
+        width: '95vw',
+        maxWidth: '1400px'
+      }}>
+        {/* Left TODO Sidebar */}
+        {currentTodos.length > 0 && (
+          <Paper
+            sx={{
+              width: '320px',
+              mr: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              backgroundColor: 'background.paper',
+              border: '2px solid rgba(255, 149, 0, 0.3)',
+            }}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            <Box sx={{ 
+              p: 2, 
+              borderBottom: '1px solid rgba(255, 149, 0, 0.2)',
+              backgroundColor: 'rgba(255, 149, 0, 0.05)'
+            }}>
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  fontWeight: 'bold', 
+                  color: '#ff9500', 
+                  fontSize: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1
+                }}
+              >
+                📋 Active TODOs ({currentTodos.length})
+              </Typography>
+            </Box>
+            <Box sx={{ 
+              flex: 1,
+              overflow: 'auto',
+              p: 1.5
+            }}>
+              {currentTodos.map((todo, index) => {
+                const getStatusColor = (status: string) => {
+                  switch (status) {
+                    case 'pending': return '#ff9800'; // Orange
+                    case 'in_progress': return '#2196f3'; // Blue  
+                    case 'completed': return '#4caf50'; // Green
+                    case 'cancelled': return '#f44336'; // Red
+                    default: return '#757575'; // Grey
+                  }
+                };
+                
+                const getStatusIcon = (status: string) => {
+                  switch (status) {
+                    case 'pending': return '⏳';
+                    case 'in_progress': return '🔄';
+                    case 'completed': return '✅';
+                    case 'cancelled': return '❌';
+                    default: return '❓';
+                  }
+                };
+                
+                return (
+                  <Box 
+                    key={`${todo.id}-${index}`}
+                    sx={{ 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      gap: 0.5,
+                      p: 1.5,
+                      mb: 1,
+                      backgroundColor: todo.status === 'completed' ? 'rgba(76, 175, 80, 0.05)' : 'rgba(255, 149, 0, 0.03)',
+                      border: `1px solid ${getStatusColor(todo.status)}30`,
+                      borderRadius: 1,
+                      position: 'relative'
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography 
+                        component="span" 
+                        sx={{ fontSize: '1rem' }}
+                      >
+                        {getStatusIcon(todo.status)}
+                      </Typography>
+                      <Typography 
+                        component="span" 
+                        sx={{ 
+                          fontSize: '0.8rem',
+                          color: getStatusColor(todo.status),
+                          fontWeight: 'bold',
+                          textTransform: 'uppercase',
+                          px: 0.8,
+                          py: 0.2,
+                          backgroundColor: `${getStatusColor(todo.status)}20`,
+                          borderRadius: 0.8,
+                          lineHeight: 1
+                        }}
+                      >
+                        {todo.status}
+                      </Typography>
+                      {todo.priority && (
+                        <Typography 
+                          component="span" 
+                          sx={{ 
+                            fontSize: '0.7rem',
+                            color: 'text.secondary',
+                            fontStyle: 'italic',
+                            ml: 'auto'
+                          }}
+                        >
+                          [{todo.priority}]
+                        </Typography>
+                      )}
+                    </Box>
+                    <Typography 
+                      sx={{ 
+                        fontSize: '0.85rem',
+                        color: 'text.primary',
+                        textDecoration: todo.status === 'completed' ? 'line-through' : 'none',
+                        opacity: todo.status === 'completed' ? 0.7 : 1,
+                        fontWeight: 500,
+                        lineHeight: 1.3,
+                        wordBreak: 'break-word'
+                      }}
+                    >
+                      {todo.content}
+                    </Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Paper>
+        )}
+
+        {/* Main Terminal Modal */}
+        <Paper
+          sx={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: 'background.paper',
+          }}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        >
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -989,8 +1125,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                 backgroundColor: '#000',
                 border: '1px solid #333',
                 borderRadius: 1,
-                minHeight: '400px',
-                height: '400px',
+                minHeight: '360px',
+                height: '360px',
                 position: 'relative',
                 display: markdownFullWidth ? 'none' : 'block', // Hide instead of not rendering
                 overflow: 'hidden',
@@ -1011,7 +1147,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               <Paper
                 sx={{
                   flex: markdownFullWidth ? 1 : '1', // Full width when markdownFullWidth is true
-                  height: '400px',
+                  height: '360px',
                   overflow: 'auto',
                   p: 3, // More padding for better readability
                   backgroundColor: 'background.paper',
@@ -1097,124 +1233,21 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             )}
           </Box>
           
-          {/* TODO Tracker - positioned between terminal and input */}
-          {currentTodos.length > 0 && (
-            <Box sx={{ 
-              mt: 1, 
-              mb: 1, 
-              p: 1.5, 
-              backgroundColor: 'rgba(255, 149, 0, 0.05)', 
-              border: '1px solid rgba(255, 149, 0, 0.2)',
-              borderRadius: 1,
-              maxHeight: '200px',
-              minHeight: '60px',
-              overflowY: 'auto'
-            }}>
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  fontWeight: 'bold', 
-                  color: '#ff9500', 
-                  fontSize: '0.85rem',
-                  display: 'block',
-                  mb: 1
-                }}
-              >
-                📋 Active TODOs ({currentTodos.length})
-              </Typography>
-              {currentTodos.map((todo, index) => {
-                const getStatusColor = (status: string) => {
-                  switch (status) {
-                    case 'pending': return '#ff9800'; // Orange
-                    case 'in_progress': return '#2196f3'; // Blue  
-                    case 'completed': return '#4caf50'; // Green
-                    case 'cancelled': return '#f44336'; // Red
-                    default: return '#757575'; // Grey
-                  }
-                };
-                
-                const getStatusIcon = (status: string) => {
-                  switch (status) {
-                    case 'pending': return '⏳';
-                    case 'in_progress': return '🔄';
-                    case 'completed': return '✅';
-                    case 'cancelled': return '❌';
-                    default: return '❓';
-                  }
-                };
-                
-                return (
-                  <Box 
-                    key={`${todo.id}-${index}`}
-                    sx={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 0.8,
-                      py: 0.4,
-                      fontSize: '0.85rem'
-                    }}
-                  >
-                    <Typography 
-                      component="span" 
-                      sx={{ 
-                        fontSize: '0.9rem'
-                      }}
-                    >
-                      {getStatusIcon(todo.status)}
-                    </Typography>
-                    <Typography 
-                      component="span" 
-                      sx={{ 
-                        fontSize: '0.8rem',
-                        flex: 1,
-                        color: 'text.primary',
-                        textDecoration: todo.status === 'completed' ? 'line-through' : 'none',
-                        opacity: todo.status === 'completed' ? 0.7 : 1,
-                        fontWeight: 500
-                      }}
-                    >
-                      {todo.content}
-                    </Typography>
-                    <Typography 
-                      component="span" 
-                      sx={{ 
-                        fontSize: '0.7rem',
-                        color: getStatusColor(todo.status),
-                        fontWeight: 'bold',
-                        textTransform: 'uppercase',
-                        px: 0.8,
-                        py: 0.3,
-                        backgroundColor: `${getStatusColor(todo.status)}20`,
-                        borderRadius: 0.8
-                      }}
-                    >
-                      {todo.status}
-                    </Typography>
-                    {todo.priority && (
-                      <Typography 
-                        component="span" 
-                        sx={{ 
-                          fontSize: '0.7rem',
-                          color: 'text.secondary',
-                          fontStyle: 'italic'
-                        }}
-                      >
-                        [{todo.priority}]
-                      </Typography>
-                    )}
-                  </Box>
-                );
-              })}
-            </Box>
-          )}
-          
           <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
             <TextField
               fullWidth
+              multiline
+              maxRows={4}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Type command and press Enter..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+                // Shift+Enter will allow natural line breaks
+              }}
+              placeholder="Type command and press Enter to send, Shift+Enter for new line..."
               variant="outlined"
               size="small"
               disabled={!isConnected}
@@ -1224,7 +1257,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             </Button>
           </Box>
         </DialogContent>
-      </Paper>
+        </Paper>
+      </Box>
     </Box>
   );
 };
