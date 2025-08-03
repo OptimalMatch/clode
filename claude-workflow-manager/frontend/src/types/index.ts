@@ -125,3 +125,14 @@ export interface LogAnalytics {
   average_response_time_ms: number;
   success_rate: number;
 }
+
+export interface GitValidationResponse {
+  accessible: boolean;
+  message: string;
+  default_branch?: string;
+}
+
+export interface GitBranchesResponse {
+  branches: string[];
+  default_branch?: string;
+}

@@ -17,7 +17,8 @@ from models import (
     InstanceListResponse, SubagentListResponse, LogListResponse, TerminalHistoryResponse,
     SpawnInstanceRequest, ExecutePromptRequest, InterruptInstanceRequest,
     DetectSubagentsRequest, SyncToRepoRequest, ImportRepoPromptsRequest,
-    AgentFormatExamplesResponse, ErrorResponse, LogAnalytics
+    AgentFormatExamplesResponse, ErrorResponse, LogAnalytics,
+    GitValidationRequest, GitValidationResponse, GitBranchesResponse
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -826,6 +827,179 @@ async def get_agents_from_repo(workflow_id: str):
 async def get_agent_format_examples():
     """Get example agent definition formats for .claude/agents/ folder"""
     return agent_discovery.get_example_agent_format()
+
+# Git repository validation endpoints
+@app.post(
+    "/api/git/validate",
+    response_model=GitValidationResponse,
+    summary="Validate Git Repository",
+    description="Check if a Git repository is accessible and get basic information.",
+    tags=["Git Operations"],
+    responses={
+        200: {"description": "Repository validation result"},
+        400: {"model": ErrorResponse, "description": "Invalid repository URL"}
+    }
+)
+async def validate_git_repository(request: GitValidationRequest):
+    """
+    Validate Git repository accessibility.
+    
+    Checks if the repository can be accessed and returns basic information
+    including the default branch if accessible.
+    
+    - **git_repo**: Git repository URL to validate
+    """
+    git_repo = request.git_repo.strip()
+    
+    if not git_repo:
+        raise HTTPException(status_code=400, detail="Git repository URL is required")
+    
+    try:
+        # Use git ls-remote to check accessibility without cloning
+        env = get_git_env()
+        
+        # Get remote HEAD to check accessibility and default branch
+        cmd = ["git", "ls-remote", "--symref", git_repo, "HEAD"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env
+        )
+        
+        if result.returncode == 0:
+            # Parse output to get default branch
+            default_branch = None
+            lines = result.stdout.strip().split('\n')
+            
+            for line in lines:
+                if line.startswith('ref: refs/heads/'):
+                    # Extract branch name from "ref: refs/heads/main"
+                    default_branch = line.split('refs/heads/')[-1].split('\t')[0]
+                    break
+            
+            return GitValidationResponse(
+                accessible=True,
+                message="Repository is accessible",
+                default_branch=default_branch or "main"
+            )
+        else:
+            # Parse common Git errors for better user feedback
+            error_msg = result.stderr.lower()
+            if "not found" in error_msg or "does not exist" in error_msg:
+                message = "Repository not found or does not exist"
+            elif "permission denied" in error_msg or "authentication failed" in error_msg:
+                message = "Permission denied - check repository access or credentials"
+            elif "timeout" in error_msg:
+                message = "Connection timeout - repository may be unreachable"
+            else:
+                message = f"Repository not accessible: {result.stderr.strip()}"
+            
+            return GitValidationResponse(
+                accessible=False,
+                message=message
+            )
+            
+    except subprocess.TimeoutExpired:
+        return GitValidationResponse(
+            accessible=False,
+            message="Connection timeout - repository may be unreachable"
+        )
+    except Exception as e:
+        return GitValidationResponse(
+            accessible=False,
+            message=f"Error validating repository: {str(e)}"
+        )
+
+@app.post(
+    "/api/git/branches",
+    response_model=GitBranchesResponse,
+    summary="Get Git Repository Branches",
+    description="Fetch all available branches from a Git repository.",
+    tags=["Git Operations"],
+    responses={
+        200: {"description": "List of repository branches"},
+        400: {"model": ErrorResponse, "description": "Invalid repository URL"},
+        404: {"model": ErrorResponse, "description": "Repository not accessible"}
+    }
+)
+async def get_git_branches(request: GitValidationRequest):
+    """
+    Get all branches from a Git repository.
+    
+    Fetches the list of available branches from the remote repository
+    without cloning it locally.
+    
+    - **git_repo**: Git repository URL to fetch branches from
+    """
+    git_repo = request.git_repo.strip()
+    
+    if not git_repo:
+        raise HTTPException(status_code=400, detail="Git repository URL is required")
+    
+    try:
+        env = get_git_env()
+        
+        # Get all remote branches
+        cmd = ["git", "ls-remote", "--heads", git_repo]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env
+        )
+        
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Repository not accessible: {result.stderr.strip()}"
+            )
+        
+        # Parse branch names from output
+        branches = []
+        default_branch = None
+        
+        lines = result.stdout.strip().split('\n')
+        for line in lines:
+            if line and '\t' in line:
+                # Format: "commit_hash\trefs/heads/branch_name"
+                branch_ref = line.split('\t')[1]
+                if branch_ref.startswith('refs/heads/'):
+                    branch_name = branch_ref.replace('refs/heads/', '')
+                    branches.append(branch_name)
+                    
+                    # Common default branch names
+                    if branch_name in ['main', 'master'] and not default_branch:
+                        default_branch = branch_name
+        
+        # If no common default found, use first branch
+        if branches and not default_branch:
+            default_branch = branches[0]
+        
+        # Sort branches with default first
+        if default_branch and default_branch in branches:
+            branches.remove(default_branch)
+            branches = [default_branch] + sorted(branches)
+        else:
+            branches = sorted(branches)
+        
+        return GitBranchesResponse(
+            branches=branches,
+            default_branch=default_branch
+        )
+        
+    except subprocess.TimeoutExpired:
+        raise HTTPException(
+            status_code=400,
+            detail="Connection timeout - repository may be unreachable"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error fetching branches: {str(e)}"
+        )
 
 @app.post("/api/workflows/{workflow_id}/auto-discover-agents")
 async def auto_discover_agents_on_workflow_update(workflow_id: str):

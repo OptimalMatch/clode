@@ -192,3 +192,18 @@ class ErrorResponse(BaseModel):
     """Error response model"""
     detail: str
     error_code: Optional[str] = None
+
+class GitValidationRequest(BaseModel):
+    """Request model for Git repository validation"""
+    git_repo: str
+
+class GitValidationResponse(BaseModel):
+    """Response model for Git repository validation"""
+    accessible: bool
+    message: str
+    default_branch: Optional[str] = None
+
+class GitBranchesResponse(BaseModel):
+    """Response model for Git repository branches"""
+    branches: List[str]
+    default_branch: Optional[str] = None

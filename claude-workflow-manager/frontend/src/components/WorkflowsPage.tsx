@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -13,12 +13,22 @@ import {
   Typography,
   Grid,
   IconButton,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Alert,
+  CircularProgress,
+  Chip,
 } from '@mui/material';
-import { Add, PlayArrow, FolderOpen, SmartToy, Delete } from '@mui/icons-material';
+import { 
+  Add, PlayArrow, FolderOpen, SmartToy, Delete, 
+  CheckCircle, Error, Warning 
+} from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { workflowApi } from '../services/api';
-import { Workflow } from '../types';
+import { workflowApi, gitApi } from '../services/api';
+import { Workflow, GitValidationResponse, GitBranchesResponse } from '../types';
 import PromptFileManager from './PromptFileManager';
 import AgentDiscovery from './AgentDiscovery';
 
@@ -36,6 +46,13 @@ const WorkflowsPage: React.FC = () => {
     git_repo: '',
     branch: 'main',
   });
+  
+  // Git repository validation state
+  const [gitValidation, setGitValidation] = useState<GitValidationResponse | null>(null);
+  const [isValidatingRepo, setIsValidatingRepo] = useState(false);
+  const [availableBranches, setAvailableBranches] = useState<string[]>([]);
+  const [isFetchingBranches, setIsFetchingBranches] = useState(false);
+  const [validationTimeout, setValidationTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const { data: workflows = [], isLoading } = useQuery({
     queryKey: ['workflows'],
@@ -61,10 +78,103 @@ const WorkflowsPage: React.FC = () => {
   });
 
   const handleCreate = () => {
-    if (newWorkflow.name && newWorkflow.git_repo) {
+    if (newWorkflow.name && newWorkflow.git_repo && gitValidation?.accessible) {
       createMutation.mutate(newWorkflow as Workflow);
     }
   };
+
+  const resetGitValidation = () => {
+    setGitValidation(null);
+    setAvailableBranches([]);
+    setIsValidatingRepo(false);
+    setIsFetchingBranches(false);
+    if (validationTimeout) {
+      clearTimeout(validationTimeout);
+      setValidationTimeout(null);
+    }
+  };
+
+  const validateRepository = async (gitRepo: string) => {
+    if (!gitRepo.trim()) {
+      resetGitValidation();
+      return;
+    }
+
+    setIsValidatingRepo(true);
+    try {
+      const validation = await gitApi.validateRepository(gitRepo);
+      setGitValidation(validation);
+      
+      if (validation.accessible) {
+        // Set default branch if provided
+        if (validation.default_branch) {
+          setNewWorkflow(prev => ({ ...prev, branch: validation.default_branch }));
+        }
+        
+        // Fetch branches
+        setIsFetchingBranches(true);
+        try {
+          const branchesResponse = await gitApi.getBranches(gitRepo);
+          setAvailableBranches(branchesResponse.branches);
+          
+          // Update branch to default if it's different
+          if (branchesResponse.default_branch && branchesResponse.default_branch !== newWorkflow.branch) {
+            setNewWorkflow(prev => ({ ...prev, branch: branchesResponse.default_branch }));
+          }
+        } catch (branchError) {
+          console.error('Error fetching branches:', branchError);
+          // Keep the default branch from validation
+        } finally {
+          setIsFetchingBranches(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error validating repository:', error);
+      setGitValidation({
+        accessible: false,
+        message: 'Error validating repository'
+      });
+    } finally {
+      setIsValidatingRepo(false);
+    }
+  };
+
+  const handleGitRepoChange = (value: string) => {
+    setNewWorkflow({ ...newWorkflow, git_repo: value });
+    
+    // Clear existing timeout
+    if (validationTimeout) {
+      clearTimeout(validationTimeout);
+    }
+    
+    // Reset validation state immediately
+    if (!value.trim()) {
+      resetGitValidation();
+      return;
+    }
+    
+    // Set new timeout for validation (debounce)
+    const timeout = setTimeout(() => {
+      validateRepository(value);
+    }, 1000); // Wait 1 second after user stops typing
+    
+    setValidationTimeout(timeout);
+  };
+
+  const handleDialogClose = () => {
+    setOpen(false);
+    setNewWorkflow({ name: '', git_repo: '', branch: 'main' });
+    resetGitValidation();
+  };
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (validationTimeout) {
+        clearTimeout(validationTimeout);
+      }
+    };
+  }, [validationTimeout]);
 
   const handleDeleteClick = (workflow: Workflow) => {
     setWorkflowToDelete(workflow);
@@ -149,7 +259,7 @@ const WorkflowsPage: React.FC = () => {
 
       <Dialog 
         open={open} 
-        onClose={() => setOpen(false)} 
+        onClose={handleDialogClose} 
         maxWidth="sm" 
         fullWidth
         disableEnforceFocus
@@ -169,28 +279,90 @@ const WorkflowsPage: React.FC = () => {
             onChange={(e) => setNewWorkflow({ ...newWorkflow, name: e.target.value })}
             sx={{ mb: 2 }}
           />
-          <TextField
-            margin="dense"
-            label="Git Repository URL"
-            fullWidth
-            variant="outlined"
-            value={newWorkflow.git_repo}
-            onChange={(e) => setNewWorkflow({ ...newWorkflow, git_repo: e.target.value })}
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            margin="dense"
-            label="Branch"
-            fullWidth
-            variant="outlined"
-            value={newWorkflow.branch}
-            onChange={(e) => setNewWorkflow({ ...newWorkflow, branch: e.target.value })}
-          />
+          
+          <Box sx={{ mb: 2 }}>
+            <TextField
+              margin="dense"
+              label="Git Repository URL"
+              fullWidth
+              variant="outlined"
+              value={newWorkflow.git_repo}
+              onChange={(e) => handleGitRepoChange(e.target.value)}
+              placeholder="https://github.com/user/repository.git"
+              helperText="Enter a Git repository URL to validate access and fetch branches"
+              InputProps={{
+                endAdornment: isValidatingRepo ? (
+                  <CircularProgress size={20} />
+                ) : gitValidation ? (
+                  gitValidation.accessible ? (
+                    <CheckCircle color="success" />
+                  ) : (
+                    <Error color="error" />
+                  )
+                ) : null
+              }}
+            />
+            
+            {/* Repository validation feedback */}
+            {gitValidation && (
+              <Alert 
+                severity={gitValidation.accessible ? "success" : "error"} 
+                sx={{ mt: 1 }}
+                icon={gitValidation.accessible ? <CheckCircle /> : <Error />}
+              >
+                {gitValidation.message}
+                {gitValidation.accessible && gitValidation.default_branch && (
+                  <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                    Default branch: {gitValidation.default_branch}
+                  </Typography>
+                )}
+              </Alert>
+            )}
+          </Box>
+
+          {/* Branch selection */}
+          {availableBranches.length > 0 ? (
+            <FormControl fullWidth margin="dense">
+              <InputLabel>Branch</InputLabel>
+              <Select
+                value={newWorkflow.branch}
+                label="Branch"
+                onChange={(e) => setNewWorkflow({ ...newWorkflow, branch: e.target.value })}
+                endAdornment={isFetchingBranches ? <CircularProgress size={20} /> : null}
+              >
+                {availableBranches.map((branch) => (
+                  <MenuItem key={branch} value={branch}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {branch}
+                      {branch === gitValidation?.default_branch && (
+                        <Chip label="default" size="small" color="primary" />
+                      )}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : (
+            <TextField
+              margin="dense"
+              label="Branch"
+              fullWidth
+              variant="outlined"
+              value={newWorkflow.branch}
+              onChange={(e) => setNewWorkflow({ ...newWorkflow, branch: e.target.value })}
+              helperText={gitValidation?.accessible && isFetchingBranches ? "Fetching available branches..." : "Enter branch name manually"}
+              disabled={isFetchingBranches}
+            />
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreate} variant="contained">
-            Create
+          <Button onClick={handleDialogClose}>Cancel</Button>
+          <Button 
+            onClick={handleCreate} 
+            variant="contained"
+            disabled={!newWorkflow.name || !newWorkflow.git_repo || !gitValidation?.accessible || createMutation.isPending}
+          >
+            {createMutation.isPending ? 'Creating...' : 'Create'}
           </Button>
         </DialogActions>
       </Dialog>

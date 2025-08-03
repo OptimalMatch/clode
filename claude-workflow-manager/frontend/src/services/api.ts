@@ -228,3 +228,19 @@ export const agentDiscoveryApi = {
     return response.data;
   },
 };
+
+export const gitApi = {
+  validateRepository: async (gitRepo: string) => {
+    const response = await api.post('/api/git/validate', {
+      git_repo: gitRepo
+    });
+    return response.data;
+  },
+  
+  getBranches: async (gitRepo: string) => {
+    const response = await api.post('/api/git/branches', {
+      git_repo: gitRepo
+    });
+    return response.data;
+  },
+};
