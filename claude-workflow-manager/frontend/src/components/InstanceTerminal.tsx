@@ -1142,8 +1142,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                 backgroundColor: '#000',
                 border: '1px solid #333',
                 borderRadius: 1,
-                minHeight: '360px',
-                height: '360px',
+                minHeight: '300px',
+                height: '300px',
                 position: 'relative',
                 display: markdownFullWidth ? 'none' : 'block', // Hide instead of not rendering
                 overflow: 'hidden',
@@ -1164,7 +1164,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               <Paper
                 sx={{
                   flex: markdownFullWidth ? 1 : '1', // Full width when markdownFullWidth is true
-                  height: '360px',
+                  height: '300px',
                   overflow: 'auto',
                   p: 3, // More padding for better readability
                   backgroundColor: 'background.paper',
@@ -1250,7 +1250,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             )}
           </Box>
           
-          <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+          <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
             <TextField
               fullWidth
               multiline
