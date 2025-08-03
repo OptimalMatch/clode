@@ -53,7 +53,7 @@ class ClaudeCodeManager:
                     remaining_stdout = process.stdout.read()
                     if remaining_stdout:
                         stdout_lines.append(remaining_stdout)
-                        self._log_with_timestamp(f"📤 Final output: {remaining_stdout[:100]}...")
+                        self._log_with_timestamp(f"📤 Final output: {remaining_stdout}")
                     break
                 
                 # Read a line from stdout
@@ -62,7 +62,7 @@ class ClaudeCodeManager:
                     line = line.strip()
                     if line:
                         stdout_lines.append(line)
-                        self._log_with_timestamp(f"📤 Stream line: {line[:100]}...")
+                        self._log_with_timestamp(f"📤 Stream line: {line}")
                         
                         # Process this line immediately
                         try:
@@ -631,7 +631,7 @@ class ClaudeCodeManager:
                 if formatted_msg:
                     formatted_messages.append(formatted_msg)
             except json.JSONDecodeError as e:
-                print(f"⚠️ Failed to parse JSON line: {line[:100]}... Error: {e}")
+                self._log_with_timestamp(f"⚠️ Failed to parse JSON line: {line} Error: {e}")
                 continue
         
         return formatted_messages
@@ -648,9 +648,10 @@ class ClaudeCodeManager:
             # System initialization messages
             subtype = event.get('subtype', '')
             if subtype == 'init':
-                session_id = event.get('session_id', 'unknown')[:8]  # First 8 chars
+                session_id = event.get('session_id', 'unknown')
                 model = event.get('model', 'unknown')
-                return f"🚀 **System initialized** (Session: {session_id}..., Model: {model})"
+                cwd = event.get('cwd', 'unknown')
+                return f"🚀 **System initialized** (Session: {session_id}, Model: {model}, CWD: {cwd})"
             return f"🔧 **System:** {subtype}"
                 
         elif event_type == 'assistant':
@@ -684,12 +685,20 @@ class ClaudeCodeManager:
                 for item in content:
                     if isinstance(item, dict):
                         if item.get('type') == 'tool_result':
-                            tool_id = item.get('tool_use_id', 'unknown')[:8]
-                            return f"🔧 **Tool result received** (ID: {tool_id}...)"
+                            tool_id = item.get('tool_use_id', 'unknown')
+                            tool_content = item.get('content', '')
+                            # Show brief summary of tool result content if available
+                            if tool_content and len(str(tool_content)) > 100:
+                                content_preview = str(tool_content)[:100] + "..."
+                                return f"🔧 **Tool result received** (ID: {tool_id}) - {content_preview}"
+                            elif tool_content:
+                                return f"🔧 **Tool result received** (ID: {tool_id}) - {tool_content}"
+                            else:
+                                return f"🔧 **Tool result received** (ID: {tool_id})"
                         elif item.get('type') == 'text':
                             text = item.get('text', '').strip()
                             if text:
-                                return f"👤 **Input:** {text[:100]}..." if len(text) > 100 else f"👤 **Input:** {text}"
+                                return f"👤 **Input:** {text}"
                 
         elif event_type == 'result':
             # Final result/completion
@@ -711,7 +720,7 @@ class ClaudeCodeManager:
         if not hasattr(self, '_logged_unknown_types'):
             self._logged_unknown_types = set()
         if event_type not in self._logged_unknown_types:
-            print(f"🔍 Unknown streaming event type: {event_type}")
+            self._log_with_timestamp(f"🔍 Unknown streaming event type: {event_type} - Full event: {event}")
             self._logged_unknown_types.add(event_type)
         return None
     
@@ -734,8 +743,35 @@ class ClaudeCodeManager:
             return f"🔄 **Multi-editing file:** `{file_path}` ({edit_count} edits)"
         elif tool_name == 'TodoWrite':
             todos = tool_input.get('todos', [])
+            if isinstance(todos, list) and todos:
+                todo_details = []
+                for todo in todos:
+                    if isinstance(todo, dict):
+                        content = todo.get('content', 'Unknown task')
+                        status = todo.get('status', 'unknown')
+                        todo_id = todo.get('id', 'no-id')
+                        priority = todo.get('priority', '')
+                        priority_text = f" [{priority}]" if priority else ""
+                        
+                        # Color code the status
+                        status_colored = status
+                        if status == 'pending':
+                            status_colored = f"\x1b[33m{status}\x1b[0m"  # Yellow
+                        elif status == 'in_progress':
+                            status_colored = f"\x1b[34m{status}\x1b[0m"  # Blue
+                        elif status == 'completed':
+                            status_colored = f"\x1b[32m{status}\x1b[0m"  # Green
+                        elif status == 'cancelled':
+                            status_colored = f"\x1b[31m{status}\x1b[0m"  # Red
+                        
+                        todo_details.append(f"\x1b[38;5;208m  • {content} ({status_colored}){priority_text}\x1b[0m")  # Orange text
+                
+                if todo_details:
+                    todos_text = '\n'.join(todo_details)
+                    return f"\x1b[38;5;208m📋 **Managing TODOs:** {len(todos)} items\x1b[0m\n{todos_text}"
+            
             todo_count = len(todos) if isinstance(todos, list) else 0
-            return f"📋 **Managing TODOs:** {todo_count} items"
+            return f"\x1b[38;5;208m📋 **Managing TODOs:** {todo_count} items\x1b[0m"
         elif tool_name == 'Grep':
             query = tool_input.get('query', 'unknown')
             return f"🔍 **Searching:** `{query}`"
@@ -744,7 +780,7 @@ class ClaudeCodeManager:
             return f"📂 **Listing directory:** `{path}`"
         elif tool_name == 'Bash':
             command = tool_input.get('command', 'unknown')
-            return f"💻 **Running command:** `{command[:50]}...`" if len(command) > 50 else f"💻 **Running command:** `{command}`"
+            return f"💻 **Running command:** `{command}`"
         elif tool_name == 'Glob':
             pattern = tool_input.get('pattern', 'unknown')
             return f"🔍 **Finding files:** `{pattern}`"
