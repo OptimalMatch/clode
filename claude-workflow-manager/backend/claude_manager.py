@@ -110,7 +110,7 @@ class ClaudeCodeManager:
             for step in steps:
                 # Send step info via websocket
                 await self._send_websocket_update(instance_id, {
-                    "type": "step_start",
+                    "type": "step_start", 
                     "step": step
                 })
                 
@@ -247,13 +247,29 @@ class ClaudeCodeManager:
     async def connect_websocket(self, instance_id: str, websocket: WebSocket):
         self.websockets[instance_id] = websocket
         
-        # Send current instance status
-        instance = await self.db.get_instance(instance_id)
-        if instance:
-            await websocket.send_json({
-                "type": "connection",
-                "instance": instance.dict()
-            })
+        try:
+            # Send current instance status
+            instance = await self.db.get_instance(instance_id)
+            if instance:
+                connection_data = self._make_json_serializable({
+                    "type": "connection",
+                    "instance": instance.dict()
+                })
+                print(f"📤 Sending connection data for instance: {instance_id}")
+                await websocket.send_json(connection_data)
+                print(f"✅ Connection data sent successfully for instance: {instance_id}")
+            else:
+                print(f"⚠️ Instance not found in database: {instance_id}")
+                await websocket.send_json({
+                    "type": "error",
+                    "error": f"Instance {instance_id} not found"
+                })
+        except Exception as e:
+            print(f"❌ Error sending connection data for instance {instance_id}: {type(e).__name__}: {str(e)}")
+            # Don't re-raise, let the main websocket handler deal with it
+            # Remove from websockets dict since connection failed
+            if instance_id in self.websockets:
+                del self.websockets[instance_id]
     
     async def disconnect_websocket(self, instance_id: str):
         if instance_id in self.websockets:
@@ -327,11 +343,24 @@ class ClaudeCodeManager:
                 "error": str(e)
             })
     
+    def _make_json_serializable(self, obj):
+        """Convert datetime objects to strings for JSON serialization"""
+        if isinstance(obj, dict):
+            return {key: self._make_json_serializable(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self._make_json_serializable(item) for item in obj]
+        elif hasattr(obj, 'isoformat'):  # datetime object
+            return obj.isoformat()
+        else:
+            return obj
+    
     async def _send_websocket_update(self, instance_id: str, data: dict):
         websocket = self.websockets.get(instance_id)
         if websocket:
             try:
-                await websocket.send_json(data)
+                # Make data JSON serializable
+                serializable_data = self._make_json_serializable(data)
+                await websocket.send_json(serializable_data)
             except Exception as e:
                 print(f"Error sending websocket update: {e}")
     

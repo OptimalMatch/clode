@@ -134,34 +134,68 @@ async def interrupt_instance(instance_id: str, data: dict):
 
 @app.websocket("/ws/{instance_id}")
 async def websocket_endpoint(websocket: WebSocket, instance_id: str):
+    print(f"🔌 WebSocket connection attempt for instance: {instance_id}")
     await websocket.accept()
+    print(f"✅ WebSocket accepted for instance: {instance_id}")
     
     try:
         await claude_manager.connect_websocket(instance_id, websocket)
+        print(f"🔗 ClaudeManager connected for instance: {instance_id}")
         
         while True:
-            data = await websocket.receive_text()
-            message = json.loads(data)
-            
-            if message["type"] == "input":
-                await claude_manager.send_input(instance_id, message["content"])
-            elif message["type"] == "interrupt":
-                await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""))
-            elif message["type"] == "resume":
-                await claude_manager.resume_instance(instance_id)
-            elif message["type"] == "ping":
-                # Respond to ping with pong
+            try:
+                data = await websocket.receive_text()
+                print(f"📨 Received WebSocket message for {instance_id}: {data[:100]}...")
+                
+                message = json.loads(data)
+                message_type = message.get("type", "unknown")
+                print(f"📋 Processing message type: {message_type}")
+                
+                if message_type == "input":
+                    await claude_manager.send_input(instance_id, message["content"])
+                elif message_type == "interrupt":
+                    await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""))
+                elif message_type == "resume":
+                    await claude_manager.resume_instance(instance_id)
+                elif message_type == "ping":
+                    # Respond to ping with pong
+                    pong_data = {
+                        "type": "pong",
+                        "timestamp": message.get("timestamp"),
+                        "server_time": time.time()
+                    }
+                    await websocket.send_json(pong_data)
+                    print(f"🏓 Sent pong response for instance: {instance_id}")
+                else:
+                    print(f"⚠️ Unknown message type '{message_type}' for instance: {instance_id}")
+                    
+            except json.JSONDecodeError as e:
+                print(f"❌ JSON decode error for instance {instance_id}: {e}, data: {data}")
                 await websocket.send_json({
-                    "type": "pong",
-                    "timestamp": message.get("timestamp"),
-                    "server_time": time.time()
+                    "type": "error",
+                    "error": "Invalid JSON format"
+                })
+            except KeyError as e:
+                print(f"❌ Missing key in message for instance {instance_id}: {e}, message: {message}")
+                await websocket.send_json({
+                    "type": "error", 
+                    "error": f"Missing required field: {e}"
                 })
                 
     except WebSocketDisconnect:
-        await claude_manager.disconnect_websocket(instance_id)
+        print(f"🔌 WebSocket disconnected for instance: {instance_id}")
+        try:
+            await claude_manager.disconnect_websocket(instance_id)
+        except Exception as cleanup_error:
+            print(f"❌ Error during WebSocket cleanup for {instance_id}: {cleanup_error}")
     except Exception as e:
-        print(f"WebSocket error: {e}")
-        await claude_manager.disconnect_websocket(instance_id)
+        print(f"❌ Unexpected WebSocket error for instance {instance_id}: {type(e).__name__}: {str(e)}")
+        import traceback
+        print(f"📍 WebSocket error traceback: {traceback.format_exc()}")
+        try:
+            await claude_manager.disconnect_websocket(instance_id)
+        except Exception as cleanup_error:
+            print(f"❌ Error during WebSocket cleanup for {instance_id}: {cleanup_error}")
 
 @app.post("/api/instances/{instance_id}/execute")
 async def execute_prompt(instance_id: str, data: dict):

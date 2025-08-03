@@ -1,21 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
   Button,
   Box,
   TextField,
   IconButton,
   Typography,
+  Paper,
 } from '@mui/material';
-import { Send, Pause, PlayArrow } from '@mui/icons-material';
+import { Pause, PlayArrow, Close } from '@mui/icons-material';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import 'xterm/css/xterm.css';
-import { instanceApi } from '../services/api';
+
 import { WebSocketMessage } from '../types';
 
 interface InstanceTerminalProps {
@@ -31,6 +30,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const terminal = useRef<Terminal | null>(null);
   const fitAddon = useRef<FitAddon | null>(null);
   const ws = useRef<WebSocket | null>(null);
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -69,187 +69,300 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   };
 
   useEffect(() => {
-    if (!terminalRef.current) return;
+    if (!terminalRef.current) {
+      console.log('⏳ Terminal ref not ready, waiting...');
+      return;
+    }
 
-    // Initialize terminal
+    console.log('🖥️ Initializing terminal...');
+    console.log('📐 Terminal container dimensions:', {
+      width: terminalRef.current.offsetWidth,
+      height: terminalRef.current.offsetHeight,
+      clientWidth: terminalRef.current.clientWidth,
+      clientHeight: terminalRef.current.clientHeight
+    });
+
+    // Initialize terminal with safe defaults
     terminal.current = new Terminal({
       cursorBlink: true,
       fontSize: 14,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      cols: 80,
+      rows: 24,
       theme: {
         background: '#1a1a1a',
         foreground: '#ffffff',
       },
+      convertEol: true,
     });
 
+    // Initialize fitAddon
     fitAddon.current = new FitAddon();
-    terminal.current.loadAddon(fitAddon.current);
-    terminal.current.loadAddon(new WebLinksAddon());
-
-    terminal.current.open(terminalRef.current);
-    fitAddon.current.fit();
-
-    // Connect WebSocket
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
-    const port = process.env.REACT_APP_WS_PORT || '8000';
-    const wsUrl = process.env.REACT_APP_WS_URL || `${protocol}//${host}:${port}`;
+    let stateMonitor: NodeJS.Timeout | null = null;
     
-    console.log('🔌 Attempting WebSocket connection to:', `${wsUrl}/ws/${instanceId}`);
-    console.log('📍 Current location:', window.location.href);
-    console.log('🌐 Protocol:', protocol, 'Host:', host, 'Port:', port);
-    
-    setConnectionStatus('connecting');
-    terminal.current?.writeln('\x1b[33m🔌 Connecting to Claude Code instance...\x1b[0m');
-    
-    ws.current = new WebSocket(`${wsUrl}/ws/${instanceId}`);
-    
-    // Monitor WebSocket state changes
-    const stateMonitor = setInterval(() => {
-      if (ws.current) {
-        setWsReadyState(ws.current.readyState);
-        console.log('📡 WebSocket ReadyState:', ws.current.readyState, getReadyStateText(ws.current.readyState));
-      }
-    }, 1000);
-
-    ws.current.onopen = () => {
-      console.log('✅ WebSocket connected successfully!');
-      console.log('📊 Connection details:', {
-        url: `${wsUrl}/ws/${instanceId}`,
-        readyState: ws.current?.readyState,
-        protocol: ws.current?.protocol
-      });
+    try {
+      console.log('🔌 Loading terminal addons...');
+      terminal.current.loadAddon(fitAddon.current);
+      terminal.current.loadAddon(new WebLinksAddon());
       
-      setIsConnected(true);
-      setConnectionStatus('connected');
-      setConnectionAttempts(0);
-      setLastPingTime(new Date());
+      console.log('🔗 Opening terminal in DOM element...');
+      terminal.current.open(terminalRef.current);
       
-      terminal.current?.writeln('\x1b[32m✅ Connected to Claude Code instance!\x1b[0m');
-      terminal.current?.writeln(`\x1b[36mConnection URL: ${wsUrl}/ws/${instanceId}\x1b[0m`);
-      terminal.current?.writeln(`\x1b[36mTimestamp: ${new Date().toLocaleTimeString()}\x1b[0m\r\n`);
+      console.log('✅ Terminal opened successfully');
       
-      // Send a ping to test the connection
-      ws.current?.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-    };
-
-    ws.current.onmessage = (event) => {
-      console.log('📨 WebSocket message received:', event.data);
-      setLastPingTime(new Date());
+      // Write initial message immediately
+      terminal.current.writeln('\x1b[36m🔌 Terminal initialized, connecting...\x1b[0m');
       
-      const message: WebSocketMessage = JSON.parse(event.data);
-      
-      switch (message.type) {
-        case 'ping':
-        case 'pong':
-          console.log('🏓 Ping/Pong received - connection alive');
-          terminal.current?.writeln(`\x1b[90m🏓 Connection alive (${new Date().toLocaleTimeString()})\x1b[0m`);
-          break;
-        case 'output':
-          terminal.current?.writeln(message.content || '');
-          break;
-        case 'error':
-          terminal.current?.writeln(`\x1b[31mError: ${message.error}\x1b[0m`);
-          break;
-        case 'status':
-          terminal.current?.writeln(`\x1b[33mStatus: ${message.status}\x1b[0m`);
-          if (message.status === 'paused') {
-            setIsPaused(true);
-          } else {
-            setIsPaused(false);
+      // Function to initialize WebSocket after terminal is ready
+      const initializeWebSocket = () => {
+        console.log('🌐 Starting WebSocket connection...');
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.hostname;
+        const port = process.env.REACT_APP_WS_PORT || '8000';
+        const wsUrl = process.env.REACT_APP_WS_URL || `${protocol}//${host}:${port}`;
+        
+        console.log('🔌 Attempting WebSocket connection to:', `${wsUrl}/ws/${instanceId}`);
+        
+        setConnectionStatus('connecting');
+        if (terminal.current) {
+          terminal.current.writeln('\x1b[33m🔌 Connecting to Claude Code instance...\x1b[0m');
+        }
+        
+        ws.current = new WebSocket(`${wsUrl}/ws/${instanceId}`);
+        
+        // Monitor WebSocket state changes
+        stateMonitor = setInterval(() => {
+          if (ws.current) {
+            setWsReadyState(ws.current.readyState);
+            console.log('📡 WebSocket ReadyState:', ws.current.readyState, getReadyStateText(ws.current.readyState));
           }
-          break;
-        case 'interrupted':
-          terminal.current?.writeln(`\x1b[31m⏸️  Instance paused\x1b[0m`);
-          setIsPaused(true);
-          break;
-        case 'resumed':
-          terminal.current?.writeln(`\x1b[32m▶️  Instance resumed\x1b[0m`);
-          setIsPaused(false);
-          break;
-        case 'step_start':
-          terminal.current?.writeln(`\x1b[36m>>> Starting step: ${message.step?.content?.substring(0, 50)}...\x1b[0m`);
-          break;
-      }
-    };
+        }, 1000);
 
-    ws.current.onclose = (event) => {
-      console.log('❌ WebSocket closed:', { 
-        code: event.code, 
-        reason: event.reason, 
-        wasClean: event.wasClean,
-        timestamp: new Date().toLocaleTimeString()
-      });
-      
-      setIsConnected(false);
-      setConnectionStatus('disconnected');
-      
-      const reasonText = getCloseReasonText(event.code);
-      terminal.current?.writeln(`\r\n\x1b[31m❌ Disconnected from instance\x1b[0m`);
-      terminal.current?.writeln(`\x1b[31mCode: ${event.code} - ${reasonText}\x1b[0m`);
-      terminal.current?.writeln(`\x1b[31mReason: ${event.reason || 'No reason provided'}\x1b[0m`);
-      terminal.current?.writeln(`\x1b[31mTime: ${new Date().toLocaleTimeString()}\x1b[0m`);
-    };
+        ws.current.onopen = () => {
+          console.log('✅ WebSocket connected successfully!');
+          
+          setIsConnected(true);
+          setConnectionStatus('connected');
+          setConnectionAttempts(0);
+          setLastPingTime(new Date());
+          
+          if (terminal.current) {
+            terminal.current.writeln('\x1b[32m✅ Connected to Claude Code instance!\x1b[0m');
+            terminal.current.writeln(`\x1b[36mConnection URL: ${wsUrl}/ws/${instanceId}\x1b[0m`);
+            terminal.current.writeln(`\x1b[36mTimestamp: ${new Date().toLocaleTimeString()}\x1b[0m\r\n`);
+          }
+          
+          // Send a ping to test the connection
+          setTimeout(() => {
+            if (ws.current?.readyState === WebSocket.OPEN) {
+              ws.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+            }
+          }, 100);
+        };
 
-    ws.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setConnectionAttempts(prev => prev + 1);
-      terminal.current?.writeln(`\x1b[31m❌ WebSocket connection error (attempt ${connectionAttempts + 1})\x1b[0m`);
+        ws.current.onmessage = (event) => {
+          console.log('📨 WebSocket message received:', event.data);
+          setLastPingTime(new Date());
+          
+          const message: WebSocketMessage = JSON.parse(event.data);
+          
+          switch (message.type) {
+            case 'ping':
+            case 'pong':
+              console.log('🏓 Ping/Pong received - connection alive');
+              terminal.current?.writeln(`\x1b[90m🏓 Connection alive (${new Date().toLocaleTimeString()})\x1b[0m`);
+              break;
+            case 'output':
+              terminal.current?.writeln(message.content || '');
+              break;
+            case 'error':
+              terminal.current?.writeln(`\x1b[31mError: ${message.error}\x1b[0m`);
+              break;
+            case 'status':
+              terminal.current?.writeln(`\x1b[33mStatus: ${message.status}\x1b[0m`);
+              if (message.status === 'paused') {
+                setIsPaused(true);
+              } else {
+                setIsPaused(false);
+              }
+              break;
+            case 'interrupted':
+              terminal.current?.writeln(`\x1b[31m⏸️  Instance paused\x1b[0m`);
+              setIsPaused(true);
+              break;
+            case 'resumed':
+              terminal.current?.writeln(`\x1b[32m▶️  Instance resumed\x1b[0m`);
+              setIsPaused(false);
+              break;
+            case 'step_start':
+              terminal.current?.writeln(`\x1b[36m>>> Starting step: ${message.step?.content?.substring(0, 50)}...\x1b[0m`);
+              break;
+          }
+        };
+
+        ws.current.onclose = (event) => {
+          console.log('❌ WebSocket closed:', { 
+            code: event.code, 
+            reason: event.reason, 
+            wasClean: event.wasClean,
+            timestamp: new Date().toLocaleTimeString()
+          });
+          
+          setIsConnected(false);
+          setConnectionStatus('disconnected');
+          
+          const reasonText = getCloseReasonText(event.code);
+          terminal.current?.writeln(`\r\n\x1b[31m❌ Disconnected from instance\x1b[0m`);
+          terminal.current?.writeln(`\x1b[31mCode: ${event.code} - ${reasonText}\x1b[0m`);
+          terminal.current?.writeln(`\x1b[31mReason: ${event.reason || 'No reason provided'}\x1b[0m`);
+          terminal.current?.writeln(`\x1b[31mTime: ${new Date().toLocaleTimeString()}\x1b[0m`);
+        };
+
+        ws.current.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          setConnectionAttempts(prev => prev + 1);
+          terminal.current?.writeln(`\x1b[31m❌ WebSocket connection error\x1b[0m`);
+        };
+      };
       
-      if (connectionAttempts < 3) {
-        terminal.current?.writeln(`\x1b[33m⏳ Retrying connection in 2 seconds...\x1b[0m`);
+      // Multiple attempts to fit the terminal with increasing delays
+      const attemptFit = (attempt: number = 1) => {
+        if (attempt > 5) {
+          console.warn('⚠️ Terminal fit failed after 5 attempts');
+          initializeWebSocket(); // Initialize websocket even if fit fails
+          return;
+        }
+        
         setTimeout(() => {
-          if (!isConnected) {
-            const newWs = new WebSocket(`${wsUrl}/ws/${instanceId}`);
-            ws.current = newWs;
-            // Re-attach event handlers would go here, but for simplicity we'll let the user manually retry
+          if (fitAddon.current && terminal.current && terminalRef.current) {
+            const container = terminalRef.current;
+            if (container.offsetWidth > 0 && container.offsetHeight > 0) {
+              try {
+                console.log(`📏 Fit attempt ${attempt} - container: ${container.offsetWidth}x${container.offsetHeight}`);
+                fitAddon.current.fit();
+                console.log('✅ Terminal fitted successfully');
+                
+                // Now start WebSocket connection after terminal is ready
+                initializeWebSocket();
+              } catch (error) {
+                console.warn(`⚠️ Terminal fit attempt ${attempt} failed:`, error);
+                attemptFit(attempt + 1);
+              }
+            } else {
+              console.log(`⏳ Container not ready (${container.offsetWidth}x${container.offsetHeight}), retrying...`);
+              attemptFit(attempt + 1);
+            }
           }
-        }, 2000);
-      } else {
-        terminal.current?.writeln(`\x1b[31m❌ Connection failed after 3 attempts. Please close and reopen the terminal.\x1b[0m`);
-      }
-    };
+        }, 100 * attempt);
+      };
+      
+      attemptFit();
+      
+    } catch (error) {
+      console.error('❌ Terminal initialization error:', error);
+      return;
+    }
 
-    // Handle window resize
+    // Handle window resize with debouncing
     const handleResize = () => {
-      fitAddon.current?.fit();
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      resizeTimeoutRef.current = setTimeout(() => {
+        if (fitAddon.current && terminal.current && terminalRef.current) {
+          try {
+            fitAddon.current.fit();
+          } catch (error) {
+            console.warn('⚠️ Terminal resize error (non-critical):', error);
+          }
+        }
+      }, 100);
     };
     window.addEventListener('resize', handleResize);
 
     return () => {
+      console.log('🧹 Cleaning up terminal component...');
       window.removeEventListener('resize', handleResize);
-      if (stateMonitor) clearInterval(stateMonitor);
-      terminal.current?.dispose();
+      
+      if (stateMonitor) {
+        clearInterval(stateMonitor);
+      }
+      
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+        resizeTimeoutRef.current = null;
+      }
+      
+      if (terminal.current) {
+        console.log('🗑️ Disposing terminal...');
+        terminal.current.dispose();
+        terminal.current = null;
+      }
+      
       if (ws.current) {
         console.log('🔌 Closing WebSocket connection');
         ws.current.close(1000, 'Component unmounting');
+        ws.current = null;
+      }
+      
+      if (fitAddon.current) {
+        fitAddon.current = null;
       }
     };
   }, [instanceId]);
 
   const handleSend = () => {
-    if (input.trim() && ws.current?.readyState === WebSocket.OPEN) {
-      console.log('📤 Sending input:', input);
-      ws.current.send(JSON.stringify({ type: 'input', content: input }));
-      terminal.current?.writeln(`\x1b[32m> ${input}\x1b[0m`);
-      setInput('');
-    } else {
+    if (!input.trim()) {
+      console.warn('❌ Cannot send - no input provided');
+      return;
+    }
+    
+    if (ws.current?.readyState !== WebSocket.OPEN) {
       console.warn('❌ Cannot send - WebSocket not ready:', {
-        hasInput: !!input.trim(),
         readyState: ws.current?.readyState,
         readyStateText: ws.current ? getReadyStateText(ws.current.readyState) : 'null'
       });
-      terminal.current?.writeln(`\x1b[31m❌ Cannot send - connection not ready\x1b[0m`);
+      if (terminal.current) {
+        terminal.current.writeln(`\x1b[31m❌ Cannot send - connection not ready (${ws.current ? getReadyStateText(ws.current.readyState) : 'disconnected'})\x1b[0m`);
+      }
+      return;
+    }
+
+    try {
+      console.log('📤 Sending input:', input);
+      ws.current.send(JSON.stringify({ type: 'input', content: input }));
+      if (terminal.current) {
+        terminal.current.writeln(`\x1b[32m> ${input}\x1b[0m`);
+      }
+      setInput('');
+    } catch (error) {
+      console.error('❌ Error sending message:', error);
+      if (terminal.current) {
+        terminal.current.writeln(`\x1b[31m❌ Error sending message: ${error}\x1b[0m`);
+      }
     }
   };
 
   const handlePing = () => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
+    if (ws.current?.readyState !== WebSocket.OPEN) {
+      console.warn('❌ Cannot ping - WebSocket not ready');
+      if (terminal.current) {
+        terminal.current.writeln(`\x1b[31m❌ Cannot ping - connection not ready\x1b[0m`);
+      }
+      return;
+    }
+
+    try {
       console.log('🏓 Sending ping');
       ws.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-      terminal.current?.writeln(`\x1b[36m🏓 Ping sent at ${new Date().toLocaleTimeString()}\x1b[0m`);
-    } else {
-      terminal.current?.writeln(`\x1b[31m❌ Cannot ping - connection not ready\x1b[0m`);
+      if (terminal.current) {
+        terminal.current.writeln(`\x1b[36m🏓 Ping sent at ${new Date().toLocaleTimeString()}\x1b[0m`);
+      }
+    } catch (error) {
+      console.error('❌ Error sending ping:', error);
+      if (terminal.current) {
+        terminal.current.writeln(`\x1b[31m❌ Error sending ping: ${error}\x1b[0m`);
+      }
     }
   };
 
@@ -267,97 +380,111 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   };
 
   return (
-    <Dialog 
-      open 
-      onClose={onClose} 
-      maxWidth="lg" 
-      fullWidth
-      disableEnforceFocus
-      disableAutoFocus
-      disableRestoreFocus
-      disableScrollLock
-      hideBackdrop
-      PaperProps={{
-        style: {
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          zIndex: 1300
-        }
+    <Box
+      sx={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 1300,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      }}
+      onClick={(e: React.MouseEvent) => {
+        if (e.target === e.currentTarget) onClose();
       }}
     >
-      <DialogTitle>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography>Claude Code Terminal - Instance {instanceId.slice(0, 8)}</Typography>
+      <Paper
+        sx={{
+          width: '90vw',
+          maxWidth: '1200px',
+          height: '80vh',
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: 'background.paper',
+        }}
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box 
-                sx={{ 
-                  width: 10, 
-                  height: 10, 
-                  borderRadius: '50%', 
-                  backgroundColor: isConnected ? '#4caf50' : connectionStatus === 'connecting' ? '#ff9800' : '#f44336',
-                  animation: connectionStatus === 'connecting' ? 'pulse 1s infinite' : 'none',
-                  '@keyframes pulse': {
-                    '0%': { opacity: 1 },
-                    '50%': { opacity: 0.5 },
-                    '100%': { opacity: 1 }
-                  }
-                }} 
-                title={`${connectionStatus} - ReadyState: ${wsReadyState !== null ? getReadyStateText(wsReadyState) : 'null'}`}
-              />
-              <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.7 }}>
-                {connectionStatus}
-                {lastPingTime && ` (${lastPingTime.toLocaleTimeString()})`}
-              </Typography>
+              <Typography>Claude Code Terminal - Instance {instanceId.slice(0, 8)}</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box 
+                  sx={{ 
+                    width: 10, 
+                    height: 10, 
+                    borderRadius: '50%', 
+                    backgroundColor: isConnected ? '#4caf50' : connectionStatus === 'connecting' ? '#ff9800' : '#f44336',
+                    animation: connectionStatus === 'connecting' ? 'pulse 1s infinite' : 'none',
+                    '@keyframes pulse': {
+                      '0%': { opacity: 1 },
+                      '50%': { opacity: 0.5 },
+                      '100%': { opacity: 1 }
+                    }
+                  }} 
+                  title={`${connectionStatus} - ReadyState: ${wsReadyState !== null ? getReadyStateText(wsReadyState) : 'null'}`}
+                />
+                <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.7 }}>
+                  {connectionStatus}
+                  {lastPingTime && ` (${lastPingTime.toLocaleTimeString()})`}
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <IconButton onClick={handlePing} title="Test Connection (Ping)" disabled={!isConnected}>
+                🏓
+              </IconButton>
+              {isPaused ? (
+                <IconButton onClick={handleResume} title="Resume">
+                  <PlayArrow />
+                </IconButton>
+              ) : (
+                <IconButton onClick={handleInterrupt} title="Pause/Interrupt">
+                  <Pause />
+                </IconButton>
+              )}
+              <IconButton onClick={onClose} title="Close">
+                <Close />
+              </IconButton>
             </Box>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <IconButton onClick={handlePing} title="Test Connection (Ping)" disabled={!isConnected}>
-              🏓
-            </IconButton>
-            {isPaused ? (
-              <IconButton onClick={handleResume} title="Resume">
-                <PlayArrow />
-              </IconButton>
-            ) : (
-              <IconButton onClick={handleInterrupt} title="Pause/Interrupt">
-                <Pause />
-              </IconButton>
-            )}
-          </Box>
-        </Box>
-      </DialogTitle>
-      <DialogContent>
-        <Box
-          ref={terminalRef}
-          sx={{
-            height: '400px',
-            backgroundColor: '#1a1a1a',
-            p: 1,
-            borderRadius: 1,
-          }}
-        />
-        <Box sx={{ display: 'flex', mt: 2, gap: 1 }}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Enter command or feedback..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            disabled={!isConnected}
+        </DialogTitle>
+        <DialogContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <Box
+            ref={terminalRef}
+            sx={{
+              flex: 1,
+              backgroundColor: '#000',
+              border: '1px solid #333',
+              borderRadius: 1,
+              minHeight: '400px',
+              width: '100%',
+              height: '400px',
+              position: 'relative',
+            }}
           />
-          <IconButton onClick={handleSend} disabled={!isConnected}>
-            <Send />
-          </IconButton>
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </Dialog>
+          <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              placeholder="Type command and press Enter..."
+              variant="outlined"
+              size="small"
+              disabled={!isConnected}
+            />
+            <Button onClick={handleSend} variant="contained" disabled={!isConnected}>
+              Send
+            </Button>
+          </Box>
+        </DialogContent>
+      </Paper>
+    </Box>
   );
 };
 
