@@ -44,13 +44,26 @@ class ClaudeCodeManager:
                 env=env
             )
             
+            # Check if instance already has a session ID in database
+            existing_session_id = await self.db.get_instance_session_id(instance.id)
+            if existing_session_id:
+                print(f"♻️ Reusing existing session: {existing_session_id}")
+                session_id = existing_session_id
+                session_created = True  # Session already exists
+            else:
+                print(f"🆕 Will create new session for instance: {instance.id}")
+                session_id = instance.id  # Use instance ID as session ID
+                session_created = False  # Session needs to be created
+            
             # Store instance information
             instance_info = {
                 "id": instance.id,
                 "working_directory": temp_dir,
                 "git_repo": instance.git_repo,
                 "workflow_id": instance.workflow_id,
-                "status": InstanceStatus.READY
+                "status": InstanceStatus.READY,
+                "session_id": session_id,
+                "session_created": session_created
             }
             
             self.instances[instance.id] = instance_info
@@ -350,17 +363,60 @@ class ClaudeCodeManager:
             original_cwd = os.getcwd()
             os.chdir(instance_info["working_directory"])
             
-            response_parts = []
             try:
-                async for message in query(prompt=input_text):
-                    formatted_message = self._format_claude_message(message)
-                    if formatted_message:
-                        response_parts.append(formatted_message)
-                        # Send intermediate messages for real-time feedback
+                session_id = instance_info.get("session_id")
+                session_created = instance_info.get("session_created", False)
+                
+                if not session_created:
+                    # First command - create session with specific ID
+                    print(f"🆕 Creating new session {session_id}")
+                    cmd = [
+                        "claude", 
+                        "--print",
+                        "--session-id", session_id,
+                        input_text
+                    ]
+                    instance_info["session_created"] = True
+                    # Save session ID to database for future use
+                    await self.db.update_instance_session_id(instance_id, session_id)
+                else:
+                    # Subsequent commands - resume existing session
+                    print(f"🔄 Resuming session {session_id}")
+                    cmd = [
+                        "claude", 
+                        "--print",
+                        "--resume", session_id,
+                        input_text
+                    ]
+                
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    env=os.environ.copy()
+                )
+                
+                if result.returncode == 0:
+                    response = result.stdout.strip()
+                    if response:
+                        # Send the complete response
                         await self._send_websocket_update(instance_id, {
                             "type": "partial_output",
-                            "content": formatted_message
+                            "content": f"💬 {response}"
                         })
+                        response_parts = [response]
+                    else:
+                        response_parts = []
+                else:
+                    # Handle claude CLI error
+                    error_msg = result.stderr.strip() if result.stderr else f"Claude CLI failed with exit code {result.returncode}"
+                    print(f"❌ Claude CLI error: {error_msg}")
+                    await self._send_websocket_update(instance_id, {
+                        "type": "error",
+                        "error": error_msg
+                    })
+                    return
+                    
             finally:
                 # Always restore original working directory
                 os.chdir(original_cwd)

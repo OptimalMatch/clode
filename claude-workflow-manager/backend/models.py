@@ -77,6 +77,7 @@ class ClaudeInstance(BaseModel):
     created_at: datetime
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
+    session_id: Optional[str] = None
 
 class LogType(str, Enum):
     INPUT = "input"

@@ -208,6 +208,18 @@ class Database:
             {"$set": update_data}
         )
     
+    async def update_instance_session_id(self, instance_id: str, session_id: str):
+        """Store the session ID for an instance"""
+        await self.db.instances.update_one(
+            {"id": instance_id},
+            {"$set": {"session_id": session_id}}
+        )
+    
+    async def get_instance_session_id(self, instance_id: str) -> Optional[str]:
+        """Get the session ID for an instance"""
+        instance = await self.db.instances.find_one({"id": instance_id}, {"session_id": 1})
+        return instance.get("session_id") if instance else None
+    
     async def delete_instance(self, instance_id: str) -> bool:
         """Delete an instance and all its associated logs"""
         try:
