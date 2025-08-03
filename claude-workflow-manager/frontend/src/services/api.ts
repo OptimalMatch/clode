@@ -50,11 +50,19 @@ export const promptApi = {
 };
 
 export const instanceApi = {
-  spawn: async (workflowId: string, promptId?: string, gitRepo?: string) => {
+  spawn: async (
+    workflowId: string, 
+    promptId?: string, 
+    gitRepo?: string, 
+    startSequence?: number, 
+    endSequence?: number
+  ) => {
     const response = await api.post('/api/instances/spawn', {
       workflow_id: workflowId,
       prompt_id: promptId,
       git_repo: gitRepo,
+      start_sequence: startSequence,
+      end_sequence: endSequence,
     });
     return response.data;
   },

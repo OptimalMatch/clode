@@ -312,6 +312,9 @@ class ClaudeCodeManager:
                 "message": "Claude Code instance ready"
             })
             
+            # Auto-execute if sequence parameters are provided
+            await self._auto_execute_sequences(instance)
+            
         except Exception as e:
             execution_time = int((time.time() - start_time) * 1000)
             
@@ -330,6 +333,74 @@ class ClaudeCodeManager:
                 "error": str(e)
             })
     
+    async def _auto_execute_sequences(self, instance: 'ClaudeInstance'):
+        """Auto-execute sequences if sequence parameters are provided"""
+        if instance.start_sequence is not None or instance.end_sequence is not None:
+            self._log_with_timestamp(f"🎯 AUTO-EXECUTE: Starting sequence execution for instance {instance.id}")
+            
+            try:
+                # Get the file manager for this instance
+                working_dir = self.instances[instance.id]["working_directory"]
+                from .prompt_file_manager import PromptFileManager
+                file_manager = PromptFileManager(working_dir)
+                
+                # Get filtered execution plan
+                execution_plan = file_manager.get_execution_plan(
+                    start_sequence=instance.start_sequence,
+                    end_sequence=instance.end_sequence
+                )
+                
+                # Log execution mode
+                if instance.start_sequence == instance.end_sequence and instance.start_sequence is not None:
+                    mode = f"single sequence {instance.start_sequence}"
+                elif instance.start_sequence is not None and instance.end_sequence is None:
+                    mode = f"from sequence {instance.start_sequence} onward"
+                elif instance.start_sequence is None and instance.end_sequence is not None:
+                    mode = f"up to sequence {instance.end_sequence}"
+                else:
+                    mode = f"sequences {instance.start_sequence} to {instance.end_sequence}"
+                
+                await self._log_event(
+                    instance_id=instance.id,
+                    workflow_id=instance.workflow_id,
+                    log_type=LogType.SYSTEM,
+                    content=f"Auto-executing {mode}",
+                    metadata={
+                        "start_sequence": instance.start_sequence,
+                        "end_sequence": instance.end_sequence,
+                        "total_sequences": len(execution_plan)
+                    }
+                )
+                
+                # Execute sequences
+                if execution_plan:
+                    # Create execution command based on filtered prompts
+                    prompt_paths = []
+                    for sequence_group in execution_plan:
+                        for prompt in sequence_group:
+                            prompt_paths.append(prompt['filepath'])
+                    
+                    # Create execution prompt for claude
+                    execution_prompt = f"Execute the following prompts in order:\n"
+                    for i, path in enumerate(prompt_paths, 1):
+                        execution_prompt += f"{i}. {path}\n"
+                    
+                    # Execute the prompts
+                    await self.send_input(instance.id, execution_prompt)
+                    
+                    self._log_with_timestamp(f"✅ AUTO-EXECUTE: Started execution of {len(prompt_paths)} prompts")
+                else:
+                    self._log_with_timestamp(f"⚠️ AUTO-EXECUTE: No prompts found in specified sequence range")
+                    
+            except Exception as e:
+                self._log_with_timestamp(f"❌ AUTO-EXECUTE: Error during auto-execution: {str(e)}")
+                await self._log_event(
+                    instance_id=instance.id,
+                    workflow_id=instance.workflow_id,
+                    log_type=LogType.ERROR,
+                    content=f"Auto-execution failed: {str(e)}"
+                )
+
     async def execute_prompt(self, instance_id: str, prompt_content: str) -> bool:
         """Execute a prompt using the streaming Claude CLI approach"""
         self._log_with_timestamp(f"📝 EXECUTE_PROMPT: Starting execution for instance {instance_id}")

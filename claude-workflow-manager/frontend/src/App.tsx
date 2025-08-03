@@ -5,6 +5,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Layout from './components/Layout';
 import WorkflowsPage from './components/WorkflowsPage';
+import DesignPage from './components/DesignPage';
 import PromptsPage from './components/PromptsPage';
 import InstancesPage from './components/InstancesPage';
 import SubagentsPage from './components/SubagentsPage';
@@ -38,6 +39,7 @@ function App() {
             <Routes>
               <Route path="/" element={<WorkflowsPage />} />
               <Route path="/workflows" element={<WorkflowsPage />} />
+              <Route path="/design" element={<DesignPage />} />
               <Route path="/prompts" element={<PromptsPage />} />
               <Route path="/subagents" element={<SubagentsPage />} />
               <Route path="/ssh-keys" element={<SSHKeysPage />} />

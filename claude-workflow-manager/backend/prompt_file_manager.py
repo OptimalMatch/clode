@@ -206,10 +206,14 @@ execution_groups: {}
         print(f"🎯 PROMPT DISCOVERY: Total prompts loaded: {len(prompts)}")
         return prompts
     
-    def get_execution_plan(self) -> List[List[Dict]]:
+    def get_execution_plan(self, start_sequence: int = None, end_sequence: int = None) -> List[List[Dict]]:
         """
         Get execution plan grouped by sequence number
         Returns list of parallel groups in execution order
+        
+        Args:
+            start_sequence: Optional sequence number to start from (None = start from beginning)
+            end_sequence: Optional sequence number to end at (None = run to end)
         """
         prompts = self.load_prompts_from_repo()
         
@@ -221,10 +225,20 @@ execution_groups: {}
                 groups[seq] = []
             groups[seq].append(prompt)
         
+        # Filter sequences based on start/end parameters
+        all_sequences = sorted(groups.keys())
+        
+        # Determine which sequences to include
+        if start_sequence is not None:
+            all_sequences = [seq for seq in all_sequences if seq >= start_sequence]
+        if end_sequence is not None:
+            all_sequences = [seq for seq in all_sequences if seq <= end_sequence]
+        
         # Sort groups by sequence and return as list
         execution_plan = []
-        for seq in sorted(groups.keys()):
-            execution_plan.append(sorted(groups[seq], key=lambda p: p['parallel']))
+        for seq in all_sequences:
+            if seq in groups:  # Make sure the sequence exists
+                execution_plan.append(sorted(groups[seq], key=lambda p: p['parallel']))
         
         return execution_plan
     

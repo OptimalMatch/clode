@@ -540,15 +540,24 @@ async def spawn_instance(request: SpawnInstanceRequest):
     Spawn a new Claude instance.
     
     Creates a new Claude AI instance that can execute prompts within the context
-    of a specific workflow and Git repository.
+    of a specific workflow and Git repository with flexible sequence execution.
     
     - **workflow_id**: ID of the workflow to execute
     - **prompt_id**: Optional specific prompt to execute
     - **git_repo**: Optional Git repository override
+    - **start_sequence**: Optional sequence number to start from (None = start from beginning)
+    - **end_sequence**: Optional sequence number to end at (None = run to end)
+    
+    **Execution Modes:**
+    - Full workflow: start_sequence=None, end_sequence=None
+    - Single sequence: start_sequence=X, end_sequence=X
+    - From sequence onward: start_sequence=X, end_sequence=None
     """
     workflow_id = request.workflow_id
     prompt_id = request.prompt_id
     git_repo = request.git_repo
+    start_sequence = request.start_sequence
+    end_sequence = request.end_sequence
     
     instance_id = str(uuid.uuid4())
     instance = ClaudeInstance(
@@ -557,7 +566,9 @@ async def spawn_instance(request: SpawnInstanceRequest):
         prompt_id=prompt_id,
         git_repo=git_repo,
         status=InstanceStatus.INITIALIZING,
-        created_at=datetime.utcnow()
+        created_at=datetime.utcnow(),
+        start_sequence=start_sequence,
+        end_sequence=end_sequence
     )
     
     await db.create_instance(instance)

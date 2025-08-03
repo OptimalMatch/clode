@@ -78,6 +78,8 @@ class ClaudeInstance(BaseModel):
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
     session_id: Optional[str] = None
+    start_sequence: Optional[int] = None  # Which sequence to start from
+    end_sequence: Optional[int] = None    # Which sequence to end at
 
 class LogType(str, Enum):
     INPUT = "input"
@@ -156,6 +158,8 @@ class SpawnInstanceRequest(BaseModel):
     workflow_id: str
     prompt_id: Optional[str] = None
     git_repo: Optional[str] = None
+    start_sequence: Optional[int] = None  # Which sequence to start from (None = start from beginning)
+    end_sequence: Optional[int] = None    # Which sequence to end at (None = run to end)
 
 class ExecutePromptRequest(BaseModel):
     """Request model for executing prompts"""
