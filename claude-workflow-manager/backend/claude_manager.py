@@ -10,6 +10,7 @@ from models import ClaudeInstance, InstanceStatus, PromptStep, Subagent, Instanc
 from database import Database
 import re
 import time
+import uuid
 from datetime import datetime
 
 class ClaudeCodeManager:
@@ -52,7 +53,7 @@ class ClaudeCodeManager:
                 session_created = True  # Session already exists
             else:
                 print(f"🆕 Will create new session for instance: {instance.id}")
-                session_id = instance.id  # Use instance ID as session ID
+                session_id = str(uuid.uuid4())  # Generate proper UUID for session
                 session_created = False  # Session needs to be created
             
             # Store instance information
@@ -351,6 +352,9 @@ class ClaudeCodeManager:
                 metadata={"source": "user_interaction"}
             )
             
+            # Store input in terminal history
+            await self.db.append_terminal_history(instance_id, f"$ {input_text}", "input")
+            
             # Send input to Claude Code and measure time using claude-code-sdk
             start_time = time.time()
             
@@ -400,10 +404,13 @@ class ClaudeCodeManager:
                     response = result.stdout.strip()
                     if response:
                         # Send the complete response
+                        content = f"💬 {response}"
                         await self._send_websocket_update(instance_id, {
                             "type": "partial_output",
-                            "content": f"💬 {response}"
+                            "content": content
                         })
+                        # Store output in terminal history
+                        await self.db.append_terminal_history(instance_id, content, "output")
                         response_parts = [response]
                     else:
                         response_parts = []
@@ -411,11 +418,68 @@ class ClaudeCodeManager:
                     # Handle claude CLI error
                     error_msg = result.stderr.strip() if result.stderr else f"Claude CLI failed with exit code {result.returncode}"
                     print(f"❌ Claude CLI error: {error_msg}")
-                    await self._send_websocket_update(instance_id, {
-                        "type": "error",
-                        "error": error_msg
-                    })
-                    return
+                    
+                    # Check if this is a session-related error that we can recover from
+                    if session_created and ("No conversation found" in error_msg or "Session ID" in error_msg):
+                        print(f"⚠️ Session {session_id} is invalid, creating new session...")
+                        # Clear the invalid session from database
+                        await self.db.update_instance_session_id(instance_id, "")
+                        instance_info["session_created"] = False
+                        
+                        # Retry with a new session (proper UUID format)
+                        new_session_id = str(uuid.uuid4())
+                        instance_info["session_id"] = new_session_id
+                        print(f"🆕 Creating new session {new_session_id} (retry)")
+                        
+                        retry_cmd = [
+                            "claude", 
+                            "--print",
+                            "--session-id", new_session_id,
+                            input_text
+                        ]
+                        
+                        retry_result = subprocess.run(
+                            retry_cmd,
+                            capture_output=True,
+                            text=True,
+                            env=os.environ.copy()
+                        )
+                        
+                        if retry_result.returncode == 0:
+                            # Save the new session ID and mark as created
+                            await self.db.update_instance_session_id(instance_id, new_session_id)
+                            instance_info["session_created"] = True
+                            
+                            response = retry_result.stdout.strip()
+                            if response:
+                                content = f"💬 {response}"
+                                await self._send_websocket_update(instance_id, {
+                                    "type": "partial_output",
+                                    "content": content
+                                })
+                                await self.db.append_terminal_history(instance_id, content, "output")
+                                response_parts = [response]
+                            else:
+                                response_parts = []
+                        else:
+                            # Even retry failed
+                            retry_error = retry_result.stderr.strip() if retry_result.stderr else f"Retry failed with exit code {retry_result.returncode}"
+                            print(f"❌ Retry also failed: {retry_error}")
+                            await self._send_websocket_update(instance_id, {
+                                "type": "error",
+                                "error": f"Session recovery failed: {retry_error}"
+                            })
+                            await self.db.append_terminal_history(instance_id, f"❌ Error: Session recovery failed: {retry_error}", "error")
+                            return
+                    else:
+                        # Not a session error, or this was already a fresh session attempt
+                        await self._send_websocket_update(instance_id, {
+                            "type": "error",
+                            "error": error_msg
+                        })
+                        # Store error in terminal history
+                        await self.db.append_terminal_history(instance_id, f"❌ Error: {error_msg}", "error")
+                        return
                     
             finally:
                 # Always restore original working directory

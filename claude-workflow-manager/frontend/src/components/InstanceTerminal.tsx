@@ -15,7 +15,8 @@ import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import 'xterm/css/xterm.css';
 
-import { WebSocketMessage } from '../types';
+import { WebSocketMessage, TerminalHistoryEntry } from '../types';
+import { instanceApi } from '../services/api';
 
 interface InstanceTerminalProps {
   instanceId: string;
@@ -66,6 +67,57 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       case 1011: return 'Internal Error';
       case 1015: return 'TLS Handshake';
       default: return 'Unknown';
+    }
+  };
+
+  const loadTerminalHistory = async () => {
+    try {
+      console.log('📜 Loading terminal history for instance:', instanceId);
+      const response = await instanceApi.getTerminalHistory(instanceId);
+      const history: TerminalHistoryEntry[] = response.history || [];
+      
+      if (history.length === 0) {
+        console.log('📜 No terminal history found');
+        return;
+      }
+      
+      console.log(`📜 Found ${history.length} terminal history entries`);
+      
+      if (terminal.current) {
+        terminal.current.writeln('\x1b[90m--- Previous Session History ---\x1b[0m');
+        
+        history.forEach((entry) => {
+          let color = '';
+          
+          switch (entry.type) {
+            case 'input':
+              color = '\x1b[36m'; // Cyan for input
+              break;
+            case 'output':
+              color = '\x1b[37m'; // White for output  
+              break;
+            case 'error':
+              color = '\x1b[31m'; // Red for errors
+              break;
+            case 'system':
+              color = '\x1b[33m'; // Yellow for system
+              break;
+            default:
+              color = '\x1b[37m'; // Default white
+          }
+          
+          // Write the entry with appropriate coloring
+          terminal.current?.writeln(`${color}${entry.content}\x1b[0m`);
+        });
+        
+        terminal.current.writeln('\x1b[90m--- End History ---\x1b[0m\r\n');
+        console.log('📜 Terminal history loaded successfully');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load terminal history:', error);
+      if (terminal.current) {
+        terminal.current.writeln('\x1b[31m⚠️ Failed to load previous session history\x1b[0m\r\n');
+      }
     }
   };
 
@@ -159,6 +211,9 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             terminal.current.writeln('\x1b[32m✅ Connected to Claude Code instance!\x1b[0m');
             terminal.current.writeln(`\x1b[36mConnection URL: ${wsUrl}/ws/${instanceId}\x1b[0m`);
             terminal.current.writeln(`\x1b[36mTimestamp: ${new Date().toLocaleTimeString()}\x1b[0m\r\n`);
+            
+            // Load and display terminal history
+            loadTerminalHistory();
           }
           
           // Send a ping to test the connection

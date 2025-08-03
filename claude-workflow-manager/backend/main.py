@@ -150,6 +150,24 @@ async def delete_instance(instance_id: str):
     
     return {"success": True, "message": f"Instance {instance_id} deleted successfully"}
 
+@app.get("/api/instances/{instance_id}/terminal-history")
+async def get_terminal_history(instance_id: str):
+    """Get terminal history for an instance"""
+    try:
+        history = await db.get_terminal_history(instance_id)
+        return {"history": history}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/instances/{instance_id}/terminal-history")
+async def clear_terminal_history(instance_id: str):
+    """Clear terminal history for an instance"""
+    try:
+        await db.clear_terminal_history(instance_id)
+        return {"success": True, "message": f"Terminal history cleared for instance {instance_id}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.websocket("/ws/{instance_id}")
 async def websocket_endpoint(websocket: WebSocket, instance_id: str):
     print(f"🔌 WebSocket connection attempt for instance: {instance_id}")

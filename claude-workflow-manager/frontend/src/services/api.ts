@@ -82,6 +82,16 @@ export const instanceApi = {
     const response = await api.delete(`/api/instances/${instanceId}`);
     return response.data;
   },
+  
+  getTerminalHistory: async (instanceId: string) => {
+    const response = await api.get(`/api/instances/${instanceId}/terminal-history`);
+    return response.data;
+  },
+  
+  clearTerminalHistory: async (instanceId: string) => {
+    const response = await api.delete(`/api/instances/${instanceId}/terminal-history`);
+    return response.data;
+  },
 };
 
 export const subagentApi = {

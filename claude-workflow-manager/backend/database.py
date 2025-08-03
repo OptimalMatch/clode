@@ -220,6 +220,42 @@ class Database:
         instance = await self.db.instances.find_one({"id": instance_id}, {"session_id": 1})
         return instance.get("session_id") if instance else None
     
+    async def append_terminal_history(self, instance_id: str, content: str, content_type: str = "output"):
+        """Append content to instance terminal history"""
+        history_entry = {
+            "timestamp": datetime.utcnow(),
+            "type": content_type,  # "input", "output", "error", "system"
+            "content": content
+        }
+        
+        # Add to history array, keeping only last 500 entries
+        await self.db.instances.update_one(
+            {"id": instance_id},
+            {
+                "$push": {
+                    "terminal_history": {
+                        "$each": [history_entry],
+                        "$slice": -500  # Keep only last 500 entries
+                    }
+                }
+            }
+        )
+    
+    async def get_terminal_history(self, instance_id: str) -> List[Dict]:
+        """Get terminal history for an instance"""
+        instance = await self.db.instances.find_one(
+            {"id": instance_id}, 
+            {"terminal_history": 1}
+        )
+        return instance.get("terminal_history", []) if instance else []
+    
+    async def clear_terminal_history(self, instance_id: str):
+        """Clear terminal history for an instance"""
+        await self.db.instances.update_one(
+            {"id": instance_id},
+            {"$unset": {"terminal_history": 1}}
+        )
+    
     async def delete_instance(self, instance_id: str) -> bool:
         """Delete an instance and all its associated logs"""
         try:

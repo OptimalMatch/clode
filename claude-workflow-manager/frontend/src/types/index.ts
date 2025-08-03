@@ -77,6 +77,12 @@ export interface WebSocketMessage {
   tokens_used?: number;
 }
 
+export interface TerminalHistoryEntry {
+  timestamp: string;
+  type: 'input' | 'output' | 'error' | 'system';
+  content: string;
+}
+
 export type LogType = 
   | 'input'
   | 'output'
