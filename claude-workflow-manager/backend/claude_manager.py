@@ -365,7 +365,23 @@ class ClaudeCodeManager:
             
             # Change to the working directory for this instance
             original_cwd = os.getcwd()
-            os.chdir(instance_info["working_directory"])
+            working_dir = instance_info["working_directory"]
+            print(f"📁 Changing to working directory: {working_dir}")
+            
+            # Check if working directory exists and has content
+            if not os.path.exists(working_dir):
+                print(f"❌ Working directory doesn't exist: {working_dir}")
+            else:
+                print(f"✅ Working directory exists: {working_dir}")
+                try:
+                    dir_contents = os.listdir(working_dir)
+                    print(f"📂 Directory contents: {len(dir_contents)} items")
+                    if len(dir_contents) < 5:  # Show contents if small directory
+                        print(f"📋 Contents: {dir_contents}")
+                except Exception as e:
+                    print(f"⚠️ Could not list directory contents: {e}")
+            
+            os.chdir(working_dir)
             
             try:
                 session_id = instance_info.get("session_id")
@@ -417,7 +433,13 @@ class ClaudeCodeManager:
                 else:
                     # Handle claude CLI error
                     error_msg = result.stderr.strip() if result.stderr else f"Claude CLI failed with exit code {result.returncode}"
-                    print(f"❌ Claude CLI error: {error_msg}")
+                    stdout_msg = result.stdout.strip() if result.stdout else ""
+                    print(f"❌ Claude CLI error:")
+                    print(f"   Exit code: {result.returncode}")
+                    print(f"   Command: {' '.join(cmd)}")
+                    print(f"   Working dir: {os.getcwd()}")
+                    print(f"   Stderr: {error_msg}")
+                    print(f"   Stdout: {stdout_msg}")
                     
                     # Check if this is a session-related error that we can recover from
                     if session_created and ("No conversation found" in error_msg or "Session ID" in error_msg):
@@ -438,12 +460,18 @@ class ClaudeCodeManager:
                             input_text
                         ]
                         
+                        print(f"🔄 Executing retry command: {' '.join(retry_cmd)}")
                         retry_result = subprocess.run(
                             retry_cmd,
                             capture_output=True,
                             text=True,
                             env=os.environ.copy()
                         )
+                        
+                        print(f"📊 Retry result:")
+                        print(f"   Exit code: {retry_result.returncode}")
+                        print(f"   Stderr: {retry_result.stderr.strip() if retry_result.stderr else 'None'}")
+                        print(f"   Stdout: {retry_result.stdout.strip() if retry_result.stdout else 'None'}")
                         
                         if retry_result.returncode == 0:
                             # Save the new session ID and mark as created
@@ -575,22 +603,46 @@ class ClaudeCodeManager:
                     return f"💬 {text}"
                     
             elif "ToolResultBlock" in msg_str and "content=" in msg_str:
-                # Extract file content from tool results
-                match = re.search(r"content='([^']*(?:\\.[^']*)*)'", msg_str)
-                if match:
-                    content = match.group(1)
-                    # Clean up the content - remove line numbers and format nicely
-                    if "→" in content:  # Line numbers present
-                        lines = content.split("\\n")
-                        formatted_lines = []
-                        for line in lines:
-                            if "→" in line:
-                                # Remove line numbers
-                                text = line.split("→", 1)[-1]
-                                formatted_lines.append(text)
-                            else:
-                                formatted_lines.append(line)
-                        return "📄 **File Contents:**\n```\n" + "\n".join(formatted_lines) + "\n```"
+                # Extract file content from tool results - handle JSON and special characters properly
+                try:
+                    # Look for content= followed by the actual content
+                    content_start = msg_str.find("content='")
+                    if content_start != -1:
+                        # Find the start of the content
+                        content_start += len("content='")
+                        
+                        # Find the end - look for the last single quote before closing parenthesis
+                        # This handles JSON and other complex content better
+                        content_end = msg_str.rfind("'", content_start)
+                        if content_end > content_start:
+                            content = msg_str[content_start:content_end]
+                            
+                            # Unescape the content
+                            content = content.replace("\\'", "'").replace("\\n", "\n").replace("\\\"", "\"")
+                            
+                            # Clean up line numbers if present
+                            if "→" in content:
+                                lines = content.split("\n")
+                                formatted_lines = []
+                                for line in lines:
+                                    if "→" in line and line.strip():
+                                        # Remove line numbers (format: "   123→content")
+                                        parts = line.split("→", 1)
+                                        if len(parts) > 1:
+                                            formatted_lines.append(parts[1])
+                                        else:
+                                            formatted_lines.append(line)
+                                    else:
+                                        formatted_lines.append(line)
+                                content = "\n".join(formatted_lines)
+                            
+                            # Return markdown-formatted content
+                            return f"📄 **File Contents:**\n```markdown\n{content}\n```"
+                            
+                except Exception as e:
+                    print(f"⚠️ Error parsing file content: {e}")
+                    # Fall back to simple extraction
+                    pass
                         
             elif "ResultMessage" in msg_str:
                 # Extract cost and duration info

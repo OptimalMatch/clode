@@ -17,6 +17,7 @@ import 'xterm/css/xterm.css';
 
 import { WebSocketMessage, TerminalHistoryEntry } from '../types';
 import { instanceApi } from '../services/api';
+import ReactMarkdown from 'react-markdown';
 
 interface InstanceTerminalProps {
   instanceId: string;
@@ -40,6 +41,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [lastPingTime, setLastPingTime] = useState<Date | null>(null);
   const [wsReadyState, setWsReadyState] = useState<number | null>(null);
+  const [markdownContent, setMarkdownContent] = useState<string | null>(null);
 
   // Helper functions
   const getReadyStateText = (state: number): string => {
@@ -67,6 +69,67 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       case 1011: return 'Internal Error';
       case 1015: return 'TLS Handshake';
       default: return 'Unknown';
+    }
+  };
+
+  const detectAndExtractMarkdown = (content: string): { hasMarkdown: boolean; markdown: string; plainText: string } => {
+    const markdownRegex = /```markdown\n([\s\S]*?)\n```/g;
+    const match = markdownRegex.exec(content);
+    
+    if (match) {
+      return {
+        hasMarkdown: true,
+        markdown: match[1],
+        plainText: content.replace(markdownRegex, '[Markdown content detected - Click "View Markdown" to see formatted version]')
+      };
+    }
+    
+    return {
+      hasMarkdown: false,
+      markdown: '',
+      plainText: content
+    };
+  };
+
+  const writeContentToTerminal = (content: string) => {
+    const { hasMarkdown, markdown, plainText } = detectAndExtractMarkdown(content);
+    
+    if (terminal.current) {
+      if (hasMarkdown) {
+        // Show simplified terminal message and set markdown for inline display
+        terminal.current.writeln('\x1b[36m📋 Markdown content detected - displaying formatted view below:\x1b[0m');
+        setMarkdownContent(markdown);
+        // Recalculate terminal size after layout change
+        setTimeout(() => {
+          if (fitAddon.current && terminal.current) {
+            try {
+              fitAddon.current.fit();
+              console.log('🔧 Terminal resized for markdown split layout');
+            } catch (error) {
+              console.warn('⚠️ Failed to resize terminal for split layout:', error);
+            }
+          }
+        }, 100);
+      } else {
+        // Regular content, clear any previous markdown
+        terminal.current.writeln(plainText);
+        const previouslyHadMarkdown = markdownContent !== null;
+        setMarkdownContent(null);
+        
+        // Recalculate terminal size if we just cleared markdown (layout change)
+        if (previouslyHadMarkdown) {
+          setTimeout(() => {
+            if (fitAddon.current && terminal.current) {
+              try {
+                fitAddon.current.fit();
+                console.log('🔧 Terminal resized back to full width');
+              } catch (error) {
+                console.warn('⚠️ Failed to resize terminal to full width:', error);
+              }
+            }
+          }, 100);
+        }
+      }
     }
   };
 
@@ -106,8 +169,13 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               color = '\x1b[37m'; // Default white
           }
           
-          // Write the entry with appropriate coloring
-          terminal.current?.writeln(`${color}${entry.content}\x1b[0m`);
+          // Process content for markdown detection (show plain text for history)
+          const { hasMarkdown, plainText } = detectAndExtractMarkdown(entry.content);
+          terminal.current?.writeln(`${color}${plainText}\x1b[0m`);
+          
+          if (hasMarkdown) {
+            terminal.current?.writeln('\x1b[36m📋 [This message contained markdown content]\x1b[0m');
+          }
         });
         
         terminal.current.writeln('\x1b[90m--- End History ---\x1b[0m\r\n');
@@ -237,12 +305,14 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               terminal.current?.writeln(`\x1b[90m🏓 Connection alive (${new Date().toLocaleTimeString()})\x1b[0m`);
               break;
             case 'output':
-              terminal.current?.writeln(message.content || '');
+              if (message.content) {
+                writeContentToTerminal(message.content);
+              }
               break;
             case 'partial_output':
-              // Real-time output from Claude with formatting
+              // Real-time output from Claude with formatting and markdown detection
               if (message.content) {
-                terminal.current?.writeln(message.content);
+                writeContentToTerminal(message.content);
               }
               break;
             case 'completion':
@@ -420,10 +490,45 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     };
   }, [instanceId]);
 
+  // Handle window resize to recalculate terminal dimensions
+  useEffect(() => {
+    const handleResize = () => {
+      if (fitAddon.current && terminal.current) {
+        try {
+          fitAddon.current.fit();
+          console.log('🔧 Terminal resized due to window resize');
+        } catch (error) {
+          console.warn('⚠️ Failed to resize terminal on window resize:', error);
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const handleSend = () => {
     if (!input.trim()) {
       console.warn('❌ Cannot send - no input provided');
       return;
+    }
+    
+    // Clear previous markdown content when sending new command
+    const previouslyHadMarkdown = markdownContent !== null;
+    setMarkdownContent(null);
+    
+    // Recalculate terminal size if we just cleared markdown (layout change)
+    if (previouslyHadMarkdown) {
+      setTimeout(() => {
+        if (fitAddon.current && terminal.current) {
+          try {
+            fitAddon.current.fit();
+            console.log('🔧 Terminal resized back to full width on new command');
+          } catch (error) {
+            console.warn('⚠️ Failed to resize terminal on new command:', error);
+          }
+        }
+      }, 100);
     }
     
     if (ws.current?.readyState !== WebSocket.OPEN) {
@@ -563,29 +668,55 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
           </Box>
         </DialogTitle>
         <DialogContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <Box
-            ref={terminalRef}
-            sx={{
-              flex: 1,
-              backgroundColor: '#000',
-              border: '1px solid #333',
-              borderRadius: 1,
-              minHeight: '400px',
-              width: '100%',
-              height: '400px',
-              position: 'relative',
-              display: 'block',
-              overflow: 'hidden',
-              '& .xterm': {
-                height: '100% !important',
-                width: '100% !important',
-              },
-              '& .xterm-screen': {
-                height: '100% !important',
-                width: '100% !important',
-              }
-            }}
-          />
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: markdownContent ? 'row' : 'column', gap: markdownContent ? 1 : 0 }}>
+            {/* Terminal Area */}
+            <Box
+              ref={terminalRef}
+              sx={{
+                flex: markdownContent ? '0 0 40%' : 1,
+                backgroundColor: '#000',
+                border: '1px solid #333',
+                borderRadius: 1,
+                minHeight: '400px',
+                height: '400px',
+                position: 'relative',
+                display: 'block',
+                overflow: 'hidden',
+                transition: 'flex 0.3s ease, width 0.3s ease', // Smooth transition
+                '& .xterm': {
+                  height: '100% !important',
+                  width: '100% !important',
+                },
+                '& .xterm-screen': {
+                  height: '100% !important',
+                  width: '100% !important',
+                }
+              }}
+            />
+            
+            {/* Inline Markdown Display */}
+            {markdownContent && (
+              <Paper
+                sx={{
+                  flex: '1',
+                  maxWidth: '60%',
+                  height: '400px',
+                  overflow: 'auto',
+                  p: 2,
+                  backgroundColor: 'background.paper',
+                  border: '1px solid #333',
+                  borderRadius: 1,
+                }}
+              >
+                <Box sx={{ mb: 1, pb: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+                  <Typography variant="subtitle2" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
+                    📋 Formatted Response
+                  </Typography>
+                </Box>
+                <ReactMarkdown>{markdownContent}</ReactMarkdown>
+              </Paper>
+            )}
+          </Box>
           <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
             <TextField
               fullWidth
