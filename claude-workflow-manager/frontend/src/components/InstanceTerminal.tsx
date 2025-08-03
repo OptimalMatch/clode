@@ -34,16 +34,18 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const ws = useRef<WebSocket | null>(null);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializingRef = useRef(false);
+  const stopwatchIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [lastPingTime, setLastPingTime] = useState<Date | null>(null);
   const [wsReadyState, setWsReadyState] = useState<number | null>(null);
   const [markdownContent, setMarkdownContent] = useState<string | null>(null);
   const [markdownFullWidth, setMarkdownFullWidth] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
+  const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
 
   // Helper functions
   const getReadyStateText = (state: number): string => {
@@ -121,6 +123,24 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   };
 
   const writeContentToTerminal = (content: string) => {
+    console.log('📝 writeContentToTerminal called, isWaitingForResponse:', isWaitingForResponse, 'intervalRef:', !!stopwatchIntervalRef.current);
+    
+    // Always stop the stopwatch if interval is running (first content received)
+    if (stopwatchIntervalRef.current) {
+      console.log('🛑 Stopping stopwatch interval due to content received');
+      clearInterval(stopwatchIntervalRef.current);
+      stopwatchIntervalRef.current = null;
+      
+      // Clear the timer line
+      if (terminal.current) {
+        terminal.current.write('\r\x1b[K');
+      }
+      
+      // Update state
+      setIsWaitingForResponse(false);
+      setResponseStartTime(null);
+    }
+    
     const { hasMarkdown, markdown, plainText } = detectAndExtractMarkdown(content);
     
     if (terminal.current) {
@@ -194,6 +214,31 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         } catch (fallbackError) {
           console.error('❌ Fallback copy also failed:', fallbackError);
         }
+      }
+    }
+  };
+
+  const stopStopwatch = () => {
+    console.log('🛑 stopStopwatch called (for errors), isWaitingForResponse:', isWaitingForResponse);
+    
+    // Immediately clear the interval using the ref
+    if (stopwatchIntervalRef.current) {
+      console.log('🔴 Clearing stopwatch interval immediately');
+      clearInterval(stopwatchIntervalRef.current);
+      stopwatchIntervalRef.current = null;
+    }
+    
+    if (isWaitingForResponse && responseStartTime) {
+      const finalTime = (Date.now() - responseStartTime) / 1000;
+      console.log('⏱️ Stopping stopwatch after', finalTime.toFixed(1), 'seconds');
+      
+      setIsWaitingForResponse(false);
+      setResponseStartTime(null);
+      
+      if (terminal.current) {
+        // Clear the timer line and show error completion
+        terminal.current.write('\r\x1b[K');
+        terminal.current.writeln(`\x1b[33m⏱️  Stopped after ${finalTime.toFixed(1)}s (due to error)\x1b[0m`);
       }
     }
   };
@@ -337,7 +382,6 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
           
           setIsConnected(true);
           setConnectionStatus('connected');
-          setConnectionAttempts(0);
           setLastPingTime(new Date());
           
           if (terminal.current) {
@@ -381,13 +425,17 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               }
               break;
             case 'completion':
-              // Show completion info
+              console.log('📨 Completion message received:', message);
+              // Just show completion info (stopwatch should already be stopped by writeContentToTerminal)
               const execTime = message.execution_time_ms ? `${(message.execution_time_ms / 1000).toFixed(1)}s` : '';
               const tokens = message.tokens_used ? `${message.tokens_used} tokens` : '';
               const info = [execTime, tokens].filter(Boolean).join(', ');
               terminal.current?.writeln(`\x1b[32m✅ Command completed${info ? ` (${info})` : ''}\x1b[0m`);
               break;
             case 'error':
+              if (isWaitingForResponse) {
+                stopStopwatch(); // Stop timer on error
+              }
               terminal.current?.writeln(`\x1b[31mError: ${message.error}\x1b[0m`);
               break;
             case 'status':
@@ -433,7 +481,6 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         ws.current.onerror = (error) => {
           console.error('WebSocket error:', error);
           isInitializingRef.current = false;
-          setConnectionAttempts(prev => prev + 1);
           terminal.current?.writeln(`\x1b[31m❌ WebSocket connection error\x1b[0m`);
         };
       };
@@ -552,6 +599,14 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       if (fitAddon.current) {
         fitAddon.current = null;
       }
+      
+      // Clean up stopwatch state
+      if (stopwatchIntervalRef.current) {
+        clearInterval(stopwatchIntervalRef.current);
+        stopwatchIntervalRef.current = null;
+      }
+      setIsWaitingForResponse(false);
+      setResponseStartTime(null);
     };
   }, [instanceId]);
 
@@ -590,6 +645,41 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     }
   }, [markdownFullWidth]);
 
+  // Stopwatch effect
+  useEffect(() => {
+    if (isWaitingForResponse && responseStartTime && !stopwatchIntervalRef.current) {
+      console.log('🕐 Starting stopwatch timer');
+      
+      stopwatchIntervalRef.current = setInterval(() => {
+        const now = Date.now();
+        const elapsed = Math.floor((now - responseStartTime) / 100) / 10; // Update every 100ms, show 1 decimal
+        
+        // Check if interval should still be running
+        if (!stopwatchIntervalRef.current) {
+          console.log('⚠️ Interval cleared during execution');
+          return;
+        }
+        
+        // Update terminal with current elapsed time - properly clear and rewrite the line
+        if (terminal.current) {
+          terminal.current.write('\r\x1b[K\x1b[33m⏱️  Waiting for response... ' + elapsed.toFixed(1) + 's\x1b[0m');
+        }
+      }, 100);
+    } else if (!isWaitingForResponse && stopwatchIntervalRef.current) {
+      console.log('🛑 Stopping stopwatch timer, isWaitingForResponse:', isWaitingForResponse);
+      clearInterval(stopwatchIntervalRef.current);
+      stopwatchIntervalRef.current = null;
+    }
+    
+    return () => {
+      if (stopwatchIntervalRef.current) {
+        console.log('🧹 Cleaning up stopwatch interval');
+        clearInterval(stopwatchIntervalRef.current);
+        stopwatchIntervalRef.current = null;
+      }
+    };
+  }, [isWaitingForResponse, responseStartTime]);
+
   const handleSend = () => {
     if (!input.trim()) {
       console.warn('❌ Cannot send - no input provided');
@@ -601,6 +691,17 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     setMarkdownContent(null);
     setMarkdownFullWidth(false);
     setCopySuccess(false);
+    
+    // Reset stopwatch state in case there was a previous hanging request
+    if (isWaitingForResponse) {
+      console.log('🔄 Resetting previous stopwatch state');
+      if (stopwatchIntervalRef.current) {
+        clearInterval(stopwatchIntervalRef.current);
+        stopwatchIntervalRef.current = null;
+      }
+      setIsWaitingForResponse(false);
+      setResponseStartTime(null);
+    }
     
     // Recalculate terminal size if we just cleared markdown (layout change)
     if (previouslyHadMarkdown) {
@@ -632,7 +733,14 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       ws.current.send(JSON.stringify({ type: 'input', content: input }));
       if (terminal.current) {
         terminal.current.writeln(`\x1b[32m> ${input}\x1b[0m`);
+        terminal.current.write(`\x1b[33m⏱️  Waiting for response... 0.0s\x1b[0m`);
       }
+      
+      // Start stopwatch
+      console.log('🚀 Starting stopwatch for new command');
+      setIsWaitingForResponse(true);
+      setResponseStartTime(Date.now());
+      
       setInput('');
     } catch (error) {
       console.error('❌ Error sending message:', error);
