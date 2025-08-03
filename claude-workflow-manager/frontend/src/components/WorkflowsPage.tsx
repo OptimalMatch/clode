@@ -23,7 +23,7 @@ import {
 } from '@mui/material';
 import { 
   Add, PlayArrow, FolderOpen, SmartToy, Delete, 
-  CheckCircle, Error, Warning, VpnKey 
+  CheckCircle, Error, Warning, VpnKey, DesignServices 
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -236,6 +236,14 @@ const WorkflowsPage: React.FC = () => {
                 >
                   View Instances
                 </Button>
+                <IconButton
+                  size="small"
+                  onClick={() => navigate(`/design?workflow=${workflow.id}`)}
+                  title="Open in Visual Designer"
+                  color="primary"
+                >
+                  <DesignServices />
+                </IconButton>
                 <IconButton
                   size="small"
                   onClick={() => {

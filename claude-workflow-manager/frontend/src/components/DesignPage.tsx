@@ -50,6 +50,7 @@ import {
   FastForward,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { workflowApi, promptFileApi, instanceApi } from '../services/api';
 import { Workflow } from '../types';
 
@@ -85,6 +86,8 @@ interface ExecutionPlan extends Array<Array<{
 }>> {}
 
 const DesignPage: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>('');
   const [nodes, setNodes] = useState<WorkflowNode[]>([]);
   const [connections, setConnections] = useState<WorkflowConnection[]>([]);
@@ -101,6 +104,17 @@ const DesignPage: React.FC = () => {
     severity: 'success'
   });
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Check for workflow parameter in URL on component mount
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const workflowParam = searchParams.get('workflow');
+    if (workflowParam) {
+      setSelectedWorkflowId(workflowParam);
+      // Clean up URL by removing the parameter after selection
+      navigate('/design', { replace: true });
+    }
+  }, [location.search, navigate]);
 
   // Fetch workflows
   const { data: workflows = [], isLoading } = useQuery({
