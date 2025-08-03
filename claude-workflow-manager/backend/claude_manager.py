@@ -393,6 +393,7 @@ class ClaudeCodeManager:
                     cmd = [
                         "claude", 
                         "--print",
+                        "--permission-mode", "acceptEdits",
                         "--session-id", session_id,
                         input_text
                     ]
@@ -405,6 +406,7 @@ class ClaudeCodeManager:
                     cmd = [
                         "claude", 
                         "--print",
+                        "--permission-mode", "acceptEdits",
                         "--resume", session_id,
                         input_text
                     ]
@@ -456,6 +458,7 @@ class ClaudeCodeManager:
                         retry_cmd = [
                             "claude", 
                             "--print",
+                            "--permission-mode", "acceptEdits",
                             "--session-id", new_session_id,
                             input_text
                         ]
