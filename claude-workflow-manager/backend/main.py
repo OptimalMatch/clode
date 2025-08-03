@@ -11,7 +11,14 @@ import uuid
 import time
 from datetime import datetime
 
-from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, Subagent, LogType
+from models import (
+    Workflow, Prompt, ClaudeInstance, InstanceStatus, Subagent, LogType,
+    ApiResponse, IdResponse, WorkflowListResponse, PromptListResponse,
+    InstanceListResponse, SubagentListResponse, LogListResponse, TerminalHistoryResponse,
+    SpawnInstanceRequest, ExecutePromptRequest, InterruptInstanceRequest,
+    DetectSubagentsRequest, SyncToRepoRequest, ImportRepoPromptsRequest,
+    AgentFormatExamplesResponse, ErrorResponse, LogAnalytics
+)
 from claude_manager import ClaudeCodeManager
 from database import Database
 from prompt_file_manager import PromptFileManager
@@ -49,7 +56,50 @@ db = Database()
 claude_manager = ClaudeCodeManager(db)
 agent_discovery = AgentDiscovery(db)
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="Claude Workflow Manager API",
+    description="""
+    A comprehensive API for managing Claude AI workflows, instances, and automation.
+    
+    ## Features
+    
+    * **Workflows** - Create and manage AI automation workflows
+    * **Instances** - Spawn and control Claude AI instances
+    * **Prompts** - Manage reusable prompt templates
+    * **Subagents** - Define specialized AI agents
+    * **Logs & Analytics** - Monitor instance performance and token usage
+    * **Repository Integration** - Sync prompts and agents with Git repositories
+    
+    ## WebSocket API
+    
+    This documentation covers the REST API only. For WebSocket real-time communication 
+    (instance updates, streaming output), see the separate **AsyncAPI specification** 
+    at `backend/asyncapi.yaml` or use [AsyncAPI Studio](https://studio.asyncapi.com/).
+    
+    WebSocket endpoint: `ws://localhost:8000/ws/instance/{instance_id}`
+    
+    ## Authentication
+    
+    Currently uses API key authentication via ANTHROPIC_API_KEY environment variable.
+    
+    ## Rate Limits
+    
+    Rate limits follow Anthropic's Claude API limitations.
+    """,
+    version="1.0.0",
+    contact={
+        "name": "Claude Workflow Manager",
+        "url": "https://github.com/your-org/claude-workflow-manager",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    lifespan=lifespan,
+    docs_url="/api/docs",  # Swagger UI
+    redoc_url="/api/redoc",  # ReDoc
+    openapi_url="/api/openapi.json"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,22 +109,65 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
+@app.get(
+    "/",
+    response_model=ApiResponse,
+    summary="API Health Check",
+    description="Simple health check endpoint to verify the API is running.",
+    tags=["Health"]
+)
 async def root():
-    return {"message": "Claude Workflow Manager API"}
+    """API health check endpoint."""
+    return {"message": "Claude Workflow Manager API", "success": True}
 
-@app.post("/api/workflows")
+@app.post(
+    "/api/workflows",
+    response_model=IdResponse,
+    status_code=201,
+    summary="Create Workflow",
+    description="Create a new AI automation workflow with associated Git repository.",
+    tags=["Workflows"],
+    responses={
+        201: {"description": "Workflow created successfully"},
+        400: {"model": ErrorResponse, "description": "Invalid workflow data"},
+    }
+)
 async def create_workflow(workflow: Workflow):
+    """
+    Create a new workflow.
+    
+    - **name**: Human-readable workflow name
+    - **git_repo**: Git repository URL for the workflow
+    - **branch**: Git branch to use (defaults to 'main')
+    - **prompts**: List of prompt IDs associated with this workflow
+    """
     workflow_id = await db.create_workflow(workflow)
     return {"id": workflow_id}
 
-@app.get("/api/workflows")
+@app.get(
+    "/api/workflows",
+    response_model=WorkflowListResponse,
+    summary="List Workflows",
+    description="Retrieve all workflows with their metadata and configuration.",
+    tags=["Workflows"]
+)
 async def get_workflows():
+    """Get all workflows."""
     workflows = await db.get_workflows()
     return {"workflows": workflows}
 
-@app.get("/api/workflows/{workflow_id}")
+@app.get(
+    "/api/workflows/{workflow_id}",
+    response_model=Workflow,
+    summary="Get Workflow",
+    description="Retrieve a specific workflow by its ID.",
+    tags=["Workflows"],
+    responses={
+        404: {"model": ErrorResponse, "description": "Workflow not found"}
+    }
+)
 async def get_workflow(workflow_id: str):
+    """Get a specific workflow by ID."""
     workflow = await db.get_workflow(workflow_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
@@ -87,28 +180,74 @@ async def delete_workflow(workflow_id: str):
         raise HTTPException(status_code=404, detail="Workflow not found or deletion failed")
     return {"message": f"Workflow {workflow_id} deleted successfully"}
 
-@app.post("/api/prompts")
+@app.post(
+    "/api/prompts",
+    response_model=IdResponse,
+    status_code=201,
+    summary="Create Prompt",
+    description="Create a new reusable prompt template for AI automation.",
+    tags=["Prompts"]
+)
 async def create_prompt(prompt: Prompt):
+    """Create a new prompt template with steps and subagent references."""
     prompt_id = await db.create_prompt(prompt)
     return {"id": prompt_id}
 
-@app.get("/api/prompts")
+@app.get(
+    "/api/prompts",
+    response_model=PromptListResponse,
+    summary="List Prompts",
+    description="Retrieve all available prompt templates.",
+    tags=["Prompts"]
+)
 async def get_prompts():
+    """Get all prompt templates."""
     prompts = await db.get_prompts()
     return {"prompts": prompts}
 
-@app.put("/api/prompts/{prompt_id}")
+@app.put(
+    "/api/prompts/{prompt_id}",
+    response_model=ApiResponse,
+    summary="Update Prompt",
+    description="Update an existing prompt template.",
+    tags=["Prompts"],
+    responses={
+        404: {"model": ErrorResponse, "description": "Prompt not found"}
+    }
+)
 async def update_prompt(prompt_id: str, prompt: Prompt):
+    """Update an existing prompt template."""
     success = await db.update_prompt(prompt_id, prompt)
     if not success:
         raise HTTPException(status_code=404, detail="Prompt not found")
-    return {"success": True}
+    return {"message": "Prompt updated successfully", "success": True}
 
-@app.post("/api/instances/spawn")
-async def spawn_instance(data: dict):
-    workflow_id = data.get("workflow_id")
-    prompt_id = data.get("prompt_id")
-    git_repo = data.get("git_repo")
+@app.post(
+    "/api/instances/spawn",
+    response_model=dict,
+    status_code=201,
+    summary="Spawn Claude Instance",
+    description="Create and spawn a new Claude AI instance for workflow execution.",
+    tags=["Instances"],
+    responses={
+        201: {"description": "Instance created and spawned"},
+        400: {"model": ErrorResponse, "description": "Invalid request data"}
+    }
+)
+async def spawn_instance(request: SpawnInstanceRequest):
+    """
+    Spawn a new Claude instance.
+    
+    Creates a new Claude AI instance that can execute prompts within the context
+    of a specific workflow and Git repository.
+    
+    - **workflow_id**: ID of the workflow to execute
+    - **prompt_id**: Optional specific prompt to execute
+    - **git_repo**: Optional Git repository override
+    """
+    workflow_id = request.workflow_id
+    prompt_id = request.prompt_id
+    git_repo = request.git_repo
     
     instance_id = str(uuid.uuid4())
     instance = ClaudeInstance(
@@ -125,8 +264,15 @@ async def spawn_instance(data: dict):
     
     return {"instance_id": instance_id}
 
-@app.get("/api/instances/{workflow_id}")
+@app.get(
+    "/api/instances/{workflow_id}",
+    response_model=InstanceListResponse,
+    summary="List Workflow Instances",
+    description="Retrieve all instances associated with a specific workflow.",
+    tags=["Instances"]
+)
 async def get_instances(workflow_id: str):
+    """Get all instances for a specific workflow."""
     instances = await db.get_instances_by_workflow(workflow_id)
     return {"instances": instances}
 
@@ -251,13 +397,28 @@ async def execute_prompt(instance_id: str, data: dict):
     return {"success": True}
 
 # Subagent endpoints
-@app.post("/api/subagents")
+@app.post(
+    "/api/subagents",
+    response_model=IdResponse,
+    status_code=201,
+    summary="Create Subagent",
+    description="Create a new specialized AI subagent with specific capabilities.",
+    tags=["Subagents"]
+)
 async def create_subagent(subagent: Subagent):
+    """Create a new subagent with specialized capabilities and system prompts."""
     subagent_id = await db.create_subagent(subagent)
     return {"id": subagent_id}
 
-@app.get("/api/subagents")
+@app.get(
+    "/api/subagents",
+    response_model=SubagentListResponse,
+    summary="List Subagents",
+    description="Retrieve all available subagents and their capabilities.",
+    tags=["Subagents"]
+)
 async def get_subagents():
+    """Get all available subagents."""
     subagents = await db.get_subagents()
     return {"subagents": subagents}
 
@@ -334,8 +495,27 @@ async def search_logs(
     logs = await db.search_logs(q, workflow_id, instance_id)
     return {"logs": logs}
 
-@app.get("/api/analytics/instance/{instance_id}")
+@app.get(
+    "/api/analytics/instance/{instance_id}",
+    response_model=LogAnalytics,
+    summary="Get Instance Analytics",
+    description="Retrieve detailed analytics and performance metrics for a specific instance.",
+    tags=["Analytics"],
+    responses={
+        404: {"model": ErrorResponse, "description": "Instance not found"}
+    }
+)
 async def get_instance_analytics(instance_id: str):
+    """
+    Get analytics for a specific instance.
+    
+    Returns comprehensive analytics including:
+    - Total interactions and tokens used
+    - Execution time statistics
+    - Error rates and success metrics
+    - Subagent usage information
+    - Interaction timeline
+    """
     analytics = await db.get_instance_analytics(instance_id)
     return analytics.dict()
 

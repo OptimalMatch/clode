@@ -113,3 +113,82 @@ class LogAnalytics(BaseModel):
     interaction_timeline: List[Dict[str, Any]]
     average_response_time_ms: float
     success_rate: float
+
+# API Response Models for OpenAPI documentation
+class ApiResponse(BaseModel):
+    """Base API response model"""
+    message: str
+    success: bool = True
+
+class IdResponse(BaseModel):
+    """Response containing an ID"""
+    id: str
+
+class WorkflowListResponse(BaseModel):
+    """Response for workflow list endpoint"""
+    workflows: List[Workflow]
+
+class PromptListResponse(BaseModel):
+    """Response for prompt list endpoint"""
+    prompts: List[Prompt]
+
+class InstanceListResponse(BaseModel):
+    """Response for instance list endpoint"""
+    instances: List[ClaudeInstance]
+
+class SubagentListResponse(BaseModel):
+    """Response for subagent list endpoint"""
+    subagents: List[Subagent]
+
+class LogListResponse(BaseModel):
+    """Response for logs list endpoint"""
+    logs: List[InstanceLog]
+    total: Optional[int] = None
+    limit: Optional[int] = None
+    offset: Optional[int] = None
+
+class TerminalHistoryResponse(BaseModel):
+    """Response for terminal history endpoint"""
+    history: List[Dict[str, Any]]
+
+class SpawnInstanceRequest(BaseModel):
+    """Request model for spawning instances"""
+    workflow_id: str
+    prompt_id: Optional[str] = None
+    git_repo: Optional[str] = None
+
+class ExecutePromptRequest(BaseModel):
+    """Request model for executing prompts"""
+    prompt: str
+
+class InterruptInstanceRequest(BaseModel):
+    """Request model for interrupting instances"""
+    feedback: str
+
+class DetectSubagentsRequest(BaseModel):
+    """Request model for detecting subagents"""
+    content: str
+
+class SyncToRepoRequest(BaseModel):
+    """Request model for syncing to repository"""
+    commit_message: Optional[str] = "Update prompt from Claude Workflow Manager"
+
+class ImportRepoPromptsRequest(BaseModel):
+    """Request model for importing repository prompts"""
+    file_paths: List[str]
+    
+class AgentFormatExample(BaseModel):
+    """Example agent format structure"""
+    name: str
+    description: str
+    example_file: str
+    format_description: str
+
+class AgentFormatExamplesResponse(BaseModel):
+    """Response for agent format examples"""
+    examples: List[AgentFormatExample]
+
+class ErrorResponse(BaseModel):
+    """Error response model"""
+    detail: str
+    error_code: Optional[str] = None

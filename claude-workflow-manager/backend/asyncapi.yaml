@@ -1,0 +1,311 @@
+asyncapi: 3.0.0
+info:
+  title: Claude Workflow Manager WebSocket API
+  version: 1.0.0
+  description: |
+    WebSocket API for real-time communication with Claude AI instances.
+    
+    Provides live updates for instance status, execution progress, and terminal output.
+    
+  contact:
+    name: Claude Workflow Manager
+    url: https://github.com/your-org/claude-workflow-manager
+
+servers:
+  development:
+    host: localhost:8000
+    protocol: ws
+    description: Development server
+  production:
+    host: api.yourserver.com
+    protocol: wss
+    description: Production server (SSL)
+
+channels:
+  /ws/instance/{instanceId}:
+    parameters:
+      instanceId:
+        description: Unique identifier for the Claude instance
+        schema:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+    
+    messages:
+      connectionMessage:
+        $ref: '#/components/messages/ConnectionMessage'
+      partialOutputMessage:
+        $ref: '#/components/messages/PartialOutputMessage'
+      completionMessage:
+        $ref: '#/components/messages/CompletionMessage'
+      errorMessage:
+        $ref: '#/components/messages/ErrorMessage'
+      statusMessage:
+        $ref: '#/components/messages/StatusMessage'
+      pingMessage:
+        $ref: '#/components/messages/PingMessage'
+      pongMessage:
+        $ref: '#/components/messages/PongMessage'
+
+operations:
+  connectToInstance:
+    action: receive
+    channel:
+      $ref: '#/channels/~1ws~1instance~1{instanceId}'
+    summary: Connect to Claude instance
+    description: |
+      Establish WebSocket connection to receive real-time updates from a Claude AI instance.
+      
+      Upon connection, you'll receive:
+      1. Connection confirmation with instance details
+      2. Real-time execution output and status updates
+      3. Completion notifications with token usage
+      4. Error messages if issues occur
+    
+    messages:
+      - $ref: '#/channels/~1ws~1instance~1{instanceId}/messages/connectionMessage'
+      - $ref: '#/channels/~1ws~1instance~1{instanceId}/messages/partialOutputMessage'
+      - $ref: '#/channels/~1ws~1instance~1{instanceId}/messages/completionMessage'
+      - $ref: '#/channels/~1ws~1instance~1{instanceId}/messages/errorMessage'
+      - $ref: '#/channels/~1ws~1instance~1{instanceId}/messages/statusMessage'
+
+components:
+  messages:
+    ConnectionMessage:
+      name: connection
+      title: Connection Established
+      summary: Sent when WebSocket connection is established
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ConnectionPayload'
+      examples:
+        - name: instanceConnection
+          summary: Successful instance connection
+          payload:
+            type: connection
+            instance:
+              id: "123e4567-e89b-12d3-a456-426614174000"
+              workflow_id: "workflow-123"
+              status: "running"
+              created_at: "2024-01-15T10:30:00Z"
+
+    PartialOutputMessage:
+      name: partial_output
+      title: Streaming Output
+      summary: Real-time output from Claude execution
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/PartialOutputPayload'
+      examples:
+        - name: codeGeneration
+          summary: Claude generating code
+          payload:
+            type: partial_output
+            content: "💬 I'll help you create a React component..."
+
+    CompletionMessage:
+      name: completion
+      title: Execution Complete
+      summary: Sent when Claude execution finishes
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CompletionPayload'
+      examples:
+        - name: successfulCompletion
+          summary: Task completed successfully
+          payload:
+            type: completion
+            execution_time_ms: 5430
+            tokens_used: 1250
+
+    ErrorMessage:
+      name: error
+      title: Error Occurred
+      summary: Sent when an error occurs during execution
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ErrorPayload'
+      examples:
+        - name: executionError
+          summary: Error during Claude execution
+          payload:
+            type: error
+            error: "Failed to execute prompt: API rate limit exceeded"
+
+    StatusMessage:
+      name: status
+      title: Status Update
+      summary: Instance status changes
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/StatusPayload'
+      examples:
+        - name: instanceReady
+          summary: Instance is ready for commands
+          payload:
+            type: status
+            status: "ready"
+            message: "Claude instance is ready for execution"
+
+    PingMessage:
+      name: ping
+      title: Connection Ping
+      summary: Keep-alive ping message
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/PingPayload'
+
+    PongMessage:
+      name: pong
+      title: Connection Pong
+      summary: Keep-alive pong response
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/PongPayload'
+
+  schemas:
+    ConnectionPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: connection
+          description: Message type identifier
+        instance:
+          $ref: '#/components/schemas/InstanceInfo'
+      required:
+        - type
+        - instance
+
+    PartialOutputPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: partial_output
+          description: Message type identifier
+        content:
+          type: string
+          description: Streaming content from Claude execution
+          example: "💬 I'll start by analyzing your code structure..."
+      required:
+        - type
+        - content
+
+    CompletionPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: completion
+          description: Message type identifier
+        execution_time_ms:
+          type: integer
+          description: Total execution time in milliseconds
+          example: 5430
+        tokens_used:
+          type: integer
+          description: Number of tokens consumed
+          example: 1250
+          nullable: true
+      required:
+        - type
+
+    ErrorPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: error
+          description: Message type identifier
+        error:
+          type: string
+          description: Error message description
+          example: "Failed to execute prompt: API rate limit exceeded"
+      required:
+        - type
+        - error
+
+    StatusPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: status
+          description: Message type identifier
+        status:
+          type: string
+          enum: [initializing, ready, running, paused, completed, failed]
+          description: Current instance status
+        message:
+          type: string
+          description: Human-readable status message
+          example: "Claude instance is ready for execution"
+      required:
+        - type
+        - status
+
+    PingPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: ping
+          description: Message type identifier
+        timestamp:
+          type: string
+          format: date-time
+          description: Ping timestamp
+
+    PongPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: pong
+          description: Message type identifier
+        timestamp:
+          type: string
+          format: date-time
+          description: Pong timestamp
+
+    InstanceInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique instance identifier
+        workflow_id:
+          type: string
+          description: Associated workflow ID
+        prompt_id:
+          type: string
+          nullable: true
+          description: Associated prompt ID
+        status:
+          type: string
+          enum: [initializing, ready, running, paused, completed, failed]
+          description: Current instance status
+        git_repo:
+          type: string
+          description: Git repository URL
+        created_at:
+          type: string
+          format: date-time
+          description: Instance creation timestamp
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Instance completion timestamp
+        error:
+          type: string
+          nullable: true
+          description: Error message if instance failed
+      required:
+        - id
+        - workflow_id
+        - status
+        - git_repo
+        - created_at
