@@ -31,6 +31,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const fitAddon = useRef<FitAddon | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitializingRef = useRef(false);
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -74,6 +75,19 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       return;
     }
 
+    // Prevent concurrent initialization attempts
+    if (isInitializingRef.current) {
+      console.log('⏭️ Terminal initialization already in progress, skipping...');
+      return;
+    }
+
+    // Check if terminal is already initialized and functional
+    if (terminal.current && terminalRef.current.querySelector('.xterm')) {
+      console.log('⏭️ Terminal already initialized (found .xterm in DOM), skipping...');
+      return;
+    }
+
+    isInitializingRef.current = true;
     console.log('🖥️ Initializing terminal...');
     console.log('📐 Terminal container dimensions:', {
       width: terminalRef.current.offsetWidth,
@@ -105,14 +119,6 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       terminal.current.loadAddon(fitAddon.current);
       terminal.current.loadAddon(new WebLinksAddon());
       
-      console.log('🔗 Opening terminal in DOM element...');
-      terminal.current.open(terminalRef.current);
-      
-      console.log('✅ Terminal opened successfully');
-      
-      // Write initial message immediately
-      terminal.current.writeln('\x1b[36m🔌 Terminal initialized, connecting...\x1b[0m');
-      
       // Function to initialize WebSocket after terminal is ready
       const initializeWebSocket = () => {
         console.log('🌐 Starting WebSocket connection...');
@@ -140,6 +146,9 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
 
         ws.current.onopen = () => {
           console.log('✅ WebSocket connected successfully!');
+          
+          // Mark initialization as complete
+          isInitializingRef.current = false;
           
           setIsConnected(true);
           setConnectionStatus('connected');
@@ -220,12 +229,13 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
 
         ws.current.onerror = (error) => {
           console.error('WebSocket error:', error);
+          isInitializingRef.current = false;
           setConnectionAttempts(prev => prev + 1);
           terminal.current?.writeln(`\x1b[31m❌ WebSocket connection error\x1b[0m`);
         };
       };
       
-      // Multiple attempts to fit the terminal with increasing delays
+      // Function will be called after terminal opens
       const attemptFit = (attempt: number = 1) => {
         if (attempt > 5) {
           console.warn('⚠️ Terminal fit failed after 5 attempts');
@@ -253,13 +263,40 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               attemptFit(attempt + 1);
             }
           }
-        }, 100 * attempt);
+        }, 200 + (100 * attempt)); // Longer initial delay
       };
-      
-      attemptFit();
+
+      // Wait for container to be fully rendered with computed styles
+      setTimeout(() => {
+        if (!terminal.current || !terminalRef.current) return;
+        
+        console.log('🔗 Opening terminal in DOM element...');
+        console.log('📐 Final container check:', {
+          offsetWidth: terminalRef.current.offsetWidth,
+          offsetHeight: terminalRef.current.offsetHeight,
+          clientWidth: terminalRef.current.clientWidth,
+          clientHeight: terminalRef.current.clientHeight,
+          scrollWidth: terminalRef.current.scrollWidth,
+          scrollHeight: terminalRef.current.scrollHeight
+        });
+        
+        try {
+          terminal.current.open(terminalRef.current);
+          console.log('✅ Terminal opened successfully');
+          
+          // Write initial message immediately
+          terminal.current.writeln('\x1b[36m🔌 Terminal initialized, connecting...\x1b[0m');
+          
+          // Start the fitting process
+          attemptFit();
+        } catch (openError) {
+          console.error('❌ Terminal open error:', openError);
+        }
+      }, 100);
       
     } catch (error) {
       console.error('❌ Terminal initialization error:', error);
+      isInitializingRef.current = false;
       return;
     }
 
@@ -282,6 +319,10 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
 
     return () => {
       console.log('🧹 Cleaning up terminal component...');
+      
+      // Reset initialization flag
+      isInitializingRef.current = false;
+      
       window.removeEventListener('resize', handleResize);
       
       if (stateMonitor) {
@@ -465,6 +506,16 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               width: '100%',
               height: '400px',
               position: 'relative',
+              display: 'block',
+              overflow: 'hidden',
+              '& .xterm': {
+                height: '100% !important',
+                width: '100% !important',
+              },
+              '& .xterm-screen': {
+                height: '100% !important',
+                width: '100% !important',
+              }
             }}
           />
           <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
