@@ -357,30 +357,76 @@ class ClaudeCodeManager:
             return False
     
     async def interrupt_instance(self, instance_id: str, feedback: str) -> bool:
+        """Interrupt/cancel a running Claude CLI instance"""
+        self._log_with_timestamp(f"🛑 INTERRUPT: Attempting to interrupt instance {instance_id}")
+        
         instance_info = self.instances.get(instance_id)
         if not instance_info:
+            self._log_with_timestamp(f"❌ INTERRUPT: Instance {instance_id} not found in memory")
             return False
         
         try:
-            # Note: claude-code-sdk doesn't have a built-in interrupt mechanism
-            # We can simulate this by updating status and sending feedback
+            # Check if there's a running Claude CLI process
+            if instance_id in self.running_processes:
+                process = self.running_processes[instance_id]
+                if process.poll() is None:  # Process is still running
+                    self._log_with_timestamp(f"🔥 INTERRUPT: Terminating Claude CLI process (PID: {process.pid}) for instance {instance_id}")
+                    
+                    # First try graceful termination
+                    process.terminate()
+                    
+                    # Wait a bit for graceful termination
+                    try:
+                        process.wait(timeout=3)
+                        self._log_with_timestamp(f"✅ INTERRUPT: Claude CLI process terminated gracefully")
+                    except subprocess.TimeoutExpired:
+                        # Force kill if graceful termination fails
+                        self._log_with_timestamp(f"⚡ INTERRUPT: Force killing Claude CLI process")
+                        process.kill()
+                        process.wait()
+                    
+                    # Clean up the process from tracking
+                    del self.running_processes[instance_id]
+                    
+                    # Log the cancellation to terminal history
+                    await self.db.append_terminal_history(instance_id, "❌ Execution cancelled by user", "system")
+                    
+                    # Send cancellation message via WebSocket
+                    await self._send_websocket_update(instance_id, {
+                        "type": "partial_output",
+                        "content": "🛑 **Execution Cancelled**\n\nThe Claude CLI process has been terminated."
+                    })
+                    
+                else:
+                    self._log_with_timestamp(f"ℹ️ INTERRUPT: Claude CLI process already finished for instance {instance_id}")
+                    del self.running_processes[instance_id]
+            else:
+                self._log_with_timestamp(f"ℹ️ INTERRUPT: No running Claude CLI process found for instance {instance_id}")
+                
+                # Send a more informative message when trying to cancel completed/non-running process
+                await self._send_websocket_update(instance_id, {
+                    "type": "partial_output",
+                    "content": "ℹ️ **No Active Process**\n\nThe execution has already completed or no process is currently running."
+                })
             
-            # Send feedback if provided
-            if feedback:
-                await self.send_input(instance_id, feedback)
-            
-            # Update status
+            # Update instance status to paused/cancelled
             await self.db.update_instance_status(instance_id, InstanceStatus.PAUSED)
             
+            # Send interrupt status via WebSocket
             await self._send_websocket_update(instance_id, {
                 "type": "interrupted",
-                "feedback": feedback
+                "feedback": feedback or "Execution cancelled by user"
             })
             
+            self._log_with_timestamp(f"✅ INTERRUPT: Successfully interrupted instance {instance_id}")
             return True
             
         except Exception as e:
-            print(f"Error interrupting instance: {e}")
+            self._log_with_timestamp(f"❌ INTERRUPT: Error interrupting instance {instance_id}: {str(e)}")
+            await self._send_websocket_update(instance_id, {
+                "type": "error",
+                "error": f"Failed to interrupt instance: {str(e)}"
+            })
             return False
     
     async def resume_instance(self, instance_id: str) -> bool:

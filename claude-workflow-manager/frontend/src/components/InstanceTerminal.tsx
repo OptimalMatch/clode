@@ -9,7 +9,7 @@ import {
   Typography,
   Paper,
 } from '@mui/material';
-import { Pause, PlayArrow, Close } from '@mui/icons-material';
+import { Pause, PlayArrow, Close, Stop } from '@mui/icons-material';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
@@ -38,6 +38,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [lastPingTime, setLastPingTime] = useState<Date | null>(null);
   const [wsReadyState, setWsReadyState] = useState<number | null>(null);
@@ -530,6 +531,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             case 'interrupted':
               terminal.current?.writeln(`\x1b[31m⏸️  Instance paused\x1b[0m`);
               setIsPaused(true);
+              setIsCancelling(false); // Reset cancelling state
+              console.log('✅ Interrupt confirmed, reset cancelling state');
               break;
             case 'resumed':
               terminal.current?.writeln(`\x1b[32m▶️  Instance resumed\x1b[0m`);
@@ -551,6 +554,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
           
           setIsConnected(false);
           setConnectionStatus('disconnected');
+          setIsCancelling(false); // Reset cancelling state on disconnect
           
           const reasonText = getCloseReasonText(event.code);
           terminal.current?.writeln(`\r\n\x1b[31m❌ Disconnected from instance\x1b[0m`);
@@ -857,9 +861,35 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   };
 
   const handleInterrupt = async () => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      const feedback = prompt('Enter feedback for Claude (optional):');
-      ws.current.send(JSON.stringify({ type: 'interrupt', feedback }));
+    // Prevent duplicate cancellation requests
+    if (isCancelling || ws.current?.readyState !== WebSocket.OPEN) {
+      console.log('🚫 Ignoring interrupt request - already cancelling or WebSocket not open');
+      return;
+    }
+
+    console.log('🛑 User requested cancellation of running execution');
+    setIsCancelling(true);
+    
+    try {
+      ws.current.send(JSON.stringify({ 
+        type: 'interrupt', 
+        feedback: 'Execution cancelled by user' 
+      }));
+      
+      // Update UI immediately to show cancellation is in progress
+      if (terminal.current) {
+        terminal.current.writeln('\x1b[33m🛑 Cancelling execution...\x1b[0m');
+      }
+      
+      // Reset cancelling state after a delay to allow for the cancellation to process
+      setTimeout(() => {
+        setIsCancelling(false);
+        console.log('🔄 Reset cancelling state');
+      }, 2000);
+      
+    } catch (error) {
+      console.error('❌ Error sending interrupt:', error);
+      setIsCancelling(false);
     }
   };
 
@@ -1119,13 +1149,40 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                 </>
               )}
               {isPaused ? (
-                <IconButton onClick={handleResume} title="Resume">
+                <IconButton onClick={handleResume} title="Resume execution">
                   <PlayArrow />
                 </IconButton>
               ) : (
-                <IconButton onClick={handleInterrupt} title="Pause/Interrupt">
-                  <Pause />
+                <>
+                                  <IconButton 
+                  onClick={handleInterrupt} 
+                  title={isCancelling ? "Cancelling..." : "Cancel/Stop execution"}
+                  disabled={isCancelling}
+                  sx={{
+                    color: isWaitingForResponse ? '#f44336' : 'inherit',
+                    backgroundColor: isWaitingForResponse ? 'rgba(244, 67, 54, 0.1)' : 'inherit',
+                    opacity: isCancelling ? 0.6 : 1,
+                    '&:hover': {
+                      backgroundColor: isWaitingForResponse ? 'rgba(244, 67, 54, 0.2)' : 'inherit',
+                    }
+                  }}
+                >
+                  {isWaitingForResponse ? <Stop /> : <Pause />}
                 </IconButton>
+                {isWaitingForResponse && (
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    onClick={handleInterrupt}
+                    disabled={isCancelling}
+                    startIcon={<Stop />}
+                    sx={{ ml: 1, opacity: isCancelling ? 0.6 : 1 }}
+                  >
+                    {isCancelling ? 'Cancelling...' : 'Cancel'}
+                  </Button>
+                )}
+                </>
               )}
               <IconButton onClick={onClose} title="Close">
                 <Close />
