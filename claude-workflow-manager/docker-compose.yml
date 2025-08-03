@@ -23,6 +23,7 @@ services:
     environment:
       MONGODB_URL: mongodb://admin:claudeworkflow123@mongodb:27017/claude_workflows?authSource=admin
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+      ANTHROPIC_API_KEY: ${CLAUDE_API_KEY}
       REDIS_URL: redis://redis:6379
       CLAUDE_PROMPTS_FOLDER: ${CLAUDE_PROMPTS_FOLDER:-claude_prompts}
       CLAUDE_AGENTS_FOLDER: ${CLAUDE_AGENTS_FOLDER:-.claude/agents}

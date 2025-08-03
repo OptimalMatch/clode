@@ -17,6 +17,12 @@ from database import Database
 from prompt_file_manager import PromptFileManager
 from agent_discovery import AgentDiscovery
 
+# Ensure ANTHROPIC_API_KEY is set for claude-cli
+claude_api_key = os.getenv("CLAUDE_API_KEY")
+if claude_api_key and not os.getenv("ANTHROPIC_API_KEY"):
+    os.environ["ANTHROPIC_API_KEY"] = claude_api_key
+    print("🔑 MAIN: Set ANTHROPIC_API_KEY from CLAUDE_API_KEY for claude-cli")
+
 def get_git_env():
     """Get git environment with SSH configuration"""
     env = os.environ.copy()

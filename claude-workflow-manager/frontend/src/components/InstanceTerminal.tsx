@@ -184,6 +184,19 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             case 'output':
               terminal.current?.writeln(message.content || '');
               break;
+            case 'partial_output':
+              // Real-time output from Claude with formatting
+              if (message.content) {
+                terminal.current?.writeln(message.content);
+              }
+              break;
+            case 'completion':
+              // Show completion info
+              const execTime = message.execution_time_ms ? `${(message.execution_time_ms / 1000).toFixed(1)}s` : '';
+              const tokens = message.tokens_used ? `${message.tokens_used} tokens` : '';
+              const info = [execTime, tokens].filter(Boolean).join(', ');
+              terminal.current?.writeln(`\x1b[32m✅ Command completed${info ? ` (${info})` : ''}\x1b[0m`);
+              break;
             case 'error':
               terminal.current?.writeln(`\x1b[31mError: ${message.error}\x1b[0m`);
               break;

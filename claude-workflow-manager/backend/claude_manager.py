@@ -301,7 +301,32 @@ class ClaudeCodeManager:
     async def send_input(self, instance_id: str, input_text: str):
         instance_info = self.instances.get(instance_id)
         if not instance_info:
-            return
+            # Instance not in memory - check database and spawn if needed
+            print(f"⚠️ CLAUDE_MANAGER: Instance {instance_id} not found in memory, checking database...")
+            
+            db_instance = await self.db.get_instance(instance_id)
+            if not db_instance:
+                print(f"❌ CLAUDE_MANAGER: Instance {instance_id} not found in database")
+                await self._send_websocket_update(instance_id, {
+                    "type": "error",
+                    "error": f"Instance {instance_id} not found"
+                })
+                return
+            
+            print(f"🚀 CLAUDE_MANAGER: Spawning instance {instance_id} from database...")
+            try:
+                await self.spawn_instance(db_instance)
+                instance_info = self.instances.get(instance_id)
+                if not instance_info:
+                    raise Exception("Failed to spawn instance")
+                print(f"✅ CLAUDE_MANAGER: Instance {instance_id} spawned successfully")
+            except Exception as e:
+                print(f"❌ CLAUDE_MANAGER: Failed to spawn instance {instance_id}: {e}")
+                await self._send_websocket_update(instance_id, {
+                    "type": "error", 
+                    "error": f"Failed to spawn instance: {str(e)}"
+                })
+                return
         
         try:
             # Log input
@@ -316,6 +341,11 @@ class ClaudeCodeManager:
             # Send input to Claude Code and measure time using claude-code-sdk
             start_time = time.time()
             
+            # Ensure ANTHROPIC_API_KEY is available for subprocess calls
+            claude_api_key = os.getenv("CLAUDE_API_KEY")
+            if claude_api_key and not os.getenv("ANTHROPIC_API_KEY"):
+                os.environ["ANTHROPIC_API_KEY"] = claude_api_key
+            
             # Change to the working directory for this instance
             original_cwd = os.getcwd()
             os.chdir(instance_info["working_directory"])
@@ -323,7 +353,14 @@ class ClaudeCodeManager:
             response_parts = []
             try:
                 async for message in query(prompt=input_text):
-                    response_parts.append(str(message))
+                    formatted_message = self._format_claude_message(message)
+                    if formatted_message:
+                        response_parts.append(formatted_message)
+                        # Send intermediate messages for real-time feedback
+                        await self._send_websocket_update(instance_id, {
+                            "type": "partial_output",
+                            "content": formatted_message
+                        })
             finally:
                 # Always restore original working directory
                 os.chdir(original_cwd)
@@ -345,10 +382,11 @@ class ClaudeCodeManager:
                 metadata={"source": "user_interaction"}
             )
             
-            # Send response via websocket
+            # Send completion message (response already sent via partial_output)
             await self._send_websocket_update(instance_id, {
-                "type": "output",
-                "content": response
+                "type": "completion",
+                "execution_time_ms": execution_time,
+                "tokens_used": tokens_used
             })
             
         except Exception as e:
@@ -366,6 +404,96 @@ class ClaudeCodeManager:
                 "error": str(e)
             })
     
+    def _format_claude_message(self, message):
+        """Format Claude Code SDK messages for display"""
+        try:
+            # Convert message to string to parse
+            msg_str = str(message)
+            
+            if "SystemMessage" in msg_str:
+                # Hide system initialization messages
+                return None
+                
+            elif "AssistantMessage" in msg_str and "ToolUseBlock" in msg_str:
+                # Extract tool usage
+                if "name='Read'" in msg_str:
+                    if "file_path" in msg_str:
+                        # Extract file path
+                        import re
+                        match = re.search(r"'file_path': '([^']+)'", msg_str)
+                        if match:
+                            file_path = match.group(1).replace('/tmp/tmp', '').lstrip('/')
+                            return f"📖 Reading file: {file_path}"
+                elif "name='Glob'" in msg_str:
+                    if "pattern" in msg_str:
+                        match = re.search(r"'pattern': '([^']+)'", msg_str)
+                        if match:
+                            pattern = match.group(1)
+                            return f"🔍 Searching for files matching: {pattern}"
+                elif "name='LS'" in msg_str:
+                    return "📂 Listing directory contents"
+                elif "name='Bash'" in msg_str:
+                    return "💻 Executing command"
+                # Generic tool use
+                match = re.search(r"name='([^']+)'", msg_str)
+                if match:
+                    tool_name = match.group(1)
+                    return f"🔧 Using tool: {tool_name}"
+                    
+            elif "UserMessage" in msg_str and "ToolResultBlock" in msg_str:
+                # Hide tool results (they're technical details)
+                return None
+                
+            elif "AssistantMessage" in msg_str and "TextBlock" in msg_str:
+                # Extract the actual text content
+                import re
+                match = re.search(r"text='([^']*(?:\\.[^']*)*)'", msg_str)
+                if match:
+                    text = match.group(1)
+                    # Unescape the text
+                    text = text.replace("\\'", "'").replace("\\n", "\n")
+                    return f"💬 {text}"
+                    
+            elif "ToolResultBlock" in msg_str and "content=" in msg_str:
+                # Extract file content from tool results
+                match = re.search(r"content='([^']*(?:\\.[^']*)*)'", msg_str)
+                if match:
+                    content = match.group(1)
+                    # Clean up the content - remove line numbers and format nicely
+                    if "→" in content:  # Line numbers present
+                        lines = content.split("\\n")
+                        formatted_lines = []
+                        for line in lines:
+                            if "→" in line:
+                                # Remove line numbers
+                                text = line.split("→", 1)[-1]
+                                formatted_lines.append(text)
+                            else:
+                                formatted_lines.append(line)
+                        return "📄 **File Contents:**\n```\n" + "\n".join(formatted_lines) + "\n```"
+                        
+            elif "ResultMessage" in msg_str:
+                # Extract cost and duration info
+                duration_match = re.search(r"duration_ms=(\d+)", msg_str)
+                cost_match = re.search(r"total_cost_usd=([0-9.]+)", msg_str)
+                
+                info_parts = []
+                if duration_match:
+                    duration_ms = int(duration_match.group(1))
+                    info_parts.append(f"⏱️ {duration_ms/1000:.1f}s")
+                if cost_match:
+                    cost = float(cost_match.group(1))
+                    info_parts.append(f"💰 ${cost:.4f}")
+                    
+                if info_parts:
+                    return f"✅ **Completed** ({', '.join(info_parts)})"
+                    
+            return None
+            
+        except Exception as e:
+            print(f"Error formatting message: {e}")
+            return None
+
     def _make_json_serializable(self, obj):
         """Convert datetime objects to strings for JSON serialization"""
         if isinstance(obj, dict):

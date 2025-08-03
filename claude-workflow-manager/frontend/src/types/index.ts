@@ -73,6 +73,8 @@ export interface WebSocketMessage {
   error?: string;
   step?: any;
   instance?: ClaudeInstance;
+  execution_time_ms?: number;
+  tokens_used?: number;
 }
 
 export type LogType = 
