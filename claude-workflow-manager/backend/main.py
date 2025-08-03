@@ -9,6 +9,11 @@ from typing import Dict, List, Optional
 import json
 import uuid
 import time
+import tempfile
+import shutil
+import base64
+import hashlib
+from pathlib import Path
 from datetime import datetime
 
 from models import (
@@ -18,7 +23,9 @@ from models import (
     SpawnInstanceRequest, ExecutePromptRequest, InterruptInstanceRequest,
     DetectSubagentsRequest, SyncToRepoRequest, ImportRepoPromptsRequest,
     AgentFormatExamplesResponse, ErrorResponse, LogAnalytics,
-    GitValidationRequest, GitValidationResponse, GitBranchesResponse
+    GitValidationRequest, GitValidationResponse, GitBranchesResponse,
+    SSHKeyGenerationRequest, SSHKeyResponse, SSHKeyListResponse, 
+    GitConnectionTestRequest, SSHKeyInfo
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -34,8 +41,292 @@ if claude_api_key and not os.getenv("ANTHROPIC_API_KEY"):
 def get_git_env():
     """Get git environment with SSH configuration"""
     env = os.environ.copy()
-    env['GIT_SSH_COMMAND'] = 'ssh -o UserKnownHostsFile=/root/.ssh/known_hosts -o StrictHostKeyChecking=yes'
+    
+    # Use both the read-only mounted SSH directory and our writable directory
+    ssh_key_dir = get_ssh_key_directory()
+    
+    # Build SSH command that checks both directories for keys
+    ssh_command_parts = [
+        'ssh',
+        '-o', 'UserKnownHostsFile=/root/.ssh/known_hosts',
+        '-o', 'StrictHostKeyChecking=yes',
+        '-o', f'IdentitiesOnly=yes'
+    ]
+    
+    # Add keys from both directories
+    mounted_ssh_dir = Path('/root/.ssh')
+    if mounted_ssh_dir.exists():
+        for key_file in mounted_ssh_dir.glob('id_*'):
+            if key_file.is_file() and not key_file.name.endswith('.pub'):
+                ssh_command_parts.extend(['-i', str(key_file)])
+    
+    # Add generated keys from writable directory
+    for key_file in ssh_key_dir.glob('*'):
+        if key_file.is_file() and not key_file.name.endswith('.pub'):
+            ssh_command_parts.extend(['-i', str(key_file)])
+    
+    env['GIT_SSH_COMMAND'] = ' '.join(ssh_command_parts)
     return env
+
+def get_ssh_key_directory():
+    """Get or create SSH key directory"""
+    # Use a writable directory for generated SSH keys (not the read-only mounted one)
+    if os.path.exists('/app'):
+        # Running in Docker container
+        ssh_dir = Path('/app/ssh_keys')
+    else:
+        # Running locally
+        ssh_dir = Path.home() / '.ssh'
+    
+    ssh_dir.mkdir(mode=0o700, exist_ok=True)
+    return ssh_dir
+
+def generate_ssh_key_pair(key_name: str, key_type: str = "ed25519", email: str = None):
+    """Generate SSH key pair and return public/private keys with fingerprint"""
+    ssh_dir = get_ssh_key_directory()
+    
+    # Create temporary key files
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_key_path = Path(temp_dir) / key_name
+        
+        try:
+            # Generate key based on type
+            if key_type == "ed25519":
+                cmd = [
+                    'ssh-keygen', '-t', 'ed25519', 
+                    '-f', str(temp_key_path),
+                    '-N', '',  # No passphrase
+                    '-q'  # Quiet mode
+                ]
+                if email:
+                    cmd.extend(['-C', email])
+            elif key_type == "rsa":
+                cmd = [
+                    'ssh-keygen', '-t', 'rsa', '-b', '4096',
+                    '-f', str(temp_key_path),
+                    '-N', '',  # No passphrase
+                    '-q'  # Quiet mode
+                ]
+                if email:
+                    cmd.extend(['-C', email])
+            else:
+                raise ValueError(f"Unsupported key type: {key_type}")
+            
+            # Generate the key
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode != 0:
+                raise Exception(f"SSH key generation failed: {result.stderr}")
+            
+            # Read the generated keys
+            private_key = temp_key_path.read_text().strip()
+            public_key = (temp_key_path.with_suffix('.pub')).read_text().strip()
+            
+            # Get fingerprint
+            fingerprint_cmd = ['ssh-keygen', '-lf', str(temp_key_path)]
+            fingerprint_result = subprocess.run(
+                fingerprint_cmd, capture_output=True, text=True, timeout=10
+            )
+            
+            if fingerprint_result.returncode == 0:
+                # Extract fingerprint from output like "256 SHA256:... comment (keytype)"
+                fingerprint_line = fingerprint_result.stdout.strip()
+                fingerprint = fingerprint_line.split(' ')[1] if ' ' in fingerprint_line else "unknown"
+            else:
+                fingerprint = "unknown"
+            
+            return {
+                'public_key': public_key,
+                'private_key': private_key,
+                'fingerprint': fingerprint
+            }
+            
+        except subprocess.TimeoutExpired:
+            raise Exception("SSH key generation timed out")
+        except Exception as e:
+            raise Exception(f"Error generating SSH key: {str(e)}")
+
+def save_ssh_key(key_name: str, private_key: str, public_key: str):
+    """Save SSH key pair to the SSH directory"""
+    ssh_dir = get_ssh_key_directory()
+    
+    # Save private key
+    private_key_path = ssh_dir / key_name
+    private_key_path.write_text(private_key)
+    private_key_path.chmod(0o600)  # Set proper permissions
+    
+    # Save public key
+    public_key_path = ssh_dir / f"{key_name}.pub"
+    public_key_path.write_text(public_key)
+    public_key_path.chmod(0o644)  # Set proper permissions
+    
+    return {
+        'private_key_path': str(private_key_path),
+        'public_key_path': str(public_key_path)
+    }
+
+def list_ssh_keys():
+    """List all SSH keys from both generated and mounted directories"""
+    keys = []
+    
+    # Get keys from writable generated directory
+    ssh_dir = get_ssh_key_directory()
+    for pub_key_file in ssh_dir.glob("*.pub"):
+        key_name = pub_key_file.stem
+        private_key_file = ssh_dir / key_name
+        
+        if private_key_file.exists():
+            try:
+                public_key = pub_key_file.read_text().strip()
+                
+                # Get fingerprint
+                fingerprint_cmd = ['ssh-keygen', '-lf', str(pub_key_file)]
+                fingerprint_result = subprocess.run(
+                    fingerprint_cmd, capture_output=True, text=True, timeout=10
+                )
+                
+                if fingerprint_result.returncode == 0:
+                    fingerprint_line = fingerprint_result.stdout.strip()
+                    fingerprint = fingerprint_line.split(' ')[1] if ' ' in fingerprint_line else "unknown"
+                else:
+                    fingerprint = "unknown"
+                
+                # Get file creation time
+                created_at = datetime.fromtimestamp(private_key_file.stat().st_ctime).isoformat()
+                
+                keys.append({
+                    'fingerprint': fingerprint,
+                    'key_name': f"{key_name} (generated)",
+                    'public_key': public_key,
+                    'created_at': created_at,
+                    'last_used': None,
+                    'source': 'generated'
+                })
+                
+            except Exception as e:
+                print(f"Error reading generated SSH key {key_name}: {e}")
+                continue
+    
+    # Also list keys from mounted SSH directory (read-only)
+    mounted_ssh_dir = Path('/root/.ssh')
+    if mounted_ssh_dir.exists():
+        for pub_key_file in mounted_ssh_dir.glob("*.pub"):
+            key_name = pub_key_file.stem
+            private_key_file = mounted_ssh_dir / key_name
+            
+            if private_key_file.exists():
+                try:
+                    public_key = pub_key_file.read_text().strip()
+                    
+                    # Get fingerprint
+                    fingerprint_cmd = ['ssh-keygen', '-lf', str(pub_key_file)]
+                    fingerprint_result = subprocess.run(
+                        fingerprint_cmd, capture_output=True, text=True, timeout=10
+                    )
+                    
+                    if fingerprint_result.returncode == 0:
+                        fingerprint_line = fingerprint_result.stdout.strip()
+                        fingerprint = fingerprint_line.split(' ')[1] if ' ' in fingerprint_line else "unknown"
+                    else:
+                        fingerprint = "unknown"
+                    
+                    # Get file creation time
+                    created_at = datetime.fromtimestamp(private_key_file.stat().st_ctime).isoformat()
+                    
+                    keys.append({
+                        'fingerprint': fingerprint,
+                        'key_name': f"{key_name} (mounted)",
+                        'public_key': public_key,
+                        'created_at': created_at,
+                        'last_used': None,
+                        'source': 'mounted'
+                    })
+                    
+                except Exception as e:
+                    print(f"Error reading mounted SSH key {key_name}: {e}")
+                    continue
+    
+    return keys
+
+def test_ssh_connection(git_repo: str, key_name: str = None):
+    """Test SSH connection to a Git repository with a specific key or all keys"""
+    try:
+        # Extract hostname from Git URL
+        if git_repo.startswith('git@'):
+            # Format: git@github.com:user/repo.git
+            hostname = git_repo.split('@')[1].split(':')[0]
+        elif 'ssh://' in git_repo:
+            # Format: ssh://git@github.com/user/repo.git
+            hostname = git_repo.split('://')[1].split('@')[1].split('/')[0]
+        else:
+            raise ValueError("Not an SSH Git URL")
+        
+        # Build SSH command
+        cmd = ['ssh', '-T', f'git@{hostname}', '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=10']
+        
+        if key_name:
+            # Test specific key only
+            key_found = False
+            clean_key_name = key_name.replace(" (generated)", "").replace(" (mounted)", "")
+            
+            # Check in generated keys directory first
+            ssh_key_dir = get_ssh_key_directory()
+            generated_key_path = ssh_key_dir / clean_key_name
+            if generated_key_path.exists() and generated_key_path.is_file():
+                cmd.extend(['-i', str(generated_key_path)])
+                key_found = True
+            else:
+                # Check in mounted SSH directory
+                mounted_ssh_dir = Path('/root/.ssh')
+                if mounted_ssh_dir.exists():
+                    mounted_key_path = mounted_ssh_dir / clean_key_name
+                    if mounted_key_path.exists() and mounted_key_path.is_file():
+                        cmd.extend(['-i', str(mounted_key_path)])
+                        key_found = True
+            
+            if not key_found:
+                return False, f"SSH key '{clean_key_name}' not found"
+            
+            # Force SSH to only use this specific key
+            cmd.extend(['-o', 'IdentitiesOnly=yes'])
+            
+        else:
+            # Test with all available keys (original behavior)
+            ssh_key_dir = get_ssh_key_directory()
+            mounted_ssh_dir = Path('/root/.ssh')
+            
+            # Add mounted SSH keys
+            if mounted_ssh_dir.exists():
+                for key_file in mounted_ssh_dir.glob('id_*'):
+                    if key_file.is_file() and not key_file.name.endswith('.pub'):
+                        cmd.extend(['-i', str(key_file)])
+            
+            # Add generated SSH keys
+            for key_file in ssh_key_dir.glob('*'):
+                if key_file.is_file() and not key_file.name.endswith('.pub'):
+                    cmd.extend(['-i', str(key_file)])
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        
+        # For GitHub, a successful auth test returns exit code 1 with specific message
+        if hostname == 'github.com':
+            if 'successfully authenticated' in result.stderr:
+                return True, "SSH authentication successful"
+            elif 'Permission denied' in result.stderr:
+                return False, "SSH key not authorized or not found"
+            else:
+                return False, f"SSH connection failed: {result.stderr}"
+        else:
+            # For other Git providers, exit code 0 usually means success
+            if result.returncode == 0:
+                return True, "SSH connection successful"
+            else:
+                return False, f"SSH connection failed: {result.stderr}"
+                
+    except subprocess.TimeoutExpired:
+        return False, "SSH connection timed out"
+    except Exception as e:
+        return False, f"Error testing SSH connection: {str(e)}"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -78,6 +369,15 @@ app = FastAPI(
     at `backend/asyncapi.yaml` or use [AsyncAPI Studio](https://studio.asyncapi.com/).
     
     WebSocket endpoint: `ws://localhost:8000/ws/instance/{instance_id}`
+    
+    ## SSH Key Management
+    
+    The API includes comprehensive SSH key management for accessing private Git repositories:
+    
+    * **Generate SSH keys** - Create ED25519 or RSA key pairs automatically
+    * **Test SSH connections** - Verify authentication with Git providers  
+    * **Manage keys** - List, copy, and delete SSH keys as needed
+    * **Security** - Proper file permissions and secure key storage
     
     ## Authentication
     
@@ -999,6 +1299,207 @@ async def get_git_branches(request: GitValidationRequest):
         raise HTTPException(
             status_code=400,
             detail=f"Error fetching branches: {str(e)}"
+        )
+
+# SSH Key Management endpoints
+@app.post(
+    "/api/ssh/generate-key",
+    response_model=SSHKeyResponse,
+    summary="Generate SSH Key Pair",
+    description="Generate a new SSH key pair for Git repository access.",
+    tags=["SSH Key Management"],
+    responses={
+        201: {"description": "SSH key pair generated successfully"},
+        400: {"model": ErrorResponse, "description": "Invalid request or SSH key generation failed"}
+    }
+)
+async def generate_ssh_key(request: SSHKeyGenerationRequest):
+    """
+    Generate a new SSH key pair.
+    
+    Creates a new SSH key pair that can be used for Git repository authentication.
+    The private key is stored securely on the server, and the public key can be
+    added to Git providers like GitHub, GitLab, etc.
+    
+    - **key_name**: Name for the SSH key (default: "claude-workflow-manager")
+    - **key_type**: Type of key to generate ("ed25519" or "rsa", default: "ed25519")
+    - **email**: Optional email to associate with the key
+    """
+    try:
+        # Check if key already exists
+        existing_keys = list_ssh_keys()
+        if any(key['key_name'] == request.key_name for key in existing_keys):
+            raise HTTPException(
+                status_code=400,
+                detail=f"SSH key with name '{request.key_name}' already exists"
+            )
+        
+        # Generate the key pair
+        key_data = generate_ssh_key_pair(
+            key_name=request.key_name,
+            key_type=request.key_type,
+            email=request.email
+        )
+        
+        # Save the key pair
+        save_ssh_key(
+            key_name=request.key_name,
+            private_key=key_data['private_key'],
+            public_key=key_data['public_key']
+        )
+        
+        # Create instructions based on the key type and common Git providers
+        instructions = [
+            "1. Copy the public key below",
+            "2. Go to your Git provider's SSH key settings:",
+            "   • GitHub: Settings → SSH and GPG keys → New SSH key",
+            "   • GitLab: User Settings → SSH Keys → Add new key", 
+            "   • Bitbucket: Personal settings → SSH keys → Add key",
+            "3. Paste the public key and give it a descriptive title",
+            "4. Test the connection using the 'Test SSH Connection' feature",
+            "5. You can now use SSH URLs for private repositories"
+        ]
+        
+        return SSHKeyResponse(
+            public_key=key_data['public_key'],
+            private_key=key_data['private_key'],
+            fingerprint=key_data['fingerprint'],
+            key_name=request.key_name,
+            instructions=instructions
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to generate SSH key: {str(e)}"
+        )
+
+@app.get(
+    "/api/ssh/keys",
+    response_model=SSHKeyListResponse,
+    summary="List SSH Keys",
+    description="List all SSH keys available on the server.",
+    tags=["SSH Key Management"]
+)
+async def list_available_ssh_keys():
+    """
+    List all SSH keys.
+    
+    Returns a list of all SSH key pairs stored on the server, including
+    their fingerprints, creation dates, and public key content.
+    """
+    try:
+        keys = list_ssh_keys()
+        return SSHKeyListResponse(keys=keys)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list SSH keys: {str(e)}"
+        )
+
+@app.post(
+    "/api/ssh/test-connection",
+    response_model=dict,
+    summary="Test SSH Connection",
+    description="Test SSH connection to a Git repository.",
+    tags=["SSH Key Management"],
+    responses={
+        200: {"description": "Connection test result"},
+        400: {"model": ErrorResponse, "description": "Invalid repository URL or SSH connection failed"}
+    }
+)
+async def test_ssh_git_connection(request: GitConnectionTestRequest):
+    """
+    Test SSH connection to a Git repository.
+    
+    Tests whether the current SSH configuration can successfully authenticate
+    with the specified Git repository.
+    
+    - **git_repo**: Git repository URL (must be SSH format)
+    - **use_ssh_agent**: Whether to use SSH agent for authentication
+    - **key_name**: Optional specific SSH key name to test (tests all keys if not provided)
+    """
+    git_repo = request.git_repo.strip()
+    
+    if not git_repo:
+        raise HTTPException(status_code=400, detail="Git repository URL is required")
+    
+    # Validate that it's an SSH URL
+    if not (git_repo.startswith('git@') or 'ssh://' in git_repo):
+        raise HTTPException(
+            status_code=400, 
+            detail="Repository URL must be an SSH URL (e.g., git@github.com:user/repo.git)"
+        )
+    
+    try:
+        success, message = test_ssh_connection(git_repo, request.key_name)
+        
+        return {
+            "success": success,
+            "message": message,
+            "repository": git_repo,
+            "key_name": request.key_name,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error testing SSH connection: {str(e)}"
+        )
+
+@app.delete(
+    "/api/ssh/keys/{key_name}",
+    response_model=ApiResponse,
+    summary="Delete SSH Key",
+    description="Delete an SSH key pair from the server.",
+    tags=["SSH Key Management"],
+    responses={
+        200: {"description": "SSH key deleted successfully"},
+        404: {"model": ErrorResponse, "description": "SSH key not found"}
+    }
+)
+async def delete_ssh_key(key_name: str):
+    """
+    Delete an SSH key pair.
+    
+    Removes both the private and public key files from the server.
+    This action cannot be undone. Only generated keys can be deleted.
+    
+    - **key_name**: Name of the SSH key to delete (without source suffix)
+    """
+    try:
+        # Remove source suffix if present (e.g., "my-key (generated)" -> "my-key")
+        clean_key_name = key_name.replace(" (generated)", "").replace(" (mounted)", "")
+        
+        ssh_dir = get_ssh_key_directory()
+        private_key_path = ssh_dir / clean_key_name
+        public_key_path = ssh_dir / f"{clean_key_name}.pub"
+        
+        # Only allow deletion of generated keys (in writable directory)
+        if not private_key_path.exists() and not public_key_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Generated SSH key '{clean_key_name}' not found. Note: Mounted keys cannot be deleted."
+            )
+        
+        # Delete the key files
+        if private_key_path.exists():
+            private_key_path.unlink()
+        if public_key_path.exists():
+            public_key_path.unlink()
+        
+        return ApiResponse(
+            message=f"SSH key '{clean_key_name}' deleted successfully",
+            success=True
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete SSH key: {str(e)}"
         )
 
 @app.post("/api/workflows/{workflow_id}/auto-discover-agents")

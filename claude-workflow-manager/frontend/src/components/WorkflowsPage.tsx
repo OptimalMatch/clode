@@ -23,7 +23,7 @@ import {
 } from '@mui/material';
 import { 
   Add, PlayArrow, FolderOpen, SmartToy, Delete, 
-  CheckCircle, Error, Warning 
+  CheckCircle, Error, Warning, VpnKey 
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -31,6 +31,7 @@ import { workflowApi, gitApi } from '../services/api';
 import { Workflow, GitValidationResponse, GitBranchesResponse } from '../types';
 import PromptFileManager from './PromptFileManager';
 import AgentDiscovery from './AgentDiscovery';
+import SSHKeyManager from './SSHKeyManager';
 
 const WorkflowsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -53,6 +54,7 @@ const WorkflowsPage: React.FC = () => {
   const [availableBranches, setAvailableBranches] = useState<string[]>([]);
   const [isFetchingBranches, setIsFetchingBranches] = useState(false);
   const [validationTimeout, setValidationTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [sshKeyManagerOpen, setSSHKeyManagerOpen] = useState(false);
 
   const { data: workflows = [], isLoading } = useQuery({
     queryKey: ['workflows'],
@@ -126,6 +128,17 @@ const WorkflowsPage: React.FC = () => {
           // Keep the default branch from validation
         } finally {
           setIsFetchingBranches(false);
+        }
+      } else {
+        // If validation fails and it's a GitHub HTTPS URL, suggest SSH alternative
+        if (gitRepo.startsWith('https://github.com/') && 
+            (validation.message.toLowerCase().includes('permission') || 
+             validation.message.toLowerCase().includes('authentication'))) {
+          const sshUrl = gitRepo.replace('https://github.com/', 'git@github.com:');
+          setGitValidation({
+            ...validation,
+            message: `${validation.message}. You might want to try the SSH URL: ${sshUrl}`
+          });
         }
       }
     } catch (error) {
@@ -288,8 +301,8 @@ const WorkflowsPage: React.FC = () => {
               variant="outlined"
               value={newWorkflow.git_repo}
               onChange={(e) => handleGitRepoChange(e.target.value)}
-              placeholder="https://github.com/user/repository.git"
-              helperText="Enter a Git repository URL to validate access and fetch branches"
+              placeholder="https://github.com/user/repository.git or git@github.com:user/repository.git"
+              helperText="Enter a Git repository URL (HTTPS or SSH) to validate access and fetch branches"
               InputProps={{
                 endAdornment: isValidatingRepo ? (
                   <CircularProgress size={20} />
@@ -309,11 +322,32 @@ const WorkflowsPage: React.FC = () => {
                 severity={gitValidation.accessible ? "success" : "error"} 
                 sx={{ mt: 1 }}
                 icon={gitValidation.accessible ? <CheckCircle /> : <Error />}
+                action={
+                  !gitValidation.accessible && 
+                  (gitValidation.message.toLowerCase().includes('permission') || 
+                   gitValidation.message.toLowerCase().includes('authentication')) ? (
+                    <Button
+                      color="inherit"
+                      size="small"
+                      onClick={() => setSSHKeyManagerOpen(true)}
+                      startIcon={<VpnKey />}
+                    >
+                      Setup SSH Key
+                    </Button>
+                  ) : null
+                }
               >
                 {gitValidation.message}
                 {gitValidation.accessible && gitValidation.default_branch && (
                   <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
                     Default branch: {gitValidation.default_branch}
+                  </Typography>
+                )}
+                {!gitValidation.accessible && 
+                 (gitValidation.message.toLowerCase().includes('permission') || 
+                  gitValidation.message.toLowerCase().includes('authentication')) && (
+                  <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                    This appears to be a private repository. Generate an SSH key to access it.
                   </Typography>
                 )}
               </Alert>
@@ -422,6 +456,19 @@ const WorkflowsPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* SSH Key Manager */}
+      <SSHKeyManager
+        open={sshKeyManagerOpen}
+        onClose={() => setSSHKeyManagerOpen(false)}
+        gitRepo={newWorkflow.git_repo}
+        onKeyGenerated={() => {
+          // Re-validate repository after SSH key is generated
+          if (newWorkflow.git_repo) {
+            validateRepository(newWorkflow.git_repo);
+          }
+        }}
+      />
     </Box>
   );
 };

@@ -34,6 +34,7 @@ services:
       - ./backend:/app
       - ${HOME}/.ssh:/root/.ssh:ro
       - ssh_known_hosts:/root/.ssh_known_hosts
+      - ssh_generated_keys:/app/ssh_keys
     networks:
       - claude-network
 
@@ -66,6 +67,7 @@ services:
 volumes:
   mongo_data:
   ssh_known_hosts:
+  ssh_generated_keys:
 
 networks:
   claude-network:

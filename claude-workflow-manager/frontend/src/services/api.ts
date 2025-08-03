@@ -244,3 +244,33 @@ export const gitApi = {
     return response.data;
   },
 };
+
+export const sshApi = {
+  generateKey: async (keyName: string, keyType: string = 'ed25519', email?: string) => {
+    const response = await api.post('/api/ssh/generate-key', {
+      key_name: keyName,
+      key_type: keyType,
+      email: email
+    });
+    return response.data;
+  },
+  
+  listKeys: async () => {
+    const response = await api.get('/api/ssh/keys');
+    return response.data;
+  },
+  
+  testConnection: async (gitRepo: string, keyName?: string) => {
+    const response = await api.post('/api/ssh/test-connection', {
+      git_repo: gitRepo,
+      use_ssh_agent: true,
+      key_name: keyName
+    });
+    return response.data;
+  },
+  
+  deleteKey: async (keyName: string) => {
+    const response = await api.delete(`/api/ssh/keys/${keyName}`);
+    return response.data;
+  },
+};

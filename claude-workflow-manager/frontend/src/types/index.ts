@@ -136,3 +136,32 @@ export interface GitBranchesResponse {
   branches: string[];
   default_branch?: string;
 }
+
+export interface SSHKeyResponse {
+  public_key: string;
+  private_key: string;
+  fingerprint: string;
+  key_name: string;
+  instructions: string[];
+}
+
+export interface SSHKeyInfo {
+  fingerprint: string;
+  key_name: string;
+  public_key: string;
+  created_at: string;
+  last_used?: string;
+  source?: string; // 'generated' or 'mounted'
+}
+
+export interface SSHKeyListResponse {
+  keys: SSHKeyInfo[];
+}
+
+export interface SSHConnectionTestResponse {
+  success: boolean;
+  message: string;
+  repository: string;
+  key_name?: string;
+  timestamp: string;
+}

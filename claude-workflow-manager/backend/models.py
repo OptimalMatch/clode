@@ -207,3 +207,35 @@ class GitBranchesResponse(BaseModel):
     """Response model for Git repository branches"""
     branches: List[str]
     default_branch: Optional[str] = None
+
+class SSHKeyGenerationRequest(BaseModel):
+    """Request model for SSH key generation"""
+    key_name: str = "claude-workflow-manager"
+    key_type: str = "ed25519"  # or "rsa"
+    email: Optional[str] = None
+
+class SSHKeyResponse(BaseModel):
+    """Response model for SSH key generation"""
+    public_key: str
+    private_key: str
+    fingerprint: str
+    key_name: str
+    instructions: List[str]
+
+class SSHKeyInfo(BaseModel):
+    """Model for SSH key information"""
+    fingerprint: str
+    key_name: str
+    public_key: str
+    created_at: str
+    last_used: Optional[str] = None
+
+class SSHKeyListResponse(BaseModel):
+    """Response model for SSH key list"""
+    keys: List[SSHKeyInfo]
+
+class GitConnectionTestRequest(BaseModel):
+    """Request model for testing Git connection with SSH"""
+    git_repo: str
+    use_ssh_agent: bool = True
+    key_name: Optional[str] = None  # Specific key to test, if None tests all keys

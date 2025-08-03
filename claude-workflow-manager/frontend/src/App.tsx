@@ -8,6 +8,7 @@ import WorkflowsPage from './components/WorkflowsPage';
 import PromptsPage from './components/PromptsPage';
 import InstancesPage from './components/InstancesPage';
 import SubagentsPage from './components/SubagentsPage';
+import SSHKeysPage from './components/SSHKeysPage';
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ function App() {
               <Route path="/workflows" element={<WorkflowsPage />} />
               <Route path="/prompts" element={<PromptsPage />} />
               <Route path="/subagents" element={<SubagentsPage />} />
+              <Route path="/ssh-keys" element={<SSHKeysPage />} />
               <Route path="/instances/:workflowId" element={<InstancesPage />} />
             </Routes>
           </Layout>
