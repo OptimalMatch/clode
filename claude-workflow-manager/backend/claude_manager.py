@@ -79,6 +79,8 @@ class ClaudeCodeManager:
                                 })
                                 # Store in terminal history
                                 await self.db.append_terminal_history(instance_id, formatted_msg, "output")
+                                # Also create instance logs for analytics
+                                await self._create_event_logs(instance_id, event, formatted_msg)
                         except json.JSONDecodeError:
                             # Not a JSON line, might be error or other output
                             self._log_with_timestamp(f"⚠️ Non-JSON line: {line}")
@@ -536,6 +538,8 @@ class ClaudeCodeManager:
                                         "content": formatted_msg
                                     })
                                     await self.db.append_terminal_history(instance_id, formatted_msg, "output")
+                                    # Also create instance logs for analytics
+                                    await self._create_event_logs(instance_id, event, formatted_msg)
                             except json.JSONDecodeError:
                                 # Non-JSON line, send as-is
                                 await self._send_websocket_update(instance_id, {
@@ -915,6 +919,78 @@ class ClaudeCodeManager:
             self._log_with_timestamp(f"🔍 Unknown streaming event type: {event_type} - Full event: {event}")
             self._logged_unknown_types.add(event_type)
         return None
+    
+    async def _create_event_logs(self, instance_id: str, event: dict, formatted_msg: str):
+        """Create instance logs for streaming events to show in LogsViewer"""
+        if not isinstance(event, dict):
+            return
+            
+        instance_info = self.instances.get(instance_id, {})
+        event_type = event.get('type', '')
+        
+        # Create OUTPUT logs for assistant responses
+        if event_type == 'assistant':
+            message = event.get('message', {})
+            content = message.get('content', [])
+            
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get('type') == 'text':
+                            # Log text output
+                            text = block.get('text', '').strip()
+                            if text:
+                                await self._log_event(
+                                    instance_id=instance_id,
+                                    workflow_id=instance_info.get("workflow_id", ""),
+                                    prompt_id=instance_info.get("prompt_id"),
+                                    log_type=LogType.OUTPUT,
+                                    content=text,
+                                    metadata={"event_type": "assistant_text"}
+                                )
+                        elif block.get('type') == 'tool_use':
+                            # Log tool usage
+                            tool_name = block.get('name', 'Unknown')
+                            tool_input = block.get('input', {})
+                            tool_id = block.get('id', 'unknown')
+                            
+                            await self._log_event(
+                                instance_id=instance_id,
+                                workflow_id=instance_info.get("workflow_id", ""),
+                                prompt_id=instance_info.get("prompt_id"),
+                                log_type=LogType.TOOL_USE,
+                                content=f"Used tool: {tool_name}",
+                                metadata={
+                                    "tool_name": tool_name,
+                                    "tool_input": tool_input,
+                                    "tool_id": tool_id,
+                                    "event_type": "tool_use"
+                                }
+                            )
+        
+        # Create logs for user messages (tool results, etc.)
+        elif event_type == 'user':
+            message = event.get('message', {})
+            content = message.get('content', [])
+            
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get('type') == 'tool_result':
+                        tool_id = item.get('tool_use_id', 'unknown')
+                        tool_content = item.get('content', '')
+                        
+                        await self._log_event(
+                            instance_id=instance_id,
+                            workflow_id=instance_info.get("workflow_id", ""),
+                            prompt_id=instance_info.get("prompt_id"),
+                            log_type=LogType.OUTPUT,
+                            content=f"Tool result received (ID: {tool_id})",
+                            metadata={
+                                "tool_id": tool_id,
+                                "tool_result": str(tool_content)[:500],  # Limit size
+                                "event_type": "tool_result"
+                            }
+                        )
     
     def _format_tool_use(self, tool_name, tool_input):
         """Format tool use for display"""
