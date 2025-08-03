@@ -17,7 +17,7 @@ import {
   FormControl,
   InputLabel,
 } from '@mui/material';
-import { Add, PlayArrow, Pause, Stop, Assessment } from '@mui/icons-material';
+import { Add, PlayArrow, Pause, Stop, Assessment, Delete } from '@mui/icons-material';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { instanceApi, promptApi, workflowApi } from '../services/api';
@@ -33,6 +33,8 @@ const InstancesPage: React.FC = () => {
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null);
   const [logsViewerOpen, setLogsViewerOpen] = useState(false);
   const [logsInstanceId, setLogsInstanceId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [instanceToDelete, setInstanceToDelete] = useState<string | null>(null);
 
   const { data: workflow } = useQuery({
     queryKey: ['workflow', workflowId],
@@ -62,9 +64,29 @@ const InstancesPage: React.FC = () => {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (instanceId: string) => instanceApi.delete(instanceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['instances', workflowId] });
+      setDeleteDialogOpen(false);
+      setInstanceToDelete(null);
+    },
+  });
+
   const handleSpawn = () => {
     if (workflowId) {
       spawnMutation.mutate();
+    }
+  };
+
+  const handleDeleteClick = (instanceId: string) => {
+    setInstanceToDelete(instanceId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (instanceToDelete) {
+      deleteMutation.mutate(instanceToDelete);
     }
   };
 
@@ -139,8 +161,18 @@ const InstancesPage: React.FC = () => {
                         setLogsInstanceId(instance.id);
                         setLogsViewerOpen(true);
                       }}
+                      sx={{ mr: 1 }}
                     >
                       View Logs
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      color="error"
+                      startIcon={<Delete />}
+                      onClick={() => handleDeleteClick(instance.id)}
+                    >
+                      Delete
                     </Button>
                   </Box>
                 </Box>
@@ -191,6 +223,40 @@ const InstancesPage: React.FC = () => {
           <Button onClick={() => setOpen(false)}>Cancel</Button>
           <Button onClick={handleSpawn} variant="contained">
             Spawn
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog 
+        open={deleteDialogOpen} 
+        onClose={() => setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        disableEnforceFocus
+        disableAutoFocus
+        disableRestoreFocus
+        disableScrollLock
+      >
+        <DialogTitle>Delete Instance</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete this instance? This action will permanently remove the instance and all its associated logs. This cannot be undone.
+          </Typography>
+          {instanceToDelete && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              Instance ID: {instanceToDelete.slice(0, 8)}...
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            variant="contained" 
+            color="error"
+            disabled={deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

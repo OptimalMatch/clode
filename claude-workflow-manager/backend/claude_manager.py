@@ -275,6 +275,29 @@ class ClaudeCodeManager:
         if instance_id in self.websockets:
             del self.websockets[instance_id]
     
+    async def cleanup_instance(self, instance_id: str):
+        """Clean up an instance from memory and close any connections"""
+        # Disconnect any websocket connections
+        await self.disconnect_websocket(instance_id)
+        
+        # Remove instance from memory
+        if instance_id in self.instances:
+            instance_info = self.instances[instance_id]
+            
+            # Clean up temporary directory if it exists
+            working_dir = instance_info.get("working_directory")
+            if working_dir and os.path.exists(working_dir):
+                try:
+                    import shutil
+                    shutil.rmtree(working_dir)
+                    print(f"🗑️ CLAUDE_MANAGER: Cleaned up working directory: {working_dir}")
+                except Exception as e:
+                    print(f"⚠️ CLAUDE_MANAGER: Failed to clean up working directory {working_dir}: {e}")
+            
+            # Remove from instances
+            del self.instances[instance_id]
+            print(f"🗑️ CLAUDE_MANAGER: Cleaned up instance {instance_id} from memory")
+    
     async def send_input(self, instance_id: str, input_text: str):
         instance_info = self.instances.get(instance_id)
         if not instance_info:

@@ -132,6 +132,18 @@ async def interrupt_instance(instance_id: str, data: dict):
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
 
+@app.delete("/api/instances/{instance_id}")
+async def delete_instance(instance_id: str):
+    """Delete a specific instance and all its associated logs"""
+    success = await db.delete_instance(instance_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    
+    # Also clean up any active instance in the claude manager
+    await claude_manager.cleanup_instance(instance_id)
+    
+    return {"success": True, "message": f"Instance {instance_id} deleted successfully"}
+
 @app.websocket("/ws/{instance_id}")
 async def websocket_endpoint(websocket: WebSocket, instance_id: str):
     print(f"🔌 WebSocket connection attempt for instance: {instance_id}")

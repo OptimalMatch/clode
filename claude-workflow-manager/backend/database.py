@@ -208,6 +208,23 @@ class Database:
             {"$set": update_data}
         )
     
+    async def delete_instance(self, instance_id: str) -> bool:
+        """Delete an instance and all its associated logs"""
+        try:
+            # Delete the instance
+            instance_result = await self.db.instances.delete_one({"id": instance_id})
+            
+            # Delete associated logs
+            logs_result = await self.db.logs.delete_many({"instance_id": instance_id})
+            
+            print(f"🗑️ DATABASE: Deleted instance {instance_id}")
+            print(f"📊 DATABASE: Deleted {logs_result.deleted_count} logs for instance {instance_id}")
+            
+            return instance_result.deleted_count > 0
+        except Exception as e:
+            print(f"❌ DATABASE: Error deleting instance {instance_id}: {e}")
+            return False
+    
     async def add_instance_log(self, log: InstanceLog) -> str:
         if self.db is None:
             raise RuntimeError("Database not connected. Please ensure the database connection is established.")

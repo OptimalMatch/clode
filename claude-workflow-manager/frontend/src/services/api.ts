@@ -77,6 +77,11 @@ export const instanceApi = {
     });
     return response.data;
   },
+  
+  delete: async (instanceId: string) => {
+    const response = await api.delete(`/api/instances/${instanceId}`);
+    return response.data;
+  },
 };
 
 export const subagentApi = {
