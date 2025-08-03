@@ -205,6 +205,52 @@ class ClaudeCodeManager:
                 session_id = str(uuid.uuid4())  # Generate proper UUID for session
                 session_created = False  # Session needs to be created
             
+            # Update .claude/settings.local.json to add missing bash permissions
+            claude_dir = os.path.join(temp_dir, '.claude')
+            settings_file = os.path.join(claude_dir, 'settings.local.json')
+            
+            if os.path.exists(settings_file):
+                try:
+                    # Read existing settings
+                    with open(settings_file, 'r') as f:
+                        settings = json.load(f)
+                    
+                    # Add missing bash permissions
+                    additional_permissions = [
+                        "Bash(for:*)",      # Bash for loops
+                        "Bash(cd:*)",       # Change directory
+                        "Bash(do:*)",       # Do statements in loops
+                        "Bash(done:*)",     # End of loops
+                        "Bash(echo:*)",     # Echo command
+                        "Bash(cat:*)",      # Cat command
+                        "Bash(head:*)",     # Head command
+                        "Bash(tail:*)",     # Tail command
+                        "Bash(grep:*)",     # Grep command
+                        "Bash(find:*)",     # Find command
+                        "Bash(xargs:*)",    # Xargs command
+                        "Bash(*)"           # Allow all bash commands
+                    ]
+                    
+                    # Ensure permissions structure exists
+                    if "permissions" not in settings:
+                        settings["permissions"] = {}
+                    if "allow" not in settings["permissions"]:
+                        settings["permissions"]["allow"] = []
+                    
+                    # Add new permissions if not already present
+                    for perm in additional_permissions:
+                        if perm not in settings["permissions"]["allow"]:
+                            settings["permissions"]["allow"].append(perm)
+                    
+                    # Write updated settings back
+                    with open(settings_file, 'w') as f:
+                        json.dump(settings, f, indent=2)
+                    
+                    self._log_with_timestamp(f"📋 Updated Claude settings file with additional bash permissions")
+                    
+                except Exception as e:
+                    self._log_with_timestamp(f"⚠️ Failed to update Claude settings file: {e}")
+            
             # Store instance information
             instance_info = {
                 "id": instance.id,
@@ -687,7 +733,17 @@ class ClaudeCodeManager:
                         if item.get('type') == 'tool_result':
                             tool_id = item.get('tool_use_id', 'unknown')
                             tool_content = item.get('content', '')
-                            # Show brief summary of tool result content if available
+                            
+                            # Check if this is a permission request
+                            if tool_content and "requested permissions" in str(tool_content).lower():
+                                # Highlight permission requests in bright red
+                                if len(str(tool_content)) > 100:
+                                    content_preview = str(tool_content)[:100] + "..."
+                                    return f"\x1b[91m🚨 **PERMISSION REQUEST** (ID: {tool_id}) - {content_preview}\x1b[0m"
+                                else:
+                                    return f"\x1b[91m🚨 **PERMISSION REQUEST** (ID: {tool_id}) - {tool_content}\x1b[0m"
+                            
+                            # Regular tool results
                             if tool_content and len(str(tool_content)) > 100:
                                 content_preview = str(tool_content)[:100] + "..."
                                 return f"🔧 **Tool result received** (ID: {tool_id}) - {content_preview}"
