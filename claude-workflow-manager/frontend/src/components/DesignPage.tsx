@@ -48,6 +48,8 @@ import {
   PlayCircleOutline,
   Stop,
   FastForward,
+  DarkMode,
+  LightMode,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -88,6 +90,8 @@ interface ExecutionPlan extends Array<Array<{
 const DesignPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // No body overflow manipulation needed
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>('');
   const [nodes, setNodes] = useState<WorkflowNode[]>([]);
   const [connections, setConnections] = useState<WorkflowConnection[]>([]);
@@ -103,7 +107,28 @@ const DesignPage: React.FC = () => {
     message: '',
     severity: 'success'
   });
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('designPageDarkMode');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  // Prompt preview/edit modal state
+  const [promptPreviewOpen, setPromptPreviewOpen] = useState(false);
+  const [previewPrompt, setPreviewPrompt] = useState('');
+  const [editablePrompt, setEditablePrompt] = useState('');
+  const [executionContext, setExecutionContext] = useState<{
+    type: 'sequence' | 'prompt' | 'fromSequence' | 'fullWorkflow';
+    sequenceId?: string;
+    sequenceNumber?: number;
+    promptId?: string;
+    promptConfig?: any;
+  } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Persist dark mode preference
+  useEffect(() => {
+    localStorage.setItem('designPageDarkMode', JSON.stringify(darkMode));
+  }, [darkMode]);
 
   // Check for workflow parameter in URL on component mount
   useEffect(() => {
@@ -274,223 +299,273 @@ const DesignPage: React.FC = () => {
     setPanOffset({ x: 0, y: 0 });
   };
 
-  // Execute sequence (all prompts in the sequence)
-  const handleExecuteSequence = async (sequenceId: string, sequenceNumber: number) => {
-    if (!selectedWorkflowId) return;
+  // Generate prompt preview based on execution type
+  const generatePromptPreview = (type: string, sequenceNumber?: number, promptConfig?: any) => {
+    if (!executionPlan) return '';
+
+    const generateContextualPrompt = (targetPrompts: any[], completedPrompts: any[] = []) => {
+      if (targetPrompts.length === 0) return '';
+
+      // Get the main prompt to execute
+      const mainPrompt = targetPrompts[0];
+      const promptFileName = mainPrompt.filename;
+      
+      let prompt = '';
+
+      // Add completion context if there are completed prompts
+      if (completedPrompts.length > 0) {
+        const completedFiles = completedPrompts.map(p => p.filename).join(', ');
+        prompt += `We have finished implementing ${completedFiles}. `;
+      }
+
+      // Main instruction
+      prompt += `Start the general agent to read the prompt in ${promptFileName} and code what is specified in this file. `;
+
+      // Context files to check
+      prompt += `Check claude_prompts.md, claude_prompts folder, optimalmatch_capabilities.md, and migration_plan.md. `;
+
+      // Target directories
+      prompt += `The target new code is in the folder named python and the legacy java code is in src folder. `;
+
+      // Git branch reminder
+      prompt += `Remember to use the git branch specified in the ${promptFileName}. `;
+
+      // Destructive change protection
+      if (completedPrompts.length > 0) {
+        const reviewFiles = completedPrompts.map(p => 
+          `python/reviews/tech-lead-review-log-${p.filename.replace('.md', '')}.md`
+        ).join(', ');
+        const previousPrompts = completedPrompts.map(p => p.filename).join(', ');
+        
+        prompt += `If we are making a destructive change, please check the previous prompt${completedPrompts.length > 1 ? 's' : ''} ${previousPrompts}`;
+        if (reviewFiles) {
+          prompt += `, ${reviewFiles}`;
+        }
+        prompt += ` to see if there was existing business logic that should not be erased.`;
+      }
+
+      return prompt;
+    };
+
+    switch (type) {
+      case 'sequence': {
+        const sequence = executionPlan.find((seq: any[]) => 
+          seq.length > 0 && seq[0].sequence === sequenceNumber
+        );
+        if (!sequence) return '';
+
+        // Get all prompts from previous sequences as completed
+        const completedPrompts: any[] = [];
+        executionPlan.forEach((seq: any[]) => {
+          if (seq.length > 0 && seq[0].sequence < (sequenceNumber || 0)) {
+            completedPrompts.push(...seq);
+          }
+        });
+
+        return generateContextualPrompt(sequence, completedPrompts);
+      }
+      case 'prompt': {
+        if (!promptConfig) return '';
+
+        // Get all prompts from previous sequences as completed
+        const completedPrompts: any[] = [];
+        executionPlan.forEach((seq: any[]) => {
+          seq.forEach((prompt: any) => {
+            if (prompt.sequence < promptConfig.sequence || 
+                (prompt.sequence === promptConfig.sequence && prompt.parallel < promptConfig.parallel)) {
+              completedPrompts.push(prompt);
+            }
+          });
+        });
+
+        return generateContextualPrompt([promptConfig], completedPrompts);
+      }
+      case 'fromSequence': {
+        const sequences = executionPlan.filter((seq: any[]) => 
+          seq.length > 0 && seq[0].sequence >= (sequenceNumber || 0)
+        );
+        if (!sequences.length) return '';
+
+        // Get all prompts from previous sequences as completed
+        const completedPrompts: any[] = [];
+        executionPlan.forEach((seq: any[]) => {
+          if (seq.length > 0 && seq[0].sequence < (sequenceNumber || 0)) {
+            completedPrompts.push(...seq);
+          }
+        });
+
+        // Get the first prompt from the target sequences
+        const firstTargetPrompt = sequences[0][0];
+        return generateContextualPrompt([firstTargetPrompt], completedPrompts);
+      }
+      case 'fullWorkflow': {
+        // For full workflow, start with the first prompt
+        const firstSequence = executionPlan[0];
+        if (!firstSequence || firstSequence.length === 0) return '';
+        
+        const firstPrompt = firstSequence[0];
+        return generateContextualPrompt([firstPrompt], []);
+      }
+      default:
+        return '';
+    }
+  };
+
+  // Show prompt preview modal
+  const showPromptPreview = (
+    type: 'sequence' | 'prompt' | 'fromSequence' | 'fullWorkflow',
+    sequenceId?: string,
+    sequenceNumber?: number,
+    promptId?: string,
+    promptConfig?: any
+  ) => {
+    const prompt = generatePromptPreview(type, sequenceNumber, promptConfig);
+    setPreviewPrompt(prompt);
+    setEditablePrompt(prompt);
+    setExecutionContext({
+      type,
+      sequenceId,
+      sequenceNumber,
+      promptId,
+      promptConfig
+    });
+    setPromptPreviewOpen(true);
+  };
+
+  // Execute with custom prompt
+  const executeWithCustomPrompt = async () => {
+    if (!selectedWorkflowId || !executionContext) return;
+
+    setPromptPreviewOpen(false);
     
-    setExecutingNodes(prev => new Set(prev).add(sequenceId));
+    const nodeId = executionContext.sequenceId || executionContext.promptId || 'full-workflow';
+    setExecutingNodes(prev => new Set(prev).add(nodeId));
     
     try {
-      // Execute only this specific sequence
-      const result = await instanceApi.spawn(
-        selectedWorkflowId,
-        undefined, // no specific prompt
-        undefined, // no git repo override
-        sequenceNumber, // start at this sequence
-        sequenceNumber  // end at this sequence (single sequence mode)
-      );
+      let result: { instance_id: string };
       
-      setExecutionResults(prev => new Map(prev).set(sequenceId, {
+      // For now, we'll still use the original API calls but could extend this
+      // to support custom prompts in the future
+      switch (executionContext.type) {
+        case 'sequence':
+          result = await instanceApi.spawn(
+            selectedWorkflowId,
+            undefined,
+            undefined,
+            executionContext.sequenceNumber,
+            executionContext.sequenceNumber
+          );
+          break;
+        case 'prompt':
+          result = await instanceApi.spawn(
+            selectedWorkflowId,
+            executionContext.promptConfig?.filename
+          );
+          break;
+        case 'fromSequence':
+          result = await instanceApi.spawn(
+            selectedWorkflowId,
+            undefined,
+            undefined,
+            executionContext.sequenceNumber,
+            undefined
+          );
+          break;
+        case 'fullWorkflow':
+          result = await instanceApi.spawn(selectedWorkflowId);
+          break;
+        default:
+          throw new Error('Unknown execution type');
+      }
+      
+      setExecutionResults(prev => new Map(prev).set(nodeId, {
         success: true,
-        message: `Sequence ${sequenceNumber} execution started`,
+        message: `Execution started`,
         instanceId: result.instance_id,
         timestamp: new Date().toISOString(),
       }));
 
       setSnackbar({
         open: true,
-        message: `✨ Sequence ${sequenceNumber} started! Opening instances page...`,
+        message: `🚀 Execution started! Opening instances page...`,
         severity: 'success'
       });
       
-      // Navigate to instances page to see the execution
       setTimeout(() => {
         window.open(`/instances/${selectedWorkflowId}`, '_blank');
       }, 1000);
       
     } catch (error: any) {
-      setExecutionResults(prev => new Map(prev).set(sequenceId, {
+      setExecutionResults(prev => new Map(prev).set(nodeId, {
         success: false,
-        message: error.response?.data?.detail || 'Failed to execute sequence',
+        message: error.response?.data?.detail || 'Failed to execute',
         timestamp: new Date().toISOString(),
       }));
 
       setSnackbar({
         open: true,
-        message: `❌ Failed to execute sequence ${sequenceNumber}: ${error.response?.data?.detail || 'Unknown error'}`,
+        message: `❌ Execution failed: ${error.response?.data?.detail || 'Unknown error'}`,
         severity: 'error'
       });
     } finally {
       setExecutingNodes(prev => {
         const newSet = new Set(prev);
-        newSet.delete(sequenceId);
+        newSet.delete(nodeId);
         return newSet;
       });
     }
+  };
+
+  // Execute sequence (all prompts in the sequence)
+  const handleExecuteSequence = async (sequenceId: string, sequenceNumber: number) => {
+    if (!selectedWorkflowId) return;
+    
+    // Show prompt preview instead of directly executing
+    showPromptPreview('sequence', sequenceId, sequenceNumber);
   };
 
   // Execute individual prompt
   const handleExecutePrompt = async (promptId: string, promptConfig: any) => {
     if (!selectedWorkflowId) return;
     
-    setExecutingNodes(prev => new Set(prev).add(promptId));
-    
-    try {
-      // Create a temporary prompt for this execution
-      // We'll use the filename as a unique identifier
-      const result = await instanceApi.spawn(selectedWorkflowId, promptConfig.filename);
-      
-      setExecutionResults(prev => new Map(prev).set(promptId, {
-        success: true,
-        message: `Prompt ${promptConfig.filename} execution started`,
-        instanceId: result.instance_id,
-        timestamp: new Date().toISOString(),
-      }));
-
-      setSnackbar({
-        open: true,
-        message: `🚀 Prompt "${promptConfig.filename}" started! Opening instances page...`,
-        severity: 'success'
-      });
-      
-      // Navigate to instances page to see the execution
-      setTimeout(() => {
-        window.open(`/instances/${selectedWorkflowId}`, '_blank');
-      }, 1000);
-      
-    } catch (error: any) {
-      setExecutionResults(prev => new Map(prev).set(promptId, {
-        success: false,
-        message: error.response?.data?.detail || 'Failed to execute prompt',
-        timestamp: new Date().toISOString(),
-      }));
-
-      setSnackbar({
-        open: true,
-        message: `❌ Failed to execute prompt "${promptConfig.filename}": ${error.response?.data?.detail || 'Unknown error'}`,
-        severity: 'error'
-      });
-    } finally {
-      setExecutingNodes(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(promptId);
-        return newSet;
-      });
-    }
+    // Show prompt preview instead of directly executing
+    showPromptPreview('prompt', undefined, undefined, promptId, promptConfig);
   };
 
   // Execute from sequence onward
   const handleExecuteFromSequence = async (sequenceId: string, sequenceNumber: number) => {
     if (!selectedWorkflowId) return;
     
-    setExecutingNodes(prev => new Set(prev).add(sequenceId));
-    
-    try {
-      // Execute from this sequence to the end
-      const result = await instanceApi.spawn(
-        selectedWorkflowId,
-        undefined, // no specific prompt
-        undefined, // no git repo override
-        sequenceNumber, // start at this sequence
-        undefined // no end sequence (run to end)
-      );
-      
-      setExecutionResults(prev => new Map(prev).set(sequenceId, {
-        success: true,
-        message: `Execution from sequence ${sequenceNumber} onward started`,
-        instanceId: result.instance_id,
-        timestamp: new Date().toISOString(),
-      }));
-
-      setSnackbar({
-        open: true,
-        message: `🚀 Execution from sequence ${sequenceNumber} onward started! Opening instances page...`,
-        severity: 'success'
-      });
-      
-      setTimeout(() => {
-        window.open(`/instances/${selectedWorkflowId}`, '_blank');
-      }, 1000);
-      
-    } catch (error: any) {
-      setExecutionResults(prev => new Map(prev).set(sequenceId, {
-        success: false,
-        message: error.response?.data?.detail || 'Failed to execute from sequence',
-        timestamp: new Date().toISOString(),
-      }));
-
-      setSnackbar({
-        open: true,
-        message: `❌ Failed to execute from sequence ${sequenceNumber}: ${error.response?.data?.detail || 'Unknown error'}`,
-        severity: 'error'
-      });
-    } finally {
-      setExecutingNodes(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(sequenceId);
-        return newSet;
-      });
-    }
+    // Show prompt preview instead of directly executing
+    showPromptPreview('fromSequence', sequenceId, sequenceNumber);
   };
 
   // Execute full workflow
   const handleExecuteFullWorkflow = async () => {
     if (!selectedWorkflowId) return;
     
-    // Use a temporary ID for full workflow execution
-    const fullWorkflowId = 'full-workflow';
-    setExecutingNodes(prev => new Set(prev).add(fullWorkflowId));
-    
-    try {
-      // Execute entire workflow (no sequence parameters)
-      const result = await instanceApi.spawn(selectedWorkflowId);
-      
-      setExecutionResults(prev => new Map(prev).set(fullWorkflowId, {
-        success: true,
-        message: 'Full workflow execution started',
-        instanceId: result.instance_id,
-        timestamp: new Date().toISOString(),
-      }));
-
-      setSnackbar({
-        open: true,
-        message: `🎯 Full workflow started! Opening instances page...`,
-        severity: 'success'
-      });
-      
-      setTimeout(() => {
-        window.open(`/instances/${selectedWorkflowId}`, '_blank');
-      }, 1000);
-      
-    } catch (error: any) {
-      setExecutionResults(prev => new Map(prev).set(fullWorkflowId, {
-        success: false,
-        message: error.response?.data?.detail || 'Failed to execute full workflow',
-        timestamp: new Date().toISOString(),
-      }));
-
-      setSnackbar({
-        open: true,
-        message: `❌ Failed to execute full workflow: ${error.response?.data?.detail || 'Unknown error'}`,
-        severity: 'error'
-      });
-    } finally {
-      setExecutingNodes(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(fullWorkflowId);
-        return newSet;
-      });
-    }
+    // Show prompt preview instead of directly executing
+    showPromptPreview('fullWorkflow', 'full-workflow');
   };
 
   const renderNode = (node: WorkflowNode) => {
     const getNodeColor = () => {
-      switch (node.type) {
-        case 'trigger': return '#4caf50';
-        case 'group': return '#2196f3';
-        case 'prompt': return '#ff9800';
-        case 'condition': return '#9c27b0';
-        default: return '#666';
+      if (darkMode) {
+        switch (node.type) {
+          case 'trigger': return '#66bb6a';
+          case 'group': return '#42a5f5';
+          case 'prompt': return '#ffb74d';
+          case 'condition': return '#ba68c8';
+          default: return '#90a4ae';
+        }
+      } else {
+        switch (node.type) {
+          case 'trigger': return '#4caf50';
+          case 'group': return '#2196f3';
+          case 'prompt': return '#ff9800';
+          case 'condition': return '#9c27b0';
+          default: return '#666';
+        }
       }
     };
 
@@ -521,7 +596,15 @@ const DesignPage: React.FC = () => {
           border: selectedNode?.id === node.id ? 2 : 1,
           borderColor: selectedNode?.id === node.id ? 'primary.main' : 'grey.300',
           borderStyle: 'solid',
-          backgroundColor: 'background.paper',
+          backgroundColor: darkMode ? '#2d2d2d' : '#ffffff',
+          color: darkMode ? '#ffffff' : '#000000',
+          '& .MuiTypography-root': {
+            color: darkMode ? '#ffffff' : '#000000',
+          },
+          '& .MuiChip-root': {
+            backgroundColor: darkMode ? '#424242' : '#f5f5f5',
+            color: darkMode ? '#ffffff' : '#000000',
+          },
           transform: `scale(${zoom})`,
           transformOrigin: 'top left',
         }}
@@ -669,21 +752,93 @@ const DesignPage: React.FC = () => {
   const selectedWorkflow = workflows.find((w: Workflow) => w.id === selectedWorkflowId);
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ 
+      height: 'calc(100vh - 64px)', // Account for layout header
+      maxHeight: 'calc(100vh - 64px)',
+      display: 'flex', 
+      flexDirection: 'column',
+      backgroundColor: darkMode ? '#121212' : '#ffffff',
+      color: darkMode ? '#ffffff' : '#000000',
+      overflow: 'hidden',
+      boxSizing: 'border-box'
+    }}>
       {/* Header */}
-      <Paper sx={{ p: 2, borderRadius: 0 }}>
+      <Paper sx={{ 
+        p: 2, 
+        borderRadius: 0,
+        backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+        color: darkMode ? '#ffffff' : '#000000',
+        flexShrink: 0
+      }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <DesignServices fontSize="large" />
-            <Typography variant="h5">Workflow Designer</Typography>
+            <DesignServices fontSize="large" sx={{ color: darkMode ? '#bb86fc' : 'primary.main' }} />
+            <Typography variant="h5" sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+              Workflow Designer
+            </Typography>
+            
+            {/* Dark Mode Toggle */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={darkMode}
+                  onChange={(e) => setDarkMode(e.target.checked)}
+                  icon={<LightMode />}
+                  checkedIcon={<DarkMode />}
+                  sx={{
+                    '& .MuiSwitch-thumb': {
+                      backgroundColor: darkMode ? '#bb86fc' : '#1976d2',
+                    },
+                    '& .MuiSwitch-track': {
+                      backgroundColor: darkMode ? '#6200ea' : '#42a5f5',
+                    }
+                  }}
+                />
+              }
+              label={darkMode ? 'Dark' : 'Light'}
+              sx={{
+                '& .MuiFormControlLabel-label': {
+                  color: darkMode ? '#ffffff' : 'inherit',
+                  fontSize: '0.875rem'
+                }
+              }}
+            />
             
             <FormControl sx={{ minWidth: 300 }}>
-              <InputLabel>Select Workflow</InputLabel>
+              <InputLabel 
+                sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+              >
+                Select Workflow
+              </InputLabel>
               <Select
                 value={selectedWorkflowId}
                 onChange={(e) => setSelectedWorkflowId(e.target.value)}
                 label="Select Workflow"
                 size="small"
+                sx={{
+                  color: darkMode ? '#ffffff' : 'inherit',
+                  backgroundColor: darkMode ? '#2d2d2d' : 'transparent',
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: darkMode ? '#555' : 'rgba(0, 0, 0, 0.23)',
+                  },
+                  '& .MuiSvgIcon-root': {
+                    color: darkMode ? '#ffffff' : 'inherit',
+                  }
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      backgroundColor: darkMode ? '#2d2d2d' : '#ffffff',
+                      color: darkMode ? '#ffffff' : '#000000',
+                      '& .MuiMenuItem-root': {
+                        color: darkMode ? '#ffffff' : '#000000',
+                        '&:hover': {
+                          backgroundColor: darkMode ? '#404040' : 'rgba(0, 0, 0, 0.04)',
+                        }
+                      }
+                    }
+                  }
+                }}
               >
                 <MenuItem value="">
                   <em>Choose a workflow to design</em>
@@ -739,7 +894,13 @@ const DesignPage: React.FC = () => {
       </Paper>
 
       {/* Main Canvas Area */}
-      <Box sx={{ flex: 1, display: 'flex' }}>
+      <Box sx={{ 
+        flex: '1 1 0px', // More explicit flex value
+        display: 'flex', 
+        overflow: 'hidden',
+        minHeight: 0,
+        maxHeight: 'calc(100vh - 184px)' // Account for layout header + design header
+      }}>
         {/* Canvas */}
         <Box
           ref={canvasRef}
@@ -747,10 +908,10 @@ const DesignPage: React.FC = () => {
             flex: 1,
             position: 'relative',
             overflow: 'hidden',
-            backgroundColor: '#f5f5f5',
-            backgroundImage: `
-              radial-gradient(circle, #ccc 1px, transparent 1px)
-            `,
+            backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
+            backgroundImage: darkMode 
+              ? 'radial-gradient(circle, #333 1px, transparent 1px)'
+              : 'radial-gradient(circle, #ccc 1px, transparent 1px)',
             backgroundSize: `${20 * zoom}px ${20 * zoom}px`,
             backgroundPosition: `${panOffset.x}px ${panOffset.y}px`,
           }}
@@ -833,18 +994,36 @@ const DesignPage: React.FC = () => {
             sx={{
               width: 320,
               borderLeft: 1,
-              borderColor: 'grey.300',
+              borderColor: darkMode ? '#444' : 'grey.300',
+              backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+              color: darkMode ? '#ffffff' : '#000000',
               borderRadius: 0,
+              height: '100%', // Ensure it fits within parent
+              overflow: 'auto', // Allow internal scrolling if needed
+              flexShrink: 0 // Don't let it shrink
             }}
           >
-            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'grey.300' }}>
-              <Typography variant="h6">Properties</Typography>
+            <Box sx={{ p: 2, borderBottom: 1, borderColor: darkMode ? '#444' : 'grey.300' }}>
+              <Typography 
+                variant="h6"
+                sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+              >
+                Properties
+              </Typography>
             </Box>
             <Box sx={{ p: 2 }}>
-              <Typography variant="subtitle2" gutterBottom>
+              <Typography 
+                variant="subtitle2" 
+                gutterBottom
+                sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+              >
                 {selectedNode.data.label}
               </Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
+              <Typography 
+                variant="body2" 
+                color={darkMode ? '#b0b0b0' : 'text.secondary'} 
+                gutterBottom
+              >
                 Type: {selectedNode.type}
               </Typography>
               
@@ -960,8 +1139,14 @@ const DesignPage: React.FC = () => {
         onClose={() => setConfigDialogOpen(false)}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000'
+          }
+        }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
           Configure Prompt: {selectedNode?.data.label}
         </DialogTitle>
         <DialogContent>
@@ -1030,6 +1215,91 @@ const DesignPage: React.FC = () => {
               {executingNodes.has(selectedNode.id) ? 'Executing...' : 'Run Prompt'}
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Prompt Preview/Edit Modal */}
+      <Dialog
+        open={promptPreviewOpen}
+        onClose={() => setPromptPreviewOpen(false)}
+        fullWidth
+        maxWidth="lg"
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+          📝 Execution Prompt Preview & Edit
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2, color: darkMode ? '#b0b0b0' : '#666666' }}>
+            Preview and edit the execution prompt before running. You can modify the prompt below:
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            rows={12}
+            value={editablePrompt}
+            onChange={(e) => setEditablePrompt(e.target.value)}
+            placeholder="Execution prompt will appear here..."
+            variant="outlined"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: darkMode ? '#2a2a2a' : '#f5f5f5',
+                '& fieldset': {
+                  borderColor: darkMode ? '#555555' : '#cccccc',
+                },
+                '&:hover fieldset': {
+                  borderColor: darkMode ? '#777777' : '#999999',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: darkMode ? '#90caf9' : '#1976d2',
+                },
+              },
+              '& .MuiOutlinedInput-input': {
+                color: darkMode ? '#ffffff' : '#000000',
+                fontFamily: 'monospace',
+                fontSize: '14px',
+              },
+            }}
+          />
+          {executionContext && (
+            <Typography variant="caption" sx={{ mt: 1, display: 'block', color: darkMode ? '#90caf9' : '#1976d2' }}>
+              Execution Type: {executionContext.type === 'sequence' ? 'Single Sequence' :
+                              executionContext.type === 'prompt' ? 'Single Prompt' :
+                              executionContext.type === 'fromSequence' ? 'From Sequence Onward' :
+                              'Full Workflow'}
+              {executionContext.sequenceNumber && ` (Sequence ${executionContext.sequenceNumber})`}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setPromptPreviewOpen(false)}
+            sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setEditablePrompt(previewPrompt);
+            }}
+            sx={{ color: darkMode ? '#90caf9' : '#1976d2' }}
+          >
+            Reset to Original
+          </Button>
+          <Button
+            onClick={executeWithCustomPrompt}
+            variant="contained"
+            startIcon={<PlayCircleOutline />}
+            color="primary"
+            disabled={!editablePrompt.trim()}
+          >
+            🚀 Execute
+          </Button>
         </DialogActions>
       </Dialog>
 
