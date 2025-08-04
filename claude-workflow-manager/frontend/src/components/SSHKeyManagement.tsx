@@ -32,6 +32,8 @@ import {
   CheckCircle,
   Error,
   Warning,
+  Visibility,
+  VisibilityOff,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sshApi } from '../services/api';
@@ -49,6 +51,7 @@ const SSHKeyManagement: React.FC<SSHKeyManagementProps> = ({ open, onClose }) =>
   const [testResults, setTestResults] = useState<Record<string, SSHConnectionTestResponse>>({});
   const [testRepo, setTestRepo] = useState('git@github.com:your-username/your-repo.git');
   const [createKeyOpen, setCreateKeyOpen] = useState(false);
+  const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
 
   // Fetch SSH keys
   const { data: sshKeys, isLoading, refetch } = useQuery({
@@ -67,6 +70,29 @@ const SSHKeyManagement: React.FC<SSHKeyManagementProps> = ({ open, onClose }) =>
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  const maskPublicKey = (publicKey: string): string => {
+    if (publicKey.length <= 30) return '•'.repeat(publicKey.length);
+    
+    const start = publicKey.substring(0, 15);
+    const end = publicKey.substring(publicKey.length - 15);
+    const middleLength = Math.max(10, publicKey.length - 30);
+    const maskedMiddle = '•'.repeat(middleLength);
+    
+    return `${start}${maskedMiddle}${end}`;
+  };
+
+  const toggleKeyVisibility = (keyName: string) => {
+    setVisibleKeys(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(keyName)) {
+        newSet.delete(keyName);
+      } else {
+        newSet.add(keyName);
+      }
+      return newSet;
+    });
   };
 
   const handleTestConnection = async (keyName: string) => {
@@ -227,6 +253,15 @@ const SSHKeyManagement: React.FC<SSHKeyManagementProps> = ({ open, onClose }) =>
                             <ContentCopy />
                           </IconButton>
                         </Tooltip>
+
+                        <Tooltip title={visibleKeys.has(key.key_name) ? "Hide public key" : "Show public key"}>
+                          <IconButton
+                            size="small"
+                            onClick={() => toggleKeyVisibility(key.key_name)}
+                          >
+                            {visibleKeys.has(key.key_name) ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </Tooltip>
                         
                         <Button
                           size="small"
@@ -273,12 +308,17 @@ const SSHKeyManagement: React.FC<SSHKeyManagementProps> = ({ open, onClose }) =>
                       </Box>
                     )}
 
-                    {/* Public Key Display (Collapsible) */}
+                    {/* Public Key Display */}
                     <Box sx={{ width: '100%', mt: 1 }}>
                       <Divider sx={{ mb: 1 }} />
-                      <Typography variant="caption" color="text.secondary" gutterBottom>
-                        Public Key:
-                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Public Key:
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {visibleKeys.has(key.key_name) ? 'Visible' : 'Hidden for security'}
+                        </Typography>
+                      </Box>
                       <Paper sx={{ 
                         p: 1, 
                         backgroundColor: 'grey.900', 
@@ -287,9 +327,10 @@ const SSHKeyManagement: React.FC<SSHKeyManagementProps> = ({ open, onClose }) =>
                         fontSize: '0.6rem',
                         border: '1px solid',
                         borderColor: 'grey.700',
-                        wordBreak: 'break-all'
+                        wordBreak: 'break-all',
+                        position: 'relative'
                       }}>
-                        {key.public_key}
+                        {visibleKeys.has(key.key_name) ? key.public_key : maskPublicKey(key.public_key)}
                       </Paper>
                     </Box>
                   </ListItem>
