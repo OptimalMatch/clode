@@ -52,6 +52,9 @@ import {
   DarkMode,
   LightMode,
   RateReview,
+  Visibility,
+  Article,
+  CallSplit,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -131,6 +134,14 @@ const DesignPage: React.FC = () => {
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
+
+  // File content modal state
+  const [fileContentModalOpen, setFileContentModalOpen] = useState(false);
+  const [selectedFileContent, setSelectedFileContent] = useState<{
+    filename: string;
+    content: string;
+  } | null>(null);
+  const [markdownView, setMarkdownView] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -658,6 +669,62 @@ const DesignPage: React.FC = () => {
     showPromptPreview('techLeadReview', undefined, undefined, promptId, promptConfig);
   };
 
+  // View file content
+  const handleViewFileContent = (promptConfig: any) => {
+    if (!promptConfig || !promptConfig.content) {
+      setSelectedFileContent({
+        filename: promptConfig?.filename || 'Unknown File',
+        content: 'File content not available.'
+      });
+    } else {
+      setSelectedFileContent({
+        filename: promptConfig.filename,
+        content: promptConfig.content
+      });
+    }
+    setMarkdownView(false); // Reset to raw view when opening
+    setFileContentModalOpen(true);
+  };
+
+  // Extract branch information from prompt content
+  const extractBranchFromContent = (content: string): string | null => {
+    if (!content) return null;
+    
+    // Look for patterns like: **Branch**: `feature/python-services` or **Branch**: feature/python-services
+    const branchMatch = content.match(/\*\*Branch\*\*:\s*`?([^`\n\r]+)`?/i);
+    return branchMatch ? branchMatch[1].trim() : null;
+  };
+
+  // Simple markdown renderer
+  const renderMarkdown = (content: string) => {
+    if (!content) return '';
+    
+    let html = content
+      // Headers
+      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      // Bold
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      // Italic
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      // Code blocks
+      .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+      // Inline code
+      .replace(/`(.*?)`/g, '<code>$1</code>')
+      // Lists
+      .replace(/^\* (.*$)/gim, '<li>$1</li>')
+      .replace(/^- (.*$)/gim, '<li>$1</li>')
+      // Line breaks
+      .replace(/\n/g, '<br/>');
+
+    // Wrap consecutive <li> elements in <ul>
+    html = html.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
+    html = html.replace(/<\/ul><ul>/g, '');
+
+    return html;
+  };
+
   const renderNode = (node: WorkflowNode) => {
     const getNodeColor = () => {
       if (darkMode) {
@@ -835,9 +902,62 @@ const DesignPage: React.FC = () => {
                     </IconButton>
                   </Tooltip>
                 )}
+
+                {/* Fourth button - Only for prompt nodes: View File Content */}
+                {node.type === 'prompt' && (
+                  <Tooltip 
+                    title="View file content"
+                    placement="top"
+                    arrow
+                  >
+                    <IconButton
+                      size="small"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        handleViewFileContent(node.data.config);
+                      }}
+                      sx={{ 
+                        padding: '2px',
+                        color: 'info.main',
+                        '&:hover': {
+                          backgroundColor: 'info.light',
+                          color: 'white',
+                        }
+                      }}
+                    >
+                      <Visibility sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </Box>
             )}
           </Box>
+          
+          {/* Branch Information for Prompt Nodes */}
+          {node.type === 'prompt' && node.data.config?.content && (
+            (() => {
+              const branch = extractBranchFromContent(node.data.config.content);
+              return branch ? (
+                <Box sx={{ mt: 0.5, mb: 0.5 }}>
+                  <Chip
+                    icon={<CallSplit />}
+                    label={branch}
+                    size="small"
+                    variant="outlined"
+                    sx={{
+                      fontSize: '0.6rem',
+                      height: 18,
+                      borderColor: darkMode ? '#666' : '#ccc',
+                      color: darkMode ? '#bb86fc' : '#1976d2',
+                      '& .MuiChip-icon': {
+                        fontSize: '0.7rem'
+                      }
+                    }}
+                  />
+                </Box>
+              ) : null;
+            })()
+          )}
           
           {node.data.description && (
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
@@ -1056,7 +1176,7 @@ const DesignPage: React.FC = () => {
         display: 'flex', 
         overflow: 'hidden',
         minHeight: 0,
-        maxHeight: 'calc(100vh - 184px)' // Account for layout header + design header
+        height: 'calc(100vh - 184px)' // Account for layout header + design header
       }}>
         {/* Canvas */}
         <Box
@@ -1064,7 +1184,7 @@ const DesignPage: React.FC = () => {
           sx={{
             flex: 1,
             position: 'relative',
-            overflow: 'hidden',
+            overflow: 'auto', // Allow scrolling to see all content
             backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
             backgroundImage: darkMode 
               ? 'radial-gradient(circle, #333 1px, transparent 1px)'
@@ -1116,7 +1236,7 @@ const DesignPage: React.FC = () => {
                   top: 0,
                   left: 0,
                   width: '100%',
-                  height: '100%',
+                  height: 'calc(100% + 100px)', // Extend to cover padding area
                   pointerEvents: 'none',
                   zIndex: 1,
                 }}
@@ -1140,7 +1260,12 @@ const DesignPage: React.FC = () => {
               </svg>
 
               {/* Nodes */}
-              <Box sx={{ position: 'relative', zIndex: 2 }}>
+              <Box sx={{ 
+                position: 'relative', 
+                zIndex: 2,
+                minHeight: '100%', // Ensure minimum height
+                paddingBottom: '100px' // Add bottom padding for scrolling space
+              }}>
                 {nodes.map(renderNode)}
               </Box>
             </>
@@ -1234,8 +1359,18 @@ const DesignPage: React.FC = () => {
                     onClick={() => handleExecuteTechLeadReview(selectedNode.id, selectedNode.data.config)}
                     disabled={executingNodes.has(selectedNode.id) || !selectedWorkflowId}
                     color="warning"
+                    sx={{ mb: 1 }}
                   >
                     {executingNodes.has(selectedNode.id) ? 'Executing...' : 'Tech Lead Review'}
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    startIcon={<Visibility />}
+                    onClick={() => handleViewFileContent(selectedNode.data.config)}
+                    color="info"
+                  >
+                    View File Content
                   </Button>
                 </Box>
               )}
@@ -1395,8 +1530,20 @@ const DesignPage: React.FC = () => {
                 startIcon={executingNodes.has(selectedNode.id) ? <CircularProgress size={16} /> : <RateReview />}
                 disabled={executingNodes.has(selectedNode.id)}
                 color="warning"
+                sx={{ mr: 1 }}
               >
                 {executingNodes.has(selectedNode.id) ? 'Executing...' : 'Tech Lead Review'}
+              </Button>
+              <Button
+                onClick={() => {
+                  handleViewFileContent(selectedNode.data.config);
+                  setConfigDialogOpen(false);
+                }}
+                variant="outlined"
+                startIcon={<Visibility />}
+                color="info"
+              >
+                View Content
               </Button>
             </>
           )}
@@ -1485,6 +1632,132 @@ const DesignPage: React.FC = () => {
             disabled={!editablePrompt.trim()}
           >
             🚀 Execute
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* File Content Modal */}
+      <Dialog
+        open={fileContentModalOpen}
+        onClose={() => setFileContentModalOpen(false)}
+        fullWidth
+        maxWidth="md"
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          color: darkMode ? '#ffffff' : 'inherit',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <Typography variant="h6" component="span">
+            📄 {selectedFileContent?.filename}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <IconButton
+              onClick={() => setMarkdownView(false)}
+              size="small"
+              sx={{ 
+                color: !markdownView ? 'primary.main' : (darkMode ? 'grey.400' : 'grey.600'),
+                backgroundColor: !markdownView ? (darkMode ? 'primary.dark' : 'primary.light') : 'transparent'
+              }}
+            >
+              <Code />
+            </IconButton>
+            <IconButton
+              onClick={() => setMarkdownView(true)}
+              size="small"
+              sx={{ 
+                color: markdownView ? 'primary.main' : (darkMode ? 'grey.400' : 'grey.600'),
+                backgroundColor: markdownView ? (darkMode ? 'primary.dark' : 'primary.light') : 'transparent'
+              }}
+            >
+              <Article />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {markdownView ? (
+            <Box
+              sx={{
+                minHeight: '500px',
+                padding: 2,
+                backgroundColor: darkMode ? '#2a2a2a' : '#f8f8f8',
+                border: `1px solid ${darkMode ? '#555555' : '#cccccc'}`,
+                borderRadius: 1,
+                overflow: 'auto',
+                maxHeight: '500px',
+                '& h1': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.5rem', marginBottom: '0.5rem' },
+                '& h2': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.3rem', marginBottom: '0.5rem' },
+                '& h3': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.1rem', marginBottom: '0.5rem' },
+                '& p': { color: darkMode ? '#ffffff' : '#000000', marginBottom: '0.5rem' },
+                '& strong': { fontWeight: 'bold' },
+                '& em': { fontStyle: 'italic' },
+                '& code': { 
+                  backgroundColor: darkMode ? '#1a1a1a' : '#e0e0e0',
+                  color: darkMode ? '#ff6b6b' : '#d32f2f',
+                  padding: '0.2rem 0.4rem',
+                  borderRadius: '3px',
+                  fontFamily: 'monospace'
+                },
+                '& pre': {
+                  backgroundColor: darkMode ? '#1a1a1a' : '#e0e0e0',
+                  padding: '1rem',
+                  borderRadius: '4px',
+                  overflow: 'auto',
+                  '& code': {
+                    backgroundColor: 'transparent',
+                    color: darkMode ? '#ffffff' : '#000000',
+                    padding: 0
+                  }
+                },
+                '& ul': { paddingLeft: '1.5rem', marginBottom: '0.5rem' },
+                '& li': { color: darkMode ? '#ffffff' : '#000000', marginBottom: '0.2rem' }
+              }}
+              dangerouslySetInnerHTML={{ 
+                __html: renderMarkdown(selectedFileContent?.content || '') 
+              }}
+            />
+          ) : (
+            <TextField
+              fullWidth
+              multiline
+              rows={20}
+              value={selectedFileContent?.content || ''}
+              variant="outlined"
+              InputProps={{
+                readOnly: true,
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: darkMode ? '#2a2a2a' : '#f8f8f8',
+                  '& fieldset': {
+                    borderColor: darkMode ? '#555555' : '#cccccc',
+                  },
+                },
+                '& .MuiOutlinedInput-input': {
+                  color: darkMode ? '#ffffff' : '#000000',
+                  fontFamily: 'monospace',
+                  fontSize: '14px',
+                },
+              }}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Typography variant="caption" sx={{ color: darkMode ? '#b0b0b0' : '#666666', mr: 'auto' }}>
+            {markdownView ? '📖 Markdown View' : '📝 Raw Text View'}
+          </Typography>
+          <Button 
+            onClick={() => setFileContentModalOpen(false)}
+            sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+          >
+            Close
           </Button>
         </DialogActions>
       </Dialog>
