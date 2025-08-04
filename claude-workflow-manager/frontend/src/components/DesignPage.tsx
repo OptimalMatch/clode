@@ -28,6 +28,7 @@ import {
   ListItemText,
   ListItemIcon,
   Snackbar,
+  SelectChangeEvent,
 } from '@mui/material';
 import {
   DesignServices,
@@ -50,6 +51,7 @@ import {
   FastForward,
   DarkMode,
   LightMode,
+  RateReview,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -117,18 +119,102 @@ const DesignPage: React.FC = () => {
   const [previewPrompt, setPreviewPrompt] = useState('');
   const [editablePrompt, setEditablePrompt] = useState('');
   const [executionContext, setExecutionContext] = useState<{
-    type: 'sequence' | 'prompt' | 'fromSequence' | 'fullWorkflow';
+    type: 'sequence' | 'prompt' | 'fromSequence' | 'fullWorkflow' | 'techLeadReview';
     sequenceId?: string;
     sequenceNumber?: number;
     promptId?: string;
     promptConfig?: any;
   } | null>(null);
+
+  // Drag and drop state
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggedNode, setDraggedNode] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
+
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Persist dark mode preference
   useEffect(() => {
     localStorage.setItem('designPageDarkMode', JSON.stringify(darkMode));
   }, [darkMode]);
+
+  // Drag and drop event handlers
+  const handleMouseDown = (e: React.MouseEvent, nodeId: string) => {
+    // Don't start drag if clicking on buttons or other interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('[role="button"]') || target.closest('.MuiIconButton-root')) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const node = nodes.find((n: WorkflowNode) => n.id === nodeId);
+    if (!node) return;
+
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Calculate offset from mouse to node position
+    const nodeScreenX = node.position.x * zoom + panOffset.x;
+    const nodeScreenY = node.position.y * zoom + panOffset.y;
+    
+    setDragOffset({
+      x: mouseX - nodeScreenX,
+      y: mouseY - nodeScreenY
+    });
+
+    setDraggedNode(nodeId);
+    setIsDragging(true);
+    setLastMousePos({ x: mouseX, y: mouseY });
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging || !draggedNode || !canvasRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Calculate new node position
+    const newNodeX = (mouseX - dragOffset.x - panOffset.x) / zoom;
+    const newNodeY = (mouseY - dragOffset.y - panOffset.y) / zoom;
+
+    // Update the node position
+    setNodes((prev: WorkflowNode[]) => prev.map((node: WorkflowNode) => 
+      node.id === draggedNode 
+        ? { ...node, position: { x: newNodeX, y: newNodeY } }
+        : node
+    ));
+
+    setLastMousePos({ x: mouseX, y: mouseY });
+  }, [isDragging, draggedNode, dragOffset, panOffset, zoom]);
+
+  const handleMouseUp = useCallback(() => {
+    // Small delay to prevent click events right after dragging
+    setTimeout(() => {
+      setIsDragging(false);
+      setDraggedNode(null);
+      setDragOffset({ x: 0, y: 0 });
+    }, 10);
+  }, []);
+
+  // Global mouse event listeners for drag and drop
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // Check for workflow parameter in URL on component mount
   useEffect(() => {
@@ -242,12 +328,12 @@ const DesignPage: React.FC = () => {
       // Add prompt nodes for this sequence
       sequenceGroup.forEach((prompt, promptIndex) => {
         const promptId = `prompt-${sequence}-${prompt.parallel}`;
-        const xOffset = isParallel ? promptIndex * 220 : 0;
+        const xOffset = isParallel ? promptIndex * 260 : 0;
         
         const promptNode: WorkflowNode = {
           id: promptId,
           type: 'prompt',
-          position: { x: 300 + xOffset, y: yPosition - 60 },
+          position: { x: 330 + xOffset, y: yPosition - 60 },
           data: {
             label: prompt.description || prompt.filename,
             description: `${prompt.filename} (${prompt.parallel})`,
@@ -292,8 +378,8 @@ const DesignPage: React.FC = () => {
     }
   };
 
-  const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.1, 2));
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.1, 0.3));
+  const handleZoomIn = () => setZoom((prev: number) => Math.min(prev + 0.1, 2));
+  const handleZoomOut = () => setZoom((prev: number) => Math.max(prev - 0.1, 0.3));
   const handleResetView = () => {
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
@@ -314,7 +400,7 @@ const DesignPage: React.FC = () => {
 
       // Add completion context if there are completed prompts
       if (completedPrompts.length > 0) {
-        const completedFiles = completedPrompts.map(p => p.filename).join(', ');
+        const completedFiles = completedPrompts.map((p: any) => p.filename).join(', ');
         prompt += `We have finished implementing ${completedFiles}. `;
       }
 
@@ -332,10 +418,10 @@ const DesignPage: React.FC = () => {
 
       // Destructive change protection
       if (completedPrompts.length > 0) {
-        const reviewFiles = completedPrompts.map(p => 
+        const reviewFiles = completedPrompts.map((p: any) => 
           `python/reviews/tech-lead-review-log-${p.filename.replace('.md', '')}.md`
         ).join(', ');
-        const previousPrompts = completedPrompts.map(p => p.filename).join(', ');
+        const previousPrompts = completedPrompts.map((p: any) => p.filename).join(', ');
         
         prompt += `If we are making a destructive change, please check the previous prompt${completedPrompts.length > 1 ? 's' : ''} ${previousPrompts}`;
         if (reviewFiles) {
@@ -406,6 +492,15 @@ const DesignPage: React.FC = () => {
         const firstPrompt = firstSequence[0];
         return generateContextualPrompt([firstPrompt], []);
       }
+      case 'techLeadReview': {
+        // Generate tech lead review prompt
+        if (!promptConfig) return '';
+        
+        const promptFileName = promptConfig.filename;
+        const reviewLogFile = `python/reviews/tech-lead-review-log-${promptFileName.replace('.md', '')}.md`;
+        
+        return `Have tech-lead-reviewer agent review all the changes made for ${promptFileName} and provide feedback on whether the code meets requirements and whether there are any loose ends that need to be documented as tech debt. Write this into ${reviewLogFile}.`;
+      }
       default:
         return '';
     }
@@ -413,7 +508,7 @@ const DesignPage: React.FC = () => {
 
   // Show prompt preview modal
   const showPromptPreview = (
-    type: 'sequence' | 'prompt' | 'fromSequence' | 'fullWorkflow',
+    type: 'sequence' | 'prompt' | 'fromSequence' | 'fullWorkflow' | 'techLeadReview',
     sequenceId?: string,
     sequenceNumber?: number,
     promptId?: string,
@@ -439,7 +534,7 @@ const DesignPage: React.FC = () => {
     setPromptPreviewOpen(false);
     
     const nodeId = executionContext.sequenceId || executionContext.promptId || 'full-workflow';
-    setExecutingNodes(prev => new Set(prev).add(nodeId));
+    setExecutingNodes((prev: Set<string>) => new Set(prev).add(nodeId));
     
     try {
       let result: { instance_id: string };
@@ -474,11 +569,18 @@ const DesignPage: React.FC = () => {
         case 'fullWorkflow':
           result = await instanceApi.spawn(selectedWorkflowId);
           break;
+        case 'techLeadReview':
+          // For tech lead review, we'll spawn with a special prompt identifier
+          result = await instanceApi.spawn(
+            selectedWorkflowId,
+            `tech-lead-review-${executionContext.promptConfig?.filename}`
+          );
+          break;
         default:
           throw new Error('Unknown execution type');
       }
       
-      setExecutionResults(prev => new Map(prev).set(nodeId, {
+      setExecutionResults((prev: Map<string, any>) => new Map(prev).set(nodeId, {
         success: true,
         message: `Execution started`,
         instanceId: result.instance_id,
@@ -496,7 +598,7 @@ const DesignPage: React.FC = () => {
       }, 1000);
       
     } catch (error: any) {
-      setExecutionResults(prev => new Map(prev).set(nodeId, {
+      setExecutionResults((prev: Map<string, any>) => new Map(prev).set(nodeId, {
         success: false,
         message: error.response?.data?.detail || 'Failed to execute',
         timestamp: new Date().toISOString(),
@@ -508,7 +610,7 @@ const DesignPage: React.FC = () => {
         severity: 'error'
       });
     } finally {
-      setExecutingNodes(prev => {
+      setExecutingNodes((prev: Set<string>) => {
         const newSet = new Set(prev);
         newSet.delete(nodeId);
         return newSet;
@@ -546,6 +648,14 @@ const DesignPage: React.FC = () => {
     
     // Show prompt preview instead of directly executing
     showPromptPreview('fullWorkflow', 'full-workflow');
+  };
+
+  // Execute tech lead review for a prompt
+  const handleExecuteTechLeadReview = async (promptId: string, promptConfig: any) => {
+    if (!selectedWorkflowId) return;
+    
+    // Show prompt preview for tech lead review
+    showPromptPreview('techLeadReview', undefined, undefined, promptId, promptConfig);
   };
 
   const renderNode = (node: WorkflowNode) => {
@@ -590,14 +700,17 @@ const DesignPage: React.FC = () => {
           position: 'absolute',
           left: node.position.x * zoom + panOffset.x,
           top: node.position.y * zoom + panOffset.y,
-          width: 200 * zoom,
+          width: (node.type === 'prompt' ? 240 : 200) * zoom,
           minHeight: 80 * zoom,
-          cursor: 'pointer',
+          cursor: isDragging && draggedNode === node.id ? 'grabbing' : 'grab',
           border: selectedNode?.id === node.id ? 2 : 1,
-          borderColor: selectedNode?.id === node.id ? 'primary.main' : 'grey.300',
+          borderColor: selectedNode?.id === node.id ? 'primary.main' : 
+                      (isDragging && draggedNode === node.id ? 'warning.main' : 'grey.300'),
           borderStyle: 'solid',
           backgroundColor: darkMode ? '#2d2d2d' : '#ffffff',
           color: darkMode ? '#ffffff' : '#000000',
+          opacity: isDragging && draggedNode === node.id ? 0.8 : 1,
+          boxShadow: isDragging && draggedNode === node.id ? '0 8px 16px rgba(0,0,0,0.3)' : 'none',
           '& .MuiTypography-root': {
             color: darkMode ? '#ffffff' : '#000000',
           },
@@ -608,7 +721,8 @@ const DesignPage: React.FC = () => {
           transform: `scale(${zoom})`,
           transformOrigin: 'top left',
         }}
-        onClick={() => handleNodeClick(node)}
+        onMouseDown={(e: React.MouseEvent) => handleMouseDown(e, node.id)}
+        onClick={() => !isDragging && handleNodeClick(node)}
       >
         <CardContent sx={{ p: 1, '&:last-child': { pb: 1 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
@@ -630,7 +744,7 @@ const DesignPage: React.FC = () => {
                 >
                   <IconButton
                     size="small"
-                    onClick={(e) => {
+                    onClick={(e: React.MouseEvent) => {
                       e.stopPropagation();
                       if (node.type === 'group') {
                         const sequenceNumber = parseInt(node.data.group_id || '0');
@@ -666,7 +780,7 @@ const DesignPage: React.FC = () => {
                   >
                     <IconButton
                       size="small"
-                      onClick={(e) => {
+                      onClick={(e: React.MouseEvent) => {
                         e.stopPropagation();
                         const sequenceNumber = parseInt(node.data.group_id || '0');
                         handleExecuteFromSequence(node.id, sequenceNumber);
@@ -685,6 +799,38 @@ const DesignPage: React.FC = () => {
                         <CircularProgress size={12} />
                       ) : (
                         <FastForward sx={{ fontSize: 16 }} />
+                      )}
+                    </IconButton>
+                  </Tooltip>
+                )}
+
+                {/* Third button - Only for prompt nodes: Tech Lead Review */}
+                {node.type === 'prompt' && (
+                  <Tooltip 
+                    title="Request tech lead review for this prompt"
+                    placement="top"
+                    arrow
+                  >
+                    <IconButton
+                      size="small"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        handleExecuteTechLeadReview(node.id, node.data.config);
+                      }}
+                      disabled={isExecuting}
+                      sx={{ 
+                        padding: '2px',
+                        color: isExecuting ? 'grey.400' : 'warning.main',
+                        '&:hover': {
+                          backgroundColor: 'warning.light',
+                          color: 'white',
+                        }
+                      }}
+                    >
+                      {isExecuting ? (
+                        <CircularProgress size={12} />
+                      ) : (
+                        <RateReview sx={{ fontSize: 16 }} />
                       )}
                     </IconButton>
                   </Tooltip>
@@ -725,8 +871,8 @@ const DesignPage: React.FC = () => {
   };
 
   const renderConnection = (connection: WorkflowConnection) => {
-    const sourceNode = nodes.find(n => n.id === connection.source);
-    const targetNode = nodes.find(n => n.id === connection.target);
+    const sourceNode = nodes.find((n: WorkflowNode) => n.id === connection.source);
+    const targetNode = nodes.find((n: WorkflowNode) => n.id === connection.target);
     
     if (!sourceNode || !targetNode) return null;
 
@@ -782,7 +928,7 @@ const DesignPage: React.FC = () => {
               control={
                 <Switch
                   checked={darkMode}
-                  onChange={(e) => setDarkMode(e.target.checked)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDarkMode(e.target.checked)}
                   icon={<LightMode />}
                   checkedIcon={<DarkMode />}
                   sx={{
@@ -812,7 +958,7 @@ const DesignPage: React.FC = () => {
               </InputLabel>
               <Select
                 value={selectedWorkflowId}
-                onChange={(e) => setSelectedWorkflowId(e.target.value)}
+                onChange={(e: SelectChangeEvent<string>) => setSelectedWorkflowId(e.target.value)}
                 label="Select Workflow"
                 size="small"
                 sx={{
@@ -914,6 +1060,8 @@ const DesignPage: React.FC = () => {
               : 'radial-gradient(circle, #ccc 1px, transparent 1px)',
             backgroundSize: `${20 * zoom}px ${20 * zoom}px`,
             backgroundPosition: `${panOffset.x}px ${panOffset.y}px`,
+            userSelect: isDragging ? 'none' : 'auto',
+            cursor: isDragging ? 'grabbing' : 'default'
           }}
         >
           {!selectedWorkflowId ? (
@@ -1064,8 +1212,19 @@ const DesignPage: React.FC = () => {
                     onClick={() => handleExecutePrompt(selectedNode.id, selectedNode.data.config)}
                     disabled={executingNodes.has(selectedNode.id) || !selectedWorkflowId}
                     color="success"
+                    sx={{ mb: 1 }}
                   >
                     {executingNodes.has(selectedNode.id) ? 'Executing...' : 'Run This Prompt'}
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    startIcon={executingNodes.has(selectedNode.id) ? <CircularProgress size={16} /> : <RateReview />}
+                    onClick={() => handleExecuteTechLeadReview(selectedNode.id, selectedNode.data.config)}
+                    disabled={executingNodes.has(selectedNode.id) || !selectedWorkflowId}
+                    color="warning"
+                  >
+                    {executingNodes.has(selectedNode.id) ? 'Executing...' : 'Tech Lead Review'}
                   </Button>
                 </Box>
               )}
@@ -1202,18 +1361,33 @@ const DesignPage: React.FC = () => {
             Close
           </Button>
           {selectedNode?.type === 'prompt' && (
-            <Button
-              onClick={() => {
-                handleExecutePrompt(selectedNode.id, selectedNode.data.config);
-                setConfigDialogOpen(false);
-              }}
-              variant="contained"
-              startIcon={executingNodes.has(selectedNode.id) ? <CircularProgress size={16} /> : <PlayCircleOutline />}
-              disabled={executingNodes.has(selectedNode.id)}
-              color="success"
-            >
-              {executingNodes.has(selectedNode.id) ? 'Executing...' : 'Run Prompt'}
-            </Button>
+            <>
+              <Button
+                onClick={() => {
+                  handleExecutePrompt(selectedNode.id, selectedNode.data.config);
+                  setConfigDialogOpen(false);
+                }}
+                variant="contained"
+                startIcon={executingNodes.has(selectedNode.id) ? <CircularProgress size={16} /> : <PlayCircleOutline />}
+                disabled={executingNodes.has(selectedNode.id)}
+                color="success"
+                sx={{ mr: 1 }}
+              >
+                {executingNodes.has(selectedNode.id) ? 'Executing...' : 'Run Prompt'}
+              </Button>
+              <Button
+                onClick={() => {
+                  handleExecuteTechLeadReview(selectedNode.id, selectedNode.data.config);
+                  setConfigDialogOpen(false);
+                }}
+                variant="outlined"
+                startIcon={executingNodes.has(selectedNode.id) ? <CircularProgress size={16} /> : <RateReview />}
+                disabled={executingNodes.has(selectedNode.id)}
+                color="warning"
+              >
+                {executingNodes.has(selectedNode.id) ? 'Executing...' : 'Tech Lead Review'}
+              </Button>
+            </>
           )}
         </DialogActions>
       </Dialog>
@@ -1243,7 +1417,7 @@ const DesignPage: React.FC = () => {
             multiline
             rows={12}
             value={editablePrompt}
-            onChange={(e) => setEditablePrompt(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditablePrompt(e.target.value)}
             placeholder="Execution prompt will appear here..."
             variant="outlined"
             sx={{
@@ -1271,6 +1445,7 @@ const DesignPage: React.FC = () => {
               Execution Type: {executionContext.type === 'sequence' ? 'Single Sequence' :
                               executionContext.type === 'prompt' ? 'Single Prompt' :
                               executionContext.type === 'fromSequence' ? 'From Sequence Onward' :
+                              executionContext.type === 'techLeadReview' ? 'Tech Lead Review' :
                               'Full Workflow'}
               {executionContext.sequenceNumber && ` (Sequence ${executionContext.sequenceNumber})`}
             </Typography>
@@ -1307,11 +1482,11 @@ const DesignPage: React.FC = () => {
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
-        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        onClose={() => setSnackbar((prev: any) => ({ ...prev, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
         <Alert 
-          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} 
+          onClose={() => setSnackbar((prev: any) => ({ ...prev, open: false }))} 
           severity={snackbar.severity}
           variant="filled"
         >
