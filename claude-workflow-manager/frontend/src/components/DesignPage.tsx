@@ -876,20 +876,31 @@ const DesignPage: React.FC = () => {
     
     if (!sourceNode || !targetNode) return null;
 
-    const sourceX = (sourceNode.position.x + 100) * zoom + panOffset.x;
-    const sourceY = (sourceNode.position.y + 40) * zoom + panOffset.y;
-    const targetX = (targetNode.position.x + 100) * zoom + panOffset.x;
-    const targetY = targetNode.position.y * zoom + panOffset.y;
+    // Calculate source and target positions
+    const sourceWidth = sourceNode.type === 'prompt' ? 240 : 200;
+    const targetWidth = targetNode.type === 'prompt' ? 240 : 200;
+    const nodeHeight = 80; // Approximate node height
+    
+    const sourceX = (sourceNode.position.x + sourceWidth) * zoom + panOffset.x; // Right edge of source
+    const sourceY = (sourceNode.position.y + nodeHeight / 2) * zoom + panOffset.y; // Middle right of source
+    const targetX = (targetNode.position.x + targetWidth / 2) * zoom + panOffset.x; // Center top of target
+    const targetY = targetNode.position.y * zoom + panOffset.y; // Top edge of target
+
+    // Create simple L-shaped path with one right angle
+    // Path: horizontal → vertical (down into target)
+    const pathData = `
+      M ${sourceX},${sourceY}
+      L ${targetX},${sourceY}
+      L ${targetX},${targetY}
+    `;
 
     return (
-      <line
+      <path
         key={connection.id}
-        x1={sourceX}
-        y1={sourceY}
-        x2={targetX}
-        y2={targetY}
-        stroke="#666"
+        d={pathData}
+        stroke={darkMode ? "#888" : "#666"}
         strokeWidth={2}
+        fill="none"
         markerEnd="url(#arrowhead)"
       />
     );
@@ -1113,15 +1124,15 @@ const DesignPage: React.FC = () => {
                 <defs>
                   <marker
                     id="arrowhead"
-                    markerWidth="10"
-                    markerHeight="7"
-                    refX="9"
-                    refY="3.5"
+                    markerWidth="6"
+                    markerHeight="4"
+                    refX="5"
+                    refY="2"
                     orient="auto"
                   >
                     <polygon
-                      points="0 0, 10 3.5, 0 7"
-                      fill="#666"
+                      points="0 0, 6 2, 0 4"
+                      fill={darkMode ? "#888" : "#666"}
                     />
                   </marker>
                 </defs>
