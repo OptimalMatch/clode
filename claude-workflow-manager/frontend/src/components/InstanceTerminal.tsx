@@ -326,6 +326,23 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     }
   };
 
+  const loadLastTodos = async () => {
+    try {
+      console.log('📋 Loading last todos for instance:', instanceId);
+      const response = await instanceApi.getLastTodos(instanceId);
+      const todos = response.todos || [];
+      
+      if (todos.length > 0) {
+        console.log(`📋 Found ${todos.length} existing todos:`, todos);
+        setCurrentTodos(todos);
+      } else {
+        console.log('📋 No existing todos found');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load last todos:', error);
+    }
+  };
+
   const loadTerminalHistory = async () => {
     try {
       console.log('📜 Loading terminal history for instance:', instanceId);
@@ -474,6 +491,9 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             
             // Load and display terminal history
             loadTerminalHistory();
+            
+            // Load last todos if they exist
+            loadLastTodos();
           }
           
           // Send a ping to test the connection

@@ -471,3 +471,102 @@ class Database:
         except Exception as e:
             print(f"Error deleting subagent {subagent_id}: {e}")
             return False
+
+    async def get_last_todos(self, instance_id: str) -> List[Dict]:
+        """Get the last TodoWrite tool output for an instance"""
+        try:
+            print(f"🔍 Searching for todos for instance: {instance_id}")
+            
+            # Look for tool_use logs with TodoWrite tool
+            pipeline = [
+                {"$match": {
+                    "instance_id": instance_id,
+                    "type": "tool_use",
+                    "metadata.tool_name": "TodoWrite"
+                }},
+                {"$sort": {"timestamp": -1}},
+                {"$limit": 1}
+            ]
+            
+            print(f"🔍 Using pipeline: {pipeline}")
+            
+            cursor = self.db.logs.aggregate(pipeline)
+            logs = await cursor.to_list(length=1)
+            
+            print(f"🔍 Found {len(logs)} matching logs")
+            
+            if not logs:
+                # Let's also check what logs exist for this instance
+                total_logs = await self.db.logs.count_documents({"instance_id": instance_id})
+                print(f"🔍 Total logs for instance {instance_id}: {total_logs}")
+                
+                # Check for tool_use logs specifically
+                tool_use_logs = await self.db.logs.count_documents({
+                    "instance_id": instance_id, 
+                    "type": "tool_use"
+                })
+                print(f"🔍 Tool use logs for instance {instance_id}: {tool_use_logs}")
+                
+                return []
+            
+            # Extract todos from the tool metadata
+            log = logs[0]
+            metadata = log.get("metadata", {})
+            tool_input = metadata.get("tool_input", {})
+            todos = tool_input.get("todos", [])
+            
+            print(f"🔍 Found {len(todos)} todos in tool metadata")
+            
+            # Convert to the format expected by frontend
+            formatted_todos = []
+            for todo in todos:
+                if isinstance(todo, dict):
+                    formatted_todo = {
+                        "id": todo.get("id", "unknown"),
+                        "content": todo.get("content", ""),
+                        "status": todo.get("status", "pending")
+                    }
+                    if "priority" in todo:
+                        formatted_todo["priority"] = todo["priority"]
+                    formatted_todos.append(formatted_todo)
+            
+            print(f"🔍 Returning {len(formatted_todos)} formatted todos")
+            return formatted_todos
+            
+        except Exception as e:
+            print(f"Error retrieving last todos for instance {instance_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def _parse_todos_from_content(self, content: str) -> List[Dict]:
+        """Parse todos from TodoWrite tool output content"""
+        import re
+        
+        # Strip ANSI escape codes
+        clean_content = re.sub(r'\x1b\[[0-9;]*m', '', content)
+        
+        # Look for TODO messages like: "📋 **Managing TODOs:** 2 items\n  • Task 1 (pending) [medium]\n  • Task 2 (completed)"
+        todo_match = re.search(r'📋 \*\*Managing TODOs:\*\* (\d+) items?\n((?:\s*• .+\n?)*)', clean_content)
+        
+        if not todo_match:
+            return []
+        
+        todo_lines = todo_match.group(2).strip().split('\n')
+        todos = []
+        
+        for index, line in enumerate(todo_lines):
+            # Parse line like: "  • Create placeholder files 171.txt to 190.txt in python folder (pending) [medium]"
+            match = re.match(r'^\s*• (.+?) \(([^)]+)\)(?:\s*\[([^\]]+)\])?', line)
+            if match:
+                content_text, status, priority = match.groups()
+                todo = {
+                    "id": f"todo-{index}",
+                    "content": content_text.strip(),
+                    "status": status.strip(),
+                }
+                if priority:
+                    todo["priority"] = priority.strip()
+                todos.append(todo)
+        
+        return todos

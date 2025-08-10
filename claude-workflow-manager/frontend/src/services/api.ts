@@ -100,6 +100,11 @@ export const instanceApi = {
     const response = await api.delete(`/api/instances/${instanceId}/terminal-history`);
     return response.data;
   },
+
+  getLastTodos: async (instanceId: string) => {
+    const response = await api.get(`/api/instances/${instanceId}/last-todos`);
+    return response.data;
+  },
 };
 
 export const subagentApi = {

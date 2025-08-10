@@ -668,6 +668,15 @@ async def clear_terminal_history(instance_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/instances/{instance_id}/last-todos")
+async def get_last_todos(instance_id: str):
+    """Get the last TodoWrite entries for an instance"""
+    try:
+        todos = await db.get_last_todos(instance_id)
+        return {"todos": todos}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.websocket("/ws/{instance_id}")
 async def websocket_endpoint(websocket: WebSocket, instance_id: str):
     print(f"🔌 WebSocket connection attempt for instance: {instance_id}")
