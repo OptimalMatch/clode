@@ -119,6 +119,8 @@ class LogAnalytics(BaseModel):
     instance_id: str
     total_interactions: int
     total_tokens: int
+    token_breakdown: Optional[TokenUsage] = None  # Detailed token breakdown
+    total_cost_usd: Optional[float] = None        # Total cost in USD
     total_execution_time_ms: int
     error_count: int
     subagents_used: List[str]

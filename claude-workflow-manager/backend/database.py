@@ -335,7 +335,13 @@ class Database:
                 "error_count": {"$sum": {"$cond": [{"$eq": ["$type", "error"]}, 1, 0]}},
                 "subagents": {"$addToSet": "$subagent_name"},
                 "min_timestamp": {"$min": "$timestamp"},
-                "max_timestamp": {"$max": "$timestamp"}
+                "max_timestamp": {"$max": "$timestamp"},
+                # Sum detailed token breakdown fields
+                "total_input_tokens": {"$sum": "$token_usage.input_tokens"},
+                "total_output_tokens": {"$sum": "$token_usage.output_tokens"},
+                "total_cache_creation_tokens": {"$sum": "$token_usage.cache_creation_input_tokens"},
+                "total_cache_read_tokens": {"$sum": "$token_usage.cache_read_input_tokens"},
+                "total_cost_usd": {"$sum": "$total_cost_usd"}
             }}
         ]
         
@@ -346,6 +352,8 @@ class Database:
                 instance_id=instance_id,
                 total_interactions=0,
                 total_tokens=0,
+                token_breakdown=None,
+                total_cost_usd=None,
                 total_execution_time_ms=0,
                 error_count=0,
                 subagents_used=[],
@@ -370,10 +378,31 @@ class Database:
         total_interactions = data["total_interactions"]
         error_count = data["error_count"]
         
+        # Create token breakdown if we have detailed token data
+        token_breakdown = None
+        total_input = data.get("total_input_tokens", 0) or 0
+        total_output = data.get("total_output_tokens", 0) or 0
+        total_cache_create = data.get("total_cache_creation_tokens", 0) or 0
+        total_cache_read = data.get("total_cache_read_tokens", 0) or 0
+        
+        if total_input > 0 or total_output > 0 or total_cache_create > 0 or total_cache_read > 0:
+            from models import TokenUsage  # Import here to avoid circular dependency
+            token_breakdown = TokenUsage(
+                input_tokens=total_input,
+                output_tokens=total_output,
+                cache_creation_input_tokens=total_cache_create,
+                cache_read_input_tokens=total_cache_read,
+                total_tokens=total_input + total_output + total_cache_create + total_cache_read
+            )
+        
+        total_cost = data.get("total_cost_usd", 0.0) or 0.0
+        
         return LogAnalytics(
             instance_id=instance_id,
             total_interactions=total_interactions,
             total_tokens=data["total_tokens"] or 0,
+            token_breakdown=token_breakdown,
+            total_cost_usd=total_cost if total_cost > 0 else None,
             total_execution_time_ms=data["total_execution_time"] or 0,
             error_count=error_count,
             subagents_used=[s for s in data["subagents"] if s],

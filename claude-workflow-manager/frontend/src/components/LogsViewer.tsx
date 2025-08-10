@@ -34,10 +34,13 @@ import {
   Speed,
   Error as ErrorIcon,
   SmartToy,
+  AttachMoney,
+  Schedule,
+  TrendingUp,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { logsApi } from '../services/api';
-import { InstanceLog, LogType, LogAnalytics } from '../types';
+import { InstanceLog, LogType, LogAnalytics, TokenUsage } from '../types';
 
 interface LogsViewerProps {
   instanceId: string;
@@ -89,6 +92,22 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ instanceId, open, onClose }) =>
     if (!ms) return '-';
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(2)}s`;
+  };
+
+  const formatCost = (usd?: number) => {
+    if (!usd) return '-';
+    return `$${usd.toFixed(4)}`;
+  };
+
+  const formatTokenBreakdown = (tokenUsage?: TokenUsage) => {
+    if (!tokenUsage) return null;
+    return {
+      input: tokenUsage.input_tokens,
+      output: tokenUsage.output_tokens,
+      cacheCreate: tokenUsage.cache_creation_input_tokens,
+      cacheRead: tokenUsage.cache_read_input_tokens,
+      total: tokenUsage.total_tokens
+    };
   };
 
   return (
@@ -153,6 +172,34 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ instanceId, open, onClose }) =>
                       <Typography variant="subtitle2">Total Tokens</Typography>
                     </Box>
                     <Typography variant="h4">{analytics.total_tokens.toLocaleString()}</Typography>
+                    {analytics.token_breakdown && (
+                      <Box sx={{ mt: 1 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          Input: {analytics.token_breakdown.input_tokens.toLocaleString()}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          Output: {analytics.token_breakdown.output_tokens.toLocaleString()}
+                        </Typography>
+                        {analytics.token_breakdown.cache_creation_input_tokens > 0 && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            Cache Create: {analytics.token_breakdown.cache_creation_input_tokens.toLocaleString()}
+                          </Typography>
+                        )}
+                        {analytics.token_breakdown.cache_read_input_tokens > 0 && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            Cache Read: {analytics.token_breakdown.cache_read_input_tokens.toLocaleString()}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                    {analytics.total_cost_usd && (
+                      <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+                        <AttachMoney sx={{ fontSize: 14, color: 'success.main', mr: 0.5 }} />
+                        <Typography variant="caption" color="success.main" fontWeight="bold">
+                          {formatCost(analytics.total_cost_usd)}
+                        </Typography>
+                      </Box>
+                    )}
                   </CardContent>
                 </Card>
               </Grid>
@@ -161,11 +208,17 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ instanceId, open, onClose }) =>
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                       <Speed sx={{ mr: 1, color: 'success.main' }} />
-                      <Typography variant="subtitle2">Avg Response Time</Typography>
+                      <Typography variant="subtitle2">Response Time</Typography>
                     </Box>
                     <Typography variant="h4">
                       {formatDuration(analytics.average_response_time_ms)}
                     </Typography>
+                    <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+                      <Schedule sx={{ fontSize: 14, color: 'info.main', mr: 0.5 }} />
+                      <Typography variant="caption" color="info.main" fontWeight="bold">
+                        Total: {formatDuration(analytics.total_execution_time_ms)}
+                      </Typography>
+                    </Box>
                   </CardContent>
                 </Card>
               </Grid>
@@ -283,11 +336,25 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ instanceId, open, onClose }) =>
                       )}
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      {log.tokens_used && (
-                        <Tooltip title="Tokens used">
+                      {(log.tokens_used || log.token_usage) && (
+                        <Tooltip 
+                          title={
+                            log.token_usage ? 
+                              `Total: ${log.token_usage.total_tokens} | Input: ${log.token_usage.input_tokens} | Output: ${log.token_usage.output_tokens}${log.token_usage.cache_creation_input_tokens > 0 ? ` | Cache Create: ${log.token_usage.cache_creation_input_tokens}` : ''}${log.token_usage.cache_read_input_tokens > 0 ? ` | Cache Read: ${log.token_usage.cache_read_input_tokens}` : ''}` :
+                              "Tokens used"
+                          }
+                        >
                           <Typography variant="caption" color="text.secondary">
                             <Token sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.5 }} />
-                            {log.tokens_used}
+                            {log.token_usage ? log.token_usage.total_tokens : log.tokens_used}
+                          </Typography>
+                        </Tooltip>
+                      )}
+                      {log.total_cost_usd && (
+                        <Tooltip title="Cost in USD">
+                          <Typography variant="caption" color="success.main" fontWeight="bold">
+                            <AttachMoney sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.5 }} />
+                            {formatCost(log.total_cost_usd)}
                           </Typography>
                         </Tooltip>
                       )}

@@ -94,6 +94,14 @@ export type LogType =
   | 'tool_use'
   | 'completion';
 
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  total_tokens: number;
+}
+
 export interface InstanceLog {
   id?: string;
   instance_id: string;
@@ -103,7 +111,9 @@ export interface InstanceLog {
   type: LogType;
   content: string;
   metadata: Record<string, any>;
-  tokens_used?: number;
+  tokens_used?: number;  // Keep for backward compatibility
+  token_usage?: TokenUsage;  // Detailed breakdown
+  total_cost_usd?: number;
   execution_time_ms?: number;
   subagent_name?: string;
   step_id?: string;
@@ -113,6 +123,8 @@ export interface LogAnalytics {
   instance_id: string;
   total_interactions: number;
   total_tokens: number;
+  token_breakdown?: TokenUsage;  // Detailed token breakdown
+  total_cost_usd?: number;       // Total cost in USD
   total_execution_time_ms: number;
   error_count: number;
   subagents_used: string[];
