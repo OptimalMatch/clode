@@ -156,6 +156,7 @@ class ClaudeCodeManager:
             
             # Log completion event to database
             instance_info = self.instances.get(instance_id, {})
+            active_subagent = instance_info.get("active_subagent")
             await self._log_event(
                 instance_id=instance_id,
                 workflow_id=instance_info.get("workflow_id", ""),
@@ -165,7 +166,8 @@ class ClaudeCodeManager:
                 tokens_used=tokens_used,
                 token_usage=token_usage,
                 total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
-                execution_time_ms=execution_time
+                execution_time_ms=execution_time,
+                subagent_name=active_subagent
             )
             
             # Send completion message with detailed metrics
@@ -275,6 +277,30 @@ class ClaudeCodeManager:
                 capture_output=True,
                 env=env
             )
+            
+            # Auto-discover agents from the repository before proceeding
+            try:
+                self._log_with_timestamp(f"🔍 Auto-discovering agents from repository...")
+                from agent_discovery import AgentDiscovery
+                agent_discovery = AgentDiscovery(self.db)
+                discovery_result = await agent_discovery.discover_and_sync_agents(
+                    instance.git_repo, 
+                    instance.workflow_id
+                )
+                
+                if discovery_result["success"]:
+                    agent_count = discovery_result.get("discovered_count", 0)
+                    if agent_count > 0:
+                        self._log_with_timestamp(f"✅ Discovered and synced {agent_count} agents from repository")
+                        agent_names = [agent["name"] for agent in discovery_result.get("agents", [])]
+                        self._log_with_timestamp(f"📋 Available agents: {', '.join(agent_names)}")
+                    else:
+                        self._log_with_timestamp(f"ℹ️ No agents found in .claude/agents/ directory")
+                else:
+                    self._log_with_timestamp(f"⚠️ Agent discovery failed: {discovery_result.get('error', 'Unknown error')}")
+            except Exception as e:
+                self._log_with_timestamp(f"⚠️ Agent discovery error (non-fatal): {e}")
+                # Don't fail instance creation if agent discovery fails
             
             # Check if instance already has a session ID in database
             existing_session_id = await self.db.get_instance_session_id(instance.id)
@@ -769,6 +795,7 @@ class ClaudeCodeManager:
                 
                 # Log completion event to database
                 instance_info = self.instances.get(instance_id, {})
+                active_subagent = instance_info.get("active_subagent")
                 await self._log_event(
                     instance_id=instance_id,
                     workflow_id=instance_info.get("workflow_id", ""),
@@ -778,7 +805,8 @@ class ClaudeCodeManager:
                     tokens_used=tokens_used,
                     token_usage=token_usage,
                     total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
-                    execution_time_ms=execution_time
+                    execution_time_ms=execution_time,
+                    subagent_name=active_subagent
                 )
                 
                 # Send completion message with detailed metrics
@@ -1164,13 +1192,20 @@ class ClaudeCodeManager:
                             # Log text output
                             text = block.get('text', '').strip()
                             if text:
+                                # Detect subagent usage from the response
+                                detected_subagent = self._extract_subagent_from_content(text)
+                                
                                 await self._log_event(
                                     instance_id=instance_id,
                                     workflow_id=instance_info.get("workflow_id", ""),
                                     prompt_id=instance_info.get("prompt_id"),
                                     log_type=LogType.OUTPUT,
                                     content=text,
-                                    metadata={"event_type": "assistant_text"}
+                                    subagent_name=detected_subagent,
+                                    metadata={
+                                        "event_type": "assistant_text",
+                                        "subagent_detected": bool(detected_subagent)
+                                    }
                                 )
                         elif block.get('type') == 'tool_use':
                             # Log tool usage
@@ -1484,6 +1519,48 @@ Please leverage the above subagent capabilities and follow their system instruct
         
         return enhanced_content, detected_names
     
+    def _extract_subagent_from_content(self, content: str) -> str:
+        """Extract subagent name from content that mentions specific agents"""
+        import re
+        
+        # Look for patterns like "tech-lead-reviewer agent" or "Have <agent-name> agent"
+        patterns = [
+            r'Have\s+([a-zA-Z0-9_-]+)\s+agent',
+            r'([a-zA-Z0-9_-]+)\s+agent\s+review',
+            r'([a-zA-Z0-9_-]+)\s+agent\s+analyze',
+            r'([a-zA-Z0-9_-]+)\s+agent\s+perform',
+            r'using\s+([a-zA-Z0-9_-]+)\s+agent',
+            r'invoke\s+([a-zA-Z0-9_-]+)\s+agent',
+            r'@([a-zA-Z0-9_-]+)',  # @agent-name format
+            r'As\s+([a-zA-Z0-9_-]+)\s+agent',
+            r'([a-zA-Z0-9_-]+)\s+agent\s+will',
+            r'([a-zA-Z0-9_-]+)\s+agent\s+is',
+            r'([a-zA-Z0-9_-]+)\s+agent\s+has',
+            r'([a-zA-Z0-9_-]+)\s+agent\s+can',
+            r'I.*([a-zA-Z0-9_-]+)\s+agent',  # "I am the tech-lead-reviewer agent"
+            r'the\s+([a-zA-Z0-9_-]+)\s+agent',  # "the tech-lead-reviewer agent"
+        ]
+        
+        content_lower = content.lower()
+        for pattern in patterns:
+            match = re.search(pattern, content_lower, re.IGNORECASE)
+            if match:
+                agent_name = match.group(1).replace('-', '_')
+                # Convert common agent names to standard format
+                if 'tech' in agent_name and ('lead' in agent_name or 'reviewer' in agent_name):
+                    return 'tech_lead_reviewer'
+                elif 'code' in agent_name and 'review' in agent_name:
+                    return 'code_reviewer'
+                elif 'test' in agent_name:
+                    return 'test_generator'
+                elif 'doc' in agent_name:
+                    return 'documentation_specialist'
+                elif 'security' in agent_name:
+                    return 'security_auditor'
+                return agent_name
+        
+        return None
+
     async def _log_event(self, instance_id: str, log_type: LogType, content: str, 
                         workflow_id: str = None, prompt_id: str = None,
                         tokens_used: int = None, execution_time_ms: int = None,
@@ -1492,6 +1569,17 @@ Please leverage the above subagent capabilities and follow their system instruct
         """
         Log an event with comprehensive details
         """
+        # Auto-detect subagent from content if not explicitly provided
+        if not subagent_name and log_type == LogType.INPUT:
+            detected_subagent = self._extract_subagent_from_content(content)
+            if detected_subagent:
+                subagent_name = detected_subagent
+                self._log_with_timestamp(f"🤖 Detected subagent usage: {subagent_name}")
+                
+                # Store the active subagent for this instance
+                if instance_id in self.instances:
+                    self.instances[instance_id]["active_subagent"] = subagent_name
+        
         log = InstanceLog(
             instance_id=instance_id,
             workflow_id=workflow_id or "",
