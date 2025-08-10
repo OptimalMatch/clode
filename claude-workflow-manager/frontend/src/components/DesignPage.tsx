@@ -550,8 +550,7 @@ const DesignPage: React.FC = () => {
     try {
       let result: { instance_id: string };
       
-      // For now, we'll still use the original API calls but could extend this
-      // to support custom prompts in the future
+      // First spawn the instance
       switch (executionContext.type) {
         case 'sequence':
           result = await instanceApi.spawn(
@@ -581,32 +580,43 @@ const DesignPage: React.FC = () => {
           result = await instanceApi.spawn(selectedWorkflowId);
           break;
         case 'techLeadReview':
-          // For tech lead review, we'll spawn with a special prompt identifier
-          result = await instanceApi.spawn(
-            selectedWorkflowId,
-            `tech-lead-review-${executionContext.promptConfig?.filename}`
-          );
+          // For tech lead review, spawn a basic instance
+          result = await instanceApi.spawn(selectedWorkflowId);
           break;
         default:
           throw new Error('Unknown execution type');
       }
       
+      // Then execute the custom/edited prompt if we have one
+      if (editablePrompt && editablePrompt.trim()) {
+        // Wait a moment for the instance to be fully initialized
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Send the prompt (don't wait for completion - it might be long-running)
+        instanceApi.execute(result.instance_id, editablePrompt).catch(error => {
+          console.error('Error executing prompt:', error);
+          setSnackbar({
+            open: true,
+            message: `⚠️ Prompt sent but execution may have failed: ${error.message}`,
+            severity: 'error'
+          });
+        });
+      }
+      
       setExecutionResults((prev: Map<string, any>) => new Map(prev).set(nodeId, {
         success: true,
-        message: `Execution started`,
+        message: `Prompt sent to instance successfully`,
         instanceId: result.instance_id,
         timestamp: new Date().toISOString(),
       }));
 
       setSnackbar({
         open: true,
-        message: `🚀 Execution started! Opening instances page...`,
+        message: `🚀 Prompt sent to Claude instance! Opening terminal...`,
         severity: 'success'
       });
       
-      setTimeout(() => {
-        window.open(`/instances/${selectedWorkflowId}`, '_blank');
-      }, 1000);
+      // Navigate to instances page with the specific instance to auto-open terminal
+      navigate(`/instances/${selectedWorkflowId}?instance=${result.instance_id}`);
       
     } catch (error: any) {
       setExecutionResults((prev: Map<string, any>) => new Map(prev).set(nodeId, {

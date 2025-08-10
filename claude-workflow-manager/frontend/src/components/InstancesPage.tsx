@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -18,7 +18,7 @@ import {
   InputLabel,
 } from '@mui/material';
 import { Add, PlayArrow, Pause, Stop, Assessment, Delete } from '@mui/icons-material';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { instanceApi, promptApi, workflowApi } from '../services/api';
 import { ClaudeInstance, Prompt } from '../types';
@@ -27,6 +27,7 @@ import LogsViewer from './LogsViewer';
 
 const InstancesPage: React.FC = () => {
   const { workflowId } = useParams<{ workflowId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selectedPromptId, setSelectedPromptId] = useState('');
@@ -72,6 +73,21 @@ const InstancesPage: React.FC = () => {
       setInstanceToDelete(null);
     },
   });
+
+  // Auto-open terminal if instanceId is provided in URL
+  useEffect(() => {
+    const instanceId = searchParams.get('instance');
+    if (instanceId && instances.length > 0) {
+      // Check if the instance exists in the current workflow
+      const instanceExists = instances.some((inst: ClaudeInstance) => inst.id === instanceId);
+      if (instanceExists) {
+        setSelectedInstance(instanceId);
+        // Remove the parameter from URL to clean it up
+        searchParams.delete('instance');
+        setSearchParams(searchParams);
+      }
+    }
+  }, [instances, searchParams, setSearchParams]);
 
   const handleSpawn = () => {
     if (workflowId) {

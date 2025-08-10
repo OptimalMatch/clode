@@ -139,7 +139,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </Box>
             
             <Typography variant="h6" noWrap component="div">
-              Clode
+              CLode
             </Typography>
           </Box>
         </Toolbar>

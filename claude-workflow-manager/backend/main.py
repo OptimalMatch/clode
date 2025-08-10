@@ -1,5 +1,6 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
 import os
@@ -410,6 +411,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler to ensure CORS headers are always present"""
+    print(f"❌ Unhandled exception: {type(exc).__name__}: {str(exc)}")
+    
+    # Create response with CORS headers
+    response = JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {str(exc)}"}
+    )
+    
+    # Manually add CORS headers to ensure they're present
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    
+    return response
+
 @app.get(
     "/",
     response_model=ApiResponse,
@@ -553,28 +573,50 @@ async def spawn_instance(request: SpawnInstanceRequest):
     - Single sequence: start_sequence=X, end_sequence=X
     - From sequence onward: start_sequence=X, end_sequence=None
     """
-    workflow_id = request.workflow_id
-    prompt_id = request.prompt_id
-    git_repo = request.git_repo
-    start_sequence = request.start_sequence
-    end_sequence = request.end_sequence
-    
-    instance_id = str(uuid.uuid4())
-    instance = ClaudeInstance(
-        id=instance_id,
-        workflow_id=workflow_id,
-        prompt_id=prompt_id,
-        git_repo=git_repo,
-        status=InstanceStatus.INITIALIZING,
-        created_at=datetime.utcnow(),
-        start_sequence=start_sequence,
-        end_sequence=end_sequence
-    )
-    
-    await db.create_instance(instance)
-    await claude_manager.spawn_instance(instance)
-    
-    return {"instance_id": instance_id}
+    try:
+        workflow_id = request.workflow_id
+        prompt_id = request.prompt_id
+        git_repo = request.git_repo
+        start_sequence = request.start_sequence
+        end_sequence = request.end_sequence
+        
+        # Validate that the workflow exists
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+        
+        # Use workflow's git_repo if not provided in request
+        if not git_repo:
+            git_repo = workflow.get('git_repo') if isinstance(workflow, dict) else workflow.git_repo
+            
+        # Ensure we have a valid git_repo
+        if not git_repo:
+            raise HTTPException(status_code=400, detail="No git repository specified in request or workflow")
+            
+        instance_id = str(uuid.uuid4())
+        instance = ClaudeInstance(
+            id=instance_id,
+            workflow_id=workflow_id,
+            prompt_id=prompt_id,
+            git_repo=git_repo,
+            status=InstanceStatus.INITIALIZING,
+            created_at=datetime.utcnow(),
+            start_sequence=start_sequence,
+            end_sequence=end_sequence
+        )
+        
+        await db.create_instance(instance)
+        await claude_manager.spawn_instance(instance)
+        
+        return {"instance_id": instance_id}
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        print(f"❌ Error spawning instance: {str(e)}")
+        print(f"❌ Request data: workflow_id={request.workflow_id}, prompt_id={request.prompt_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to spawn instance: {str(e)}")
 
 @app.get(
     "/api/instances/{workflow_id}",

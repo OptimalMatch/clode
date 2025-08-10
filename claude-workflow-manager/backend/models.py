@@ -70,7 +70,7 @@ class ClaudeInstance(BaseModel):
     id: str
     workflow_id: str
     prompt_id: Optional[str] = None
-    git_repo: str
+    git_repo: Optional[str] = None
     status: InstanceStatus
     container_id: Optional[str] = None
     output: List[Dict[str, Any]] = []
