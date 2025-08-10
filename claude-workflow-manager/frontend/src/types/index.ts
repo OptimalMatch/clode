@@ -64,6 +64,12 @@ export interface ClaudeInstance {
   created_at: string;
   completed_at?: string;
   error?: string;
+  // Aggregated metrics
+  total_tokens?: number;
+  total_cost_usd?: number;
+  total_execution_time_ms?: number;
+  log_count?: number;
+  token_breakdown?: TokenUsage;
 }
 
 export interface WebSocketMessage {

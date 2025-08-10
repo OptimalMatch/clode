@@ -66,6 +66,14 @@ class Workflow(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+class TokenUsage(BaseModel):
+    """Detailed token usage breakdown for Claude API billing"""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    total_tokens: int = 0
+
 class ClaudeInstance(BaseModel):
     id: str
     workflow_id: str
@@ -80,6 +88,12 @@ class ClaudeInstance(BaseModel):
     session_id: Optional[str] = None
     start_sequence: Optional[int] = None  # Which sequence to start from
     end_sequence: Optional[int] = None    # Which sequence to end at
+    # Aggregated metrics
+    total_tokens: Optional[int] = None
+    total_cost_usd: Optional[float] = None
+    total_execution_time_ms: Optional[int] = None
+    log_count: Optional[int] = None
+    token_breakdown: Optional[TokenUsage] = None
 
 class LogType(str, Enum):
     INPUT = "input"
@@ -90,14 +104,6 @@ class LogType(str, Enum):
     SUBAGENT = "subagent"
     TOOL_USE = "tool_use"
     COMPLETION = "completion"
-
-class TokenUsage(BaseModel):
-    """Detailed token usage breakdown for Claude API billing"""
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_creation_input_tokens: int = 0
-    cache_read_input_tokens: int = 0
-    total_tokens: int = 0
 
 class InstanceLog(BaseModel):
     id: Optional[str] = None

@@ -50,6 +50,8 @@ const InstancesPage: React.FC = () => {
     refetchInterval: 2000,
   });
 
+
+
   const { data: prompts = [] } = useQuery({
     queryKey: ['prompts'],
     queryFn: promptApi.getAll,
@@ -195,6 +197,41 @@ const InstancesPage: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">
                   Created: {new Date(instance.created_at).toLocaleString()}
                 </Typography>
+                
+                {/* Token and Cost Information */}
+                <Box sx={{ mt: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+
+                  
+                  {instance.total_tokens !== undefined && instance.total_tokens > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2" color="primary" fontWeight="bold">
+                        🔢 {instance.total_tokens.toLocaleString()} tokens
+                      </Typography>
+                    </Box>
+                  )}
+                  {instance.total_cost_usd !== undefined && instance.total_cost_usd > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2" color="success.main" fontWeight="bold">
+                        💰 ${instance.total_cost_usd.toFixed(4)}
+                      </Typography>
+                    </Box>
+                  )}
+                  {instance.total_execution_time_ms !== undefined && instance.total_execution_time_ms > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2" color="info.main">
+                        ⏱️ {(instance.total_execution_time_ms / 1000).toFixed(1)}s
+                      </Typography>
+                    </Box>
+                  )}
+                  {instance.log_count !== undefined && instance.log_count > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        📝 {instance.log_count} logs
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+                
                 {instance.error && (
                   <Typography variant="body2" color="error" sx={{ mt: 1 }}>
                     Error: {instance.error}
