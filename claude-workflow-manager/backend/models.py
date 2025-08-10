@@ -57,6 +57,14 @@ class Prompt(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+class TokenUsage(BaseModel):
+    """Detailed token usage breakdown for Claude API billing"""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    total_tokens: int = 0
+
 class Workflow(BaseModel):
     id: Optional[str] = None
     name: str
@@ -65,14 +73,13 @@ class Workflow(BaseModel):
     prompts: List[str] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-
-class TokenUsage(BaseModel):
-    """Detailed token usage breakdown for Claude API billing"""
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_creation_input_tokens: int = 0
-    cache_read_input_tokens: int = 0
-    total_tokens: int = 0
+    # Aggregated metrics across all instances
+    total_tokens: Optional[int] = None
+    total_cost_usd: Optional[float] = None
+    total_execution_time_ms: Optional[int] = None
+    log_count: Optional[int] = None
+    instance_count: Optional[int] = None
+    token_breakdown: Optional[TokenUsage] = None
 
 class ClaudeInstance(BaseModel):
     id: str

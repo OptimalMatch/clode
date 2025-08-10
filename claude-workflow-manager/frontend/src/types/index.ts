@@ -6,6 +6,13 @@ export interface Workflow {
   prompts: string[];
   created_at?: string;
   updated_at?: string;
+  // Aggregated metrics across all instances
+  total_tokens?: number;
+  total_cost_usd?: number;
+  total_execution_time_ms?: number;
+  log_count?: number;
+  instance_count?: number;
+  token_breakdown?: TokenUsage;
 }
 
 export type SubagentCapability = 

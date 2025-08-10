@@ -227,6 +227,38 @@ const WorkflowsPage: React.FC = () => {
                 <Typography variant="caption" display="block" sx={{ mt: 1 }}>
                   Branch: {workflow.branch}
                 </Typography>
+                
+                {/* Workflow Metrics */}
+                <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  {workflow.total_tokens !== undefined && workflow.total_tokens > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2" color="primary" fontWeight="bold">
+                        🔢 {workflow.total_tokens.toLocaleString()} tokens
+                      </Typography>
+                    </Box>
+                  )}
+                  {workflow.total_cost_usd !== undefined && workflow.total_cost_usd > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2" color="success.main" fontWeight="bold">
+                        💰 ${workflow.total_cost_usd.toFixed(4)}
+                      </Typography>
+                    </Box>
+                  )}
+                  {workflow.total_execution_time_ms !== undefined && workflow.total_execution_time_ms > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2" color="info.main">
+                        ⏱️ {(workflow.total_execution_time_ms / 1000).toFixed(1)}s
+                      </Typography>
+                    </Box>
+                  )}
+                  {workflow.instance_count !== undefined && workflow.instance_count > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        🚀 {workflow.instance_count} instances
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
               </CardContent>
               <CardActions>
                 <Button

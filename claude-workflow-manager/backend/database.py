@@ -77,6 +77,13 @@ class Database:
         async for workflow in cursor:
             workflow["id"] = str(workflow["_id"])
             del workflow["_id"]
+            
+            # Add aggregated metrics for each workflow
+            workflow_id = workflow.get("id")
+            if workflow_id:
+                metrics = await self._get_workflow_metrics(workflow_id)
+                workflow.update(metrics)
+            
             workflows.append(workflow)
         return workflows
     
@@ -270,6 +277,85 @@ class Database:
                 "total_cost_usd": 0,
                 "total_execution_time_ms": 0,
                 "log_count": 0
+            }
+    
+    async def _get_workflow_metrics(self, workflow_id: str) -> Dict:
+        """Get aggregated metrics (tokens, cost) for all instances in a workflow"""
+        try:
+            print(f"🔍 Getting workflow metrics for: {workflow_id}")
+            
+            # Aggregate all logs for all instances in this workflow
+            pipeline = [
+                {"$match": {"workflow_id": workflow_id}},
+                {"$group": {
+                    "_id": None,
+                    "total_tokens": {"$sum": "$tokens_used"},
+                    "total_input_tokens": {"$sum": "$token_usage.input_tokens"},
+                    "total_output_tokens": {"$sum": "$token_usage.output_tokens"},
+                    "total_cache_creation_tokens": {"$sum": "$token_usage.cache_creation_input_tokens"},
+                    "total_cache_read_tokens": {"$sum": "$token_usage.cache_read_input_tokens"},
+                    "total_cost_usd": {"$sum": "$total_cost_usd"},
+                    "total_execution_time_ms": {"$sum": "$execution_time_ms"},
+                    "log_count": {"$sum": 1},
+                    "unique_instances": {"$addToSet": "$instance_id"}
+                }}
+            ]
+            
+            cursor = self.db.logs.aggregate(pipeline)
+            result = await cursor.to_list(length=1)
+            
+            print(f"🔍 Workflow aggregation result for {workflow_id}: {result}")
+            
+            if not result:
+                return {
+                    "total_tokens": 0,
+                    "total_cost_usd": 0,
+                    "total_execution_time_ms": 0,
+                    "log_count": 0,
+                    "instance_count": 0
+                }
+            
+            data = result[0]
+            
+            # Calculate detailed token breakdown if available
+            total_input = data.get("total_input_tokens", 0) or 0
+            total_output = data.get("total_output_tokens", 0) or 0
+            total_cache_create = data.get("total_cache_creation_tokens", 0) or 0
+            total_cache_read = data.get("total_cache_read_tokens", 0) or 0
+            
+            # Use detailed breakdown if available, otherwise fall back to total_tokens
+            calculated_total = total_input + total_output + total_cache_create + total_cache_read
+            final_total_tokens = calculated_total if calculated_total > 0 else (data.get("total_tokens", 0) or 0)
+            
+            # Count unique instances
+            unique_instances = data.get("unique_instances", [])
+            instance_count = len(unique_instances) if unique_instances else 0
+            
+            metrics = {
+                "total_tokens": final_total_tokens,
+                "total_cost_usd": round(data.get("total_cost_usd", 0) or 0, 4),
+                "total_execution_time_ms": data.get("total_execution_time_ms", 0) or 0,
+                "log_count": data.get("log_count", 0) or 0,
+                "instance_count": instance_count,
+                "token_breakdown": {
+                    "input_tokens": total_input,
+                    "output_tokens": total_output,
+                    "cache_creation_input_tokens": total_cache_create,
+                    "cache_read_input_tokens": total_cache_read
+                } if calculated_total > 0 else None
+            }
+            
+            print(f"🔍 Returning workflow metrics for {workflow_id}: {metrics}")
+            return metrics
+            
+        except Exception as e:
+            print(f"Error getting workflow metrics for {workflow_id}: {e}")
+            return {
+                "total_tokens": 0,
+                "total_cost_usd": 0,
+                "total_execution_time_ms": 0,
+                "log_count": 0,
+                "instance_count": 0
             }
     
     async def update_instance_status(self, instance_id: str, status: InstanceStatus, error: str = None):
