@@ -66,6 +66,42 @@ docker compose up -d
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
 
+### Accessing from Other Machines
+
+To access the application from other machines on your network:
+
+#### Using IP Address
+1. Set the `HOST_IP` environment variable to your machine's IP address:
+```bash
+export HOST_IP=192.168.1.100  # Replace with your machine's IP
+docker compose up -d
+```
+
+2. Access the application using your machine's IP:
+- Frontend: http://192.168.1.100:3000
+- Backend API: http://192.168.1.100:8000
+
+#### Using Internal Domain Name
+If your machine has an internal domain name (e.g., `myserver.local`, `workstation.internal`):
+
+1. Set the `HOST_IP` environment variable to your domain name:
+```bash
+export HOST_IP=myserver.local  # Replace with your domain name
+docker compose up -d
+```
+
+2. Access the application using your domain name:
+- Frontend: http://myserver.local:3000
+- Backend API: http://myserver.local:8000
+
+**Examples of internal domain names:**
+- `claude-dev.local`
+- `workstation.company.com`
+- `myserver.internal`
+- `dev-machine.home`
+
+**Note**: Make sure your firewall allows connections on ports 3000 and 8000, and that DNS resolution is working for your domain name.
+
 ## Usage
 
 ### Creating a Workflow
@@ -147,6 +183,15 @@ cd frontend
 npm install
 npm start
 ```
+
+**For external access in development mode:**
+```bash
+cd frontend
+npm install
+DANGEROUSLY_DISABLE_HOST_CHECK=true npm start
+```
+
+**Note**: The `DANGEROUSLY_DISABLE_HOST_CHECK=true` flag is already configured in package.json for convenience but is only needed for external access.
 
 ## Environment Variables
 
