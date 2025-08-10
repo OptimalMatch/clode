@@ -20,6 +20,7 @@ import 'xterm/css/xterm.css';
 import { WebSocketMessage, TerminalHistoryEntry } from '../types';
 import { instanceApi } from '../services/api';
 import ReactMarkdown from 'react-markdown';
+import RunnerSprite from './RunnerSprite';
 
 interface InstanceTerminalProps {
   instanceId: string;
@@ -60,10 +61,18 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*m/g, '');
     const cleanContent = stripAnsi(content);
     
+    // Debug logging - check for various todo-related content
+    if (cleanContent.includes('📋') || cleanContent.includes('Managing TODOs') || 
+        cleanContent.includes('TodoWrite') || cleanContent.includes('todo') ||
+        cleanContent.includes('Tool result received') && cleanContent.includes('modified')) {
+      console.log('🔍 Todo-related content detected:', cleanContent);
+    }
+    
     // Look for TODO messages like: "📋 **Managing TODOs:** 2 items\n  • Task 1 (pending) [medium]\n  • Task 2 (completed)"
     const todoMatch = cleanContent.match(/📋 \*\*Managing TODOs:\*\* (\d+) items?\n((?:\s*• .+\n?)*)/);
     
     if (todoMatch) {
+      console.log('✅ Todo regex matched:', todoMatch);
       const todoLines = todoMatch[2].trim().split('\n');
       const todos = todoLines.map((line, index) => {
         // Parse line like: "  • Create placeholder files 171.txt to 190.txt in python folder (pending) [medium]"
@@ -82,6 +91,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       }).filter(Boolean);
       
       if (todos.length > 0) {
+        console.log('📋 Setting todos:', todos);
         setCurrentTodos(todos as Array<{id: string, content: string, status: string, priority?: string}>);
       }
     }
@@ -1014,7 +1024,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                 const getStatusIcon = (status: string) => {
                   switch (status) {
                     case 'pending': return '⏳';
-                    case 'in_progress': return '🔄';
+                    case 'in_progress': return <RunnerSprite size={16} color="blue" />;
                     case 'completed': return '✅';
                     case 'cancelled': return '❌';
                     default: return '❓';
@@ -1037,28 +1047,36 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography 
-                        component="span" 
-                        sx={{ fontSize: '1rem' }}
-                      >
-                        {getStatusIcon(todo.status)}
-                      </Typography>
-                      <Typography 
-                        component="span" 
-                        sx={{ 
-                          fontSize: '0.8rem',
-                          color: getStatusColor(todo.status),
-                          fontWeight: 'bold',
-                          textTransform: 'uppercase',
-                          px: 0.8,
-                          py: 0.2,
-                          backgroundColor: `${getStatusColor(todo.status)}20`,
-                          borderRadius: 0.8,
-                          lineHeight: 1
-                        }}
-                      >
-                        {todo.status}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', fontSize: '1rem' }}>
+                        {typeof getStatusIcon(todo.status) === 'string' ? (
+                          <Typography component="span" sx={{ fontSize: '1rem' }}>
+                            {getStatusIcon(todo.status)}
+                          </Typography>
+                        ) : (
+                          getStatusIcon(todo.status)
+                        )}
+                      </Box>
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 0.5,
+                        fontSize: '0.8rem',
+                        color: getStatusColor(todo.status),
+                        fontWeight: 'bold',
+                        textTransform: 'uppercase',
+                        px: 0.8,
+                        py: 0.2,
+                        backgroundColor: `${getStatusColor(todo.status)}20`,
+                        borderRadius: 0.8,
+                        lineHeight: 1
+                      }}>
+                        {todo.status === 'in_progress' && (
+                          <RunnerSprite size={12} color="orange" />
+                        )}
+                        <Typography component="span" sx={{ fontSize: 'inherit' }}>
+                          {todo.status}
+                        </Typography>
+                      </Box>
                       {todo.priority && (
                         <Typography 
                           component="span" 

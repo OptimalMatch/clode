@@ -91,6 +91,14 @@ class LogType(str, Enum):
     TOOL_USE = "tool_use"
     COMPLETION = "completion"
 
+class TokenUsage(BaseModel):
+    """Detailed token usage breakdown for Claude API billing"""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    total_tokens: int = 0
+
 class InstanceLog(BaseModel):
     id: Optional[str] = None
     instance_id: str
@@ -100,7 +108,9 @@ class InstanceLog(BaseModel):
     type: LogType
     content: str
     metadata: Dict[str, Any] = {}
-    tokens_used: Optional[int] = None
+    tokens_used: Optional[int] = None  # Keep for backward compatibility
+    token_usage: Optional[TokenUsage] = None  # Detailed breakdown
+    total_cost_usd: Optional[float] = None
     execution_time_ms: Optional[int] = None
     subagent_name: Optional[str] = None
     step_id: Optional[str] = None

@@ -50,6 +50,12 @@ class ClaudeCodeManager:
             
             # Read output line by line in real-time
             stdout_lines = []
+            # Track detailed token metrics across all events
+            total_input_tokens = 0
+            total_output_tokens = 0
+            total_cache_creation_tokens = 0
+            total_cache_read_tokens = 0
+            total_cost_usd = 0.0
             
             while True:
                 # Check if process is still running
@@ -72,6 +78,33 @@ class ClaudeCodeManager:
                         # Process this line immediately
                         try:
                             event = json.loads(line)
+                            
+                            # Extract detailed token usage and cost from result events
+                            if event.get('type') == 'result':
+                                usage = event.get('usage', {})
+                                cost = event.get('total_cost_usd', 0.0)
+                                
+                                if usage:
+                                    # Track individual token categories
+                                    input_tokens = usage.get('input_tokens', 0)
+                                    output_tokens = usage.get('output_tokens', 0)
+                                    cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
+                                    cache_read_tokens = usage.get('cache_read_input_tokens', 0)
+                                    
+                                    # Accumulate totals
+                                    total_input_tokens += input_tokens
+                                    total_output_tokens += output_tokens
+                                    total_cache_creation_tokens += cache_creation_tokens
+                                    total_cache_read_tokens += cache_read_tokens
+                                    if cost > 0:
+                                        total_cost_usd += cost
+                                    
+                                    result_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
+                                    if result_tokens > 0:
+                                        total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
+                                        self._log_with_timestamp(f"🔢 Result tokens: {result_tokens} (in:{input_tokens}, out:{output_tokens}, cache_create:{cache_creation_tokens}, cache_read:{cache_read_tokens})")
+                                        self._log_with_timestamp(f"💰 Session totals: {total_tokens} tokens, ${total_cost_usd:.4f} USD")
+                            
                             formatted_msg = self._format_streaming_event(event)
                             if formatted_msg:
                                 await self._send_websocket_update(instance_id, {
@@ -105,18 +138,21 @@ class ClaudeCodeManager:
             if stderr_output:
                 self._log_with_timestamp(f"⚠️ Stderr: {stderr_output}")
             
-            # Extract token usage from the last result event if available
-            tokens_used = None
-            if stdout_lines:
-                # Check the last line for result event with token usage
-                try:
-                    last_line = stdout_lines[-1]
-                    if isinstance(last_line, str):
-                        result_event = json.loads(last_line)
-                        if result_event.get('type') == 'result':
-                            tokens_used = result_event.get('token_usage', {}).get('total_tokens', None)
-                except:
-                    pass  # Ignore parsing errors
+            # Calculate total tokens and prepare detailed usage
+            total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
+            tokens_used = total_tokens if total_tokens > 0 else None
+            
+            # Create detailed token usage object
+            token_usage = None
+            if total_tokens > 0:
+                from models import TokenUsage
+                token_usage = TokenUsage(
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    cache_creation_input_tokens=total_cache_creation_tokens,
+                    cache_read_input_tokens=total_cache_read_tokens,
+                    total_tokens=total_tokens
+                )
             
             # Log completion event to database
             instance_info = self.instances.get(instance_id, {})
@@ -127,15 +163,34 @@ class ClaudeCodeManager:
                 log_type=LogType.COMPLETION,
                 content=f"Claude CLI execution completed with exit code: {return_code}",
                 tokens_used=tokens_used,
+                token_usage=token_usage,
+                total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
                 execution_time_ms=execution_time
             )
             
-            # Send completion message
-            await self._send_websocket_update(instance_id, {
+            # Send completion message with detailed metrics
+            completion_data = {
                 "type": "completion",
                 "execution_time_ms": execution_time,
                 "tokens_used": tokens_used
-            })
+            }
+            
+            # Add detailed token breakdown if available
+            if token_usage:
+                completion_data.update({
+                    "token_usage": {
+                        "input_tokens": token_usage.input_tokens,
+                        "output_tokens": token_usage.output_tokens,
+                        "cache_creation_input_tokens": token_usage.cache_creation_input_tokens,
+                        "cache_read_input_tokens": token_usage.cache_read_input_tokens,
+                        "total_tokens": token_usage.total_tokens
+                    }
+                })
+            
+            if total_cost_usd > 0:
+                completion_data["total_cost_usd"] = total_cost_usd
+                
+            await self._send_websocket_update(instance_id, completion_data)
             
             return return_code == 0
             
@@ -611,6 +666,12 @@ class ClaudeCodeManager:
         self._log_with_timestamp(f"🔍 Starting to monitor ongoing process for instance {instance_id}")
         
         stdout_lines = []  # Collect lines to extract token usage later
+        # Track detailed token metrics across all events
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_cache_creation_tokens = 0
+        total_cache_read_tokens = 0
+        total_cost_usd = 0.0
         
         try:
             # Read any remaining output from the running process
@@ -628,6 +689,33 @@ class ClaudeCodeManager:
                             # Process this line and send to WebSocket
                             try:
                                 event = json.loads(line)
+                                
+                                # Extract detailed token usage and cost from result events
+                                if event.get('type') == 'result':
+                                    usage = event.get('usage', {})
+                                    cost = event.get('total_cost_usd', 0.0)
+                                    
+                                    if usage:
+                                        # Track individual token categories
+                                        input_tokens = usage.get('input_tokens', 0)
+                                        output_tokens = usage.get('output_tokens', 0)
+                                        cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
+                                        cache_read_tokens = usage.get('cache_read_input_tokens', 0)
+                                        
+                                        # Accumulate totals
+                                        total_input_tokens += input_tokens
+                                        total_output_tokens += output_tokens
+                                        total_cache_creation_tokens += cache_creation_tokens
+                                        total_cache_read_tokens += cache_read_tokens
+                                        if cost > 0:
+                                            total_cost_usd += cost
+                                        
+                                        result_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
+                                        if result_tokens > 0:
+                                            total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
+                                            self._log_with_timestamp(f"🔢 Monitored result tokens: {result_tokens} (in:{input_tokens}, out:{output_tokens}, cache_create:{cache_creation_tokens}, cache_read:{cache_read_tokens})")
+                                            self._log_with_timestamp(f"💰 Monitored session totals: {total_tokens} tokens, ${total_cost_usd:.4f} USD")
+                                
                                 formatted_msg = self._format_streaming_event(event)
                                 if formatted_msg:
                                     # Send as partial_output and log to history
@@ -659,18 +747,21 @@ class ClaudeCodeManager:
                 
                 self._log_with_timestamp(f"✅ Monitored Claude CLI process completed with exit code: {return_code}")
                 
-                # Extract token usage from the last result event if available
-                tokens_used = None
-                if stdout_lines:
-                    # Check the last line for result event with token usage
-                    try:
-                        last_line = stdout_lines[-1]
-                        if isinstance(last_line, str):
-                            result_event = json.loads(last_line)
-                            if result_event.get('type') == 'result':
-                                tokens_used = result_event.get('token_usage', {}).get('total_tokens', None)
-                    except:
-                        pass  # Ignore parsing errors
+                # Calculate total tokens and prepare detailed usage
+                total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
+                tokens_used = total_tokens if total_tokens > 0 else None
+                
+                # Create detailed token usage object
+                token_usage = None
+                if total_tokens > 0:
+                    from models import TokenUsage
+                    token_usage = TokenUsage(
+                        input_tokens=total_input_tokens,
+                        output_tokens=total_output_tokens,
+                        cache_creation_input_tokens=total_cache_creation_tokens,
+                        cache_read_input_tokens=total_cache_read_tokens,
+                        total_tokens=total_tokens
+                    )
                 
                 # Clean up
                 if instance_id in self.running_processes:
@@ -685,15 +776,34 @@ class ClaudeCodeManager:
                     log_type=LogType.COMPLETION,
                     content=f"Monitored Claude CLI process completed with exit code: {return_code}",
                     tokens_used=tokens_used,
+                    token_usage=token_usage,
+                    total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
                     execution_time_ms=execution_time
                 )
                 
-                # Send completion message
-                await self._send_websocket_update(instance_id, {
+                # Send completion message with detailed metrics
+                completion_data = {
                     "type": "completion",
                     "execution_time_ms": execution_time,
                     "tokens_used": tokens_used
-                })
+                }
+                
+                # Add detailed token breakdown if available
+                if token_usage:
+                    completion_data.update({
+                        "token_usage": {
+                            "input_tokens": token_usage.input_tokens,
+                            "output_tokens": token_usage.output_tokens,
+                            "cache_creation_input_tokens": token_usage.cache_creation_input_tokens,
+                            "cache_read_input_tokens": token_usage.cache_read_input_tokens,
+                            "total_tokens": token_usage.total_tokens
+                        }
+                    })
+                
+                if total_cost_usd > 0:
+                    completion_data["total_cost_usd"] = total_cost_usd
+                    
+                await self._send_websocket_update(instance_id, completion_data)
                 
         except Exception as e:
             self._log_with_timestamp(f"❌ Error monitoring ongoing process for instance {instance_id}: {str(e)}")
@@ -998,11 +1108,27 @@ class ClaudeCodeManager:
             # Final result/completion
             subtype = event.get('subtype', '')
             duration_ms = event.get('duration_ms', 0)
-            tokens_used = event.get('token_usage', {}).get('total_tokens', 0)
+            # Extract detailed token usage and cost
+            usage = event.get('usage', {})
+            cost = event.get('total_cost_usd', 0.0)
+            
+            if usage:
+                input_tokens = usage.get('input_tokens', 0)
+                output_tokens = usage.get('output_tokens', 0)
+                cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
+                cache_read_tokens = usage.get('cache_read_input_tokens', 0)
+                total_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
+            else:
+                total_tokens = 0
             
             if subtype == 'success':
                 duration_sec = duration_ms / 1000 if duration_ms else 0
-                return f"✅ **Task completed** ({duration_sec:.1f}s, {tokens_used} tokens)"
+                if total_tokens > 0 and cost > 0:
+                    return f"✅ **Task completed** ({duration_sec:.1f}s, {total_tokens} tokens, ${cost:.4f})"
+                elif total_tokens > 0:
+                    return f"✅ **Task completed** ({duration_sec:.1f}s, {total_tokens} tokens)"
+                else:
+                    return f"✅ **Task completed** ({duration_sec:.1f}s)"
             else:
                 return f"✅ **Task completed**"
             
@@ -1362,7 +1488,7 @@ Please leverage the above subagent capabilities and follow their system instruct
                         workflow_id: str = None, prompt_id: str = None,
                         tokens_used: int = None, execution_time_ms: int = None,
                         subagent_name: str = None, step_id: str = None,
-                        metadata: Dict = None) -> str:
+                        metadata: Dict = None, token_usage=None, total_cost_usd: float = None) -> str:
         """
         Log an event with comprehensive details
         """
@@ -1375,6 +1501,8 @@ Please leverage the above subagent capabilities and follow their system instruct
             content=content,
             metadata=metadata or {},
             tokens_used=tokens_used,
+            token_usage=token_usage,
+            total_cost_usd=total_cost_usd,
             execution_time_ms=execution_time_ms,
             subagent_name=subagent_name,
             step_id=step_id
