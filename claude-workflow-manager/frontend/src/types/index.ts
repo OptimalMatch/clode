@@ -71,6 +71,8 @@ export interface ClaudeInstance {
   created_at: string;
   completed_at?: string;
   error?: string;
+  archived?: boolean;
+  archived_at?: string;
   // Aggregated metrics
   total_tokens?: number;
   total_cost_usd?: number;

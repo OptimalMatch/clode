@@ -95,6 +95,8 @@ class ClaudeInstance(BaseModel):
     session_id: Optional[str] = None
     start_sequence: Optional[int] = None  # Which sequence to start from
     end_sequence: Optional[int] = None    # Which sequence to end at
+    archived: bool = False  # For soft delete functionality
+    archived_at: Optional[datetime] = None
     # Aggregated metrics
     total_tokens: Optional[int] = None
     total_cost_usd: Optional[float] = None

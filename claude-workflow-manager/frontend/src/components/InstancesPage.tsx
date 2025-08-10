@@ -16,8 +16,10 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
-import { Add, PlayArrow, Pause, Stop, Assessment, Delete } from '@mui/icons-material';
+import { Add, PlayArrow, Pause, Stop, Assessment, Delete, Archive, Unarchive } from '@mui/icons-material';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { instanceApi, promptApi, workflowApi } from '../services/api';
@@ -34,8 +36,9 @@ const InstancesPage: React.FC = () => {
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null);
   const [logsViewerOpen, setLogsViewerOpen] = useState(false);
   const [logsInstanceId, setLogsInstanceId] = useState<string | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [instanceToDelete, setInstanceToDelete] = useState<string | null>(null);
+  const [includeArchived, setIncludeArchived] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [instanceToArchive, setInstanceToArchive] = useState<{id: string, archived: boolean} | null>(null);
 
   const { data: workflow } = useQuery({
     queryKey: ['workflow', workflowId],
@@ -44,8 +47,8 @@ const InstancesPage: React.FC = () => {
   });
 
   const { data: instances = [], isLoading } = useQuery({
-    queryKey: ['instances', workflowId],
-    queryFn: () => instanceApi.getByWorkflow(workflowId!),
+    queryKey: ['instances', workflowId, includeArchived],
+    queryFn: () => instanceApi.getByWorkflow(workflowId!, includeArchived),
     enabled: !!workflowId,
     refetchInterval: 2000,
   });
@@ -67,12 +70,21 @@ const InstancesPage: React.FC = () => {
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (instanceId: string) => instanceApi.delete(instanceId),
+  const archiveMutation = useMutation({
+    mutationFn: (instanceId: string) => instanceApi.archive(instanceId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['instances', workflowId] });
-      setDeleteDialogOpen(false);
-      setInstanceToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['instances', workflowId, includeArchived] });
+      setArchiveDialogOpen(false);
+      setInstanceToArchive(null);
+    },
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: (instanceId: string) => instanceApi.unarchive(instanceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['instances', workflowId, includeArchived] });
+      setArchiveDialogOpen(false);
+      setInstanceToArchive(null);
     },
   });
 
@@ -97,14 +109,18 @@ const InstancesPage: React.FC = () => {
     }
   };
 
-  const handleDeleteClick = (instanceId: string) => {
-    setInstanceToDelete(instanceId);
-    setDeleteDialogOpen(true);
+  const handleArchiveClick = (instance: ClaudeInstance) => {
+    setInstanceToArchive({id: instance.id, archived: !!instance.archived});
+    setArchiveDialogOpen(true);
   };
 
-  const handleDeleteConfirm = () => {
-    if (instanceToDelete) {
-      deleteMutation.mutate(instanceToDelete);
+  const handleArchiveConfirm = () => {
+    if (instanceToArchive) {
+      if (instanceToArchive.archived) {
+        unarchiveMutation.mutate(instanceToArchive.id);
+      } else {
+        archiveMutation.mutate(instanceToArchive.id);
+      }
     }
   };
 
@@ -136,31 +152,57 @@ const InstancesPage: React.FC = () => {
             </Typography>
           )}
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => setOpen(true)}
-        >
-          Spawn Instance
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={includeArchived}
+                onChange={(e) => setIncludeArchived(e.target.checked)}
+                color="primary"
+              />
+            }
+            label="Show Archived"
+          />
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => setOpen(true)}
+          >
+            Spawn Instance
+          </Button>
+        </Box>
       </Box>
 
       <Grid container spacing={3}>
         {instances.map((instance: ClaudeInstance) => (
           <Grid item xs={12} key={instance.id}>
-            <Card>
+            <Card 
+              sx={{ 
+                opacity: instance.archived ? 0.6 : 1,
+                border: instance.archived ? '1px dashed #ccc' : 'none'
+              }}
+            >
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                   <Box>
                     <Typography variant="h6">
                       Instance {instance.id.slice(0, 8)}
                     </Typography>
-                    <Chip
-                      label={instance.status}
-                      color={getStatusColor(instance.status)}
-                      size="small"
-                      sx={{ mt: 1 }}
-                    />
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                      <Chip
+                        label={instance.status}
+                        color={getStatusColor(instance.status)}
+                        size="small"
+                      />
+                      {instance.archived && (
+                        <Chip
+                          label="Archived"
+                          color="default"
+                          size="small"
+                          variant="outlined"
+                        />
+                      )}
+                    </Box>
                   </Box>
                   <Box>
                     <Button
@@ -186,11 +228,11 @@ const InstancesPage: React.FC = () => {
                     <Button
                       variant="outlined"
                       size="small"
-                      color="error"
-                      startIcon={<Delete />}
-                      onClick={() => handleDeleteClick(instance.id)}
+                      color={instance.archived ? "primary" : "warning"}
+                      startIcon={instance.archived ? <Unarchive /> : <Archive />}
+                      onClick={() => handleArchiveClick(instance)}
                     >
-                      Delete
+                      {instance.archived ? 'Unarchive' : 'Archive'}
                     </Button>
                   </Box>
                 </Box>
@@ -280,36 +322,44 @@ const InstancesPage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Archive Confirmation Dialog */}
       <Dialog 
-        open={deleteDialogOpen} 
-        onClose={() => setDeleteDialogOpen(false)}
+        open={archiveDialogOpen} 
+        onClose={() => setArchiveDialogOpen(false)}
         maxWidth="sm"
         disableEnforceFocus
         disableAutoFocus
         disableRestoreFocus
         disableScrollLock
       >
-        <DialogTitle>Delete Instance</DialogTitle>
+        <DialogTitle>
+          {instanceToArchive?.archived ? 'Unarchive Instance' : 'Archive Instance'}
+        </DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete this instance? This action will permanently remove the instance and all its associated logs. This cannot be undone.
+            {instanceToArchive?.archived 
+              ? 'Are you sure you want to unarchive this instance? It will be restored to the active instances list.'
+              : 'Are you sure you want to archive this instance? It will be hidden from the default view but can be restored later.'
+            }
           </Typography>
-          {instanceToDelete && (
+          {instanceToArchive && (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-              Instance ID: {instanceToDelete.slice(0, 8)}...
+              Instance ID: {instanceToArchive.id.slice(0, 8)}...
             </Typography>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setArchiveDialogOpen(false)}>Cancel</Button>
           <Button 
-            onClick={handleDeleteConfirm} 
+            onClick={handleArchiveConfirm} 
             variant="contained" 
-            color="error"
-            disabled={deleteMutation.isPending}
+            color={instanceToArchive?.archived ? "primary" : "warning"}
+            disabled={archiveMutation.isPending || unarchiveMutation.isPending}
           >
-            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            {(archiveMutation.isPending || unarchiveMutation.isPending) 
+              ? (instanceToArchive?.archived ? 'Unarchiving...' : 'Archiving...') 
+              : (instanceToArchive?.archived ? 'Unarchive' : 'Archive')
+            }
           </Button>
         </DialogActions>
       </Dialog>

@@ -67,8 +67,10 @@ export const instanceApi = {
     return response.data;
   },
   
-  getByWorkflow: async (workflowId: string) => {
-    const response = await api.get(`/api/instances/${workflowId}`);
+  getByWorkflow: async (workflowId: string, includeArchived: boolean = false) => {
+    const response = await api.get(`/api/instances/${workflowId}`, {
+      params: { include_archived: includeArchived }
+    });
     return response.data.instances;
   },
   
@@ -86,6 +88,16 @@ export const instanceApi = {
     return response.data;
   },
   
+  archive: async (instanceId: string) => {
+    const response = await api.post(`/api/instances/${instanceId}/archive`);
+    return response.data;
+  },
+
+  unarchive: async (instanceId: string) => {
+    const response = await api.post(`/api/instances/${instanceId}/unarchive`);
+    return response.data;
+  },
+
   delete: async (instanceId: string) => {
     const response = await api.delete(`/api/instances/${instanceId}`);
     return response.data;

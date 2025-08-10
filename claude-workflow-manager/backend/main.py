@@ -625,9 +625,9 @@ async def spawn_instance(request: SpawnInstanceRequest):
     description="Retrieve all instances associated with a specific workflow.",
     tags=["Instances"]
 )
-async def get_instances(workflow_id: str):
+async def get_instances(workflow_id: str, include_archived: bool = False):
     """Get all instances for a specific workflow."""
-    instances = await db.get_instances_by_workflow(workflow_id)
+    instances = await db.get_instances_by_workflow(workflow_id, include_archived)
     return {"instances": instances}
 
 @app.post("/api/instances/{instance_id}/interrupt")
@@ -638,9 +638,27 @@ async def interrupt_instance(instance_id: str, data: dict):
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
 
+@app.post("/api/instances/{instance_id}/archive")
+async def archive_instance(instance_id: str):
+    """Archive a specific instance (soft delete)"""
+    success = await db.archive_instance(instance_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    
+    return {"success": True, "message": f"Instance {instance_id} archived successfully"}
+
+@app.post("/api/instances/{instance_id}/unarchive")
+async def unarchive_instance(instance_id: str):
+    """Unarchive a specific instance"""
+    success = await db.unarchive_instance(instance_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    
+    return {"success": True, "message": f"Instance {instance_id} unarchived successfully"}
+
 @app.delete("/api/instances/{instance_id}")
 async def delete_instance(instance_id: str):
-    """Delete a specific instance and all its associated logs"""
+    """Permanently delete a specific instance and all its associated logs (use with caution)"""
     success = await db.delete_instance(instance_id)
     if not success:
         raise HTTPException(status_code=404, detail="Instance not found")
@@ -648,7 +666,7 @@ async def delete_instance(instance_id: str):
     # Also clean up any active instance in the claude manager
     await claude_manager.cleanup_instance(instance_id)
     
-    return {"success": True, "message": f"Instance {instance_id} deleted successfully"}
+    return {"success": True, "message": f"Instance {instance_id} permanently deleted"}
 
 @app.get("/api/instances/{instance_id}/terminal-history")
 async def get_terminal_history(instance_id: str):

@@ -190,8 +190,13 @@ class Database:
             return ClaudeInstance(**instance)
         return None
     
-    async def get_instances_by_workflow(self, workflow_id: str) -> List[Dict]:
-        cursor = self.db.instances.find({"workflow_id": workflow_id}).sort("created_at", -1)
+    async def get_instances_by_workflow(self, workflow_id: str, include_archived: bool = False) -> List[Dict]:
+        # Build query filter
+        query = {"workflow_id": workflow_id}
+        if not include_archived:
+            query["archived"] = {"$ne": True}  # Only get non-archived instances
+            
+        cursor = self.db.instances.find(query).sort("created_at", -1)
         instances = []
         async for instance in cursor:
             del instance["_id"]
@@ -200,10 +205,7 @@ class Database:
             instance_id = instance.get("id")
             if instance_id:
                 metrics = await self._get_instance_metrics(instance_id)
-                print(f"🔍 Before update - instance keys: {list(instance.keys())}")
                 instance.update(metrics)
-                print(f"🔍 After update - instance keys: {list(instance.keys())}")
-                print(f"🔍 Instance total_tokens: {instance.get('total_tokens')}")
             
             instances.append(instance)
         return instances
@@ -211,8 +213,6 @@ class Database:
     async def _get_instance_metrics(self, instance_id: str) -> Dict:
         """Get aggregated metrics (tokens, cost) for an instance"""
         try:
-            print(f"🔍 Getting metrics for instance: {instance_id}")
-            
             # Aggregate all logs for this instance
             pipeline = [
                 {"$match": {"instance_id": instance_id}},
@@ -231,8 +231,6 @@ class Database:
             
             cursor = self.db.logs.aggregate(pipeline)
             result = await cursor.to_list(length=1)
-            
-            print(f"🔍 Aggregation result for {instance_id}: {result}")
             
             if not result:
                 return {
@@ -267,7 +265,6 @@ class Database:
                 } if calculated_total > 0 else None
             }
             
-            print(f"🔍 Returning metrics for {instance_id}: {metrics}")
             return metrics
             
         except Exception as e:
@@ -282,8 +279,6 @@ class Database:
     async def _get_workflow_metrics(self, workflow_id: str) -> Dict:
         """Get aggregated metrics (tokens, cost) for all instances in a workflow"""
         try:
-            print(f"🔍 Getting workflow metrics for: {workflow_id}")
-            
             # Aggregate all logs for all instances in this workflow
             pipeline = [
                 {"$match": {"workflow_id": workflow_id}},
@@ -303,8 +298,6 @@ class Database:
             
             cursor = self.db.logs.aggregate(pipeline)
             result = await cursor.to_list(length=1)
-            
-            print(f"🔍 Workflow aggregation result for {workflow_id}: {result}")
             
             if not result:
                 return {
@@ -345,7 +338,6 @@ class Database:
                 } if calculated_total > 0 else None
             }
             
-            print(f"🔍 Returning workflow metrics for {workflow_id}: {metrics}")
             return metrics
             
         except Exception as e:
@@ -423,8 +415,48 @@ class Database:
             {"$unset": {"terminal_history": 1}}
         )
     
+    async def archive_instance(self, instance_id: str) -> bool:
+        """Archive an instance (soft delete)"""
+        try:
+            result = await self.db.instances.update_one(
+                {"id": instance_id},
+                {
+                    "$set": {
+                        "archived": True,
+                        "archived_at": datetime.utcnow(),
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+            if result.modified_count > 0:
+                print(f"📦 DATABASE: Archived instance {instance_id}")
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"❌ DATABASE: Error archiving instance {instance_id}: {e}")
+            return False
+    
+    async def unarchive_instance(self, instance_id: str) -> bool:
+        """Unarchive an instance"""
+        try:
+            result = await self.db.instances.update_one(
+                {"id": instance_id},
+                {
+                    "$set": {
+                        "archived": False,
+                        "updated_at": datetime.utcnow()
+                    },
+                    "$unset": {"archived_at": 1}
+                }
+            )
+            if result.modified_count > 0:
+                print(f"📤 DATABASE: Unarchived instance {instance_id}")
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"❌ DATABASE: Error unarchiving instance {instance_id}: {e}")
+            return False
+    
     async def delete_instance(self, instance_id: str) -> bool:
-        """Delete an instance and all its associated logs"""
+        """Permanently delete an instance and all its associated logs (use with caution)"""
         try:
             # Delete the instance
             instance_result = await self.db.instances.delete_one({"id": instance_id})
@@ -432,7 +464,7 @@ class Database:
             # Delete associated logs
             logs_result = await self.db.logs.delete_many({"instance_id": instance_id})
             
-            print(f"🗑️ DATABASE: Deleted instance {instance_id}")
+            print(f"🗑️ DATABASE: Permanently deleted instance {instance_id}")
             print(f"📊 DATABASE: Deleted {logs_result.deleted_count} logs for instance {instance_id}")
             
             return instance_result.deleted_count > 0
