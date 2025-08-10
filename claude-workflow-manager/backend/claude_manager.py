@@ -28,6 +28,7 @@ class ClaudeCodeManager:
     async def _execute_claude_streaming(self, cmd: List[str], instance_id: str):
         """Execute Claude CLI with real-time streaming output"""
         self._log_with_timestamp(f"📡 Starting streaming execution...")
+        start_time = time.time()
         
         try:
             # Start the process
@@ -43,12 +44,12 @@ class ClaudeCodeManager:
             
             self._log_with_timestamp(f"🚀 Claude CLI process started (PID: {process.pid})")
             
-            # Store the running process so WebSocket connections can attach to it
+            # Store the running process and track start time
+            process._start_time = start_time  # Add start time to the process object
             self.running_processes[instance_id] = process
             
             # Read output line by line in real-time
             stdout_lines = []
-            start_time = time.time()
             
             while True:
                 # Check if process is still running
@@ -476,15 +477,41 @@ class ClaudeCodeManager:
                     # Log the cancellation to terminal history
                     await self.db.append_terminal_history(instance_id, "❌ Execution cancelled by user", "system")
                     
+                    # Calculate process duration
+                    process_duration = None
+                    if hasattr(process, '_start_time'):
+                        process_duration = time.time() - process._start_time
+                    
                     # Send cancellation message via WebSocket
+                    duration_text = f" (after {process_duration:.1f}s)" if process_duration else ""
                     await self._send_websocket_update(instance_id, {
-                        "type": "partial_output",
-                        "content": "🛑 **Execution Cancelled**\n\nThe Claude CLI process has been terminated."
+                        "type": "partial_output", 
+                        "content": f"🛑 **Execution Cancelled{duration_text}**\n\n⚠️ The Claude CLI process was forcibly terminated. Any unsaved work may be lost."
+                    })
+                    
+                    # Send status update
+                    await self._send_websocket_update(instance_id, {
+                        "type": "status",
+                        "status": "cancelled",
+                        "message": f"Process terminated{duration_text}"
                     })
                     
                 else:
                     self._log_with_timestamp(f"ℹ️ INTERRUPT: Claude CLI process already finished for instance {instance_id}")
+                    
+                    # Calculate process duration if available
+                    process_duration = None
+                    if hasattr(process, '_start_time'):
+                        process_duration = time.time() - process._start_time
+                    
                     del self.running_processes[instance_id]
+                    
+                    # Inform user that process was already completed
+                    duration_text = f" (completed in {process_duration:.1f}s)" if process_duration else ""
+                    await self._send_websocket_update(instance_id, {
+                        "type": "partial_output",
+                        "content": f"ℹ️ **Process Already Completed{duration_text}**\n\nThe execution finished before the cancellation request was processed."
+                    })
             else:
                 self._log_with_timestamp(f"ℹ️ INTERRUPT: No running Claude CLI process found for instance {instance_id}")
                 

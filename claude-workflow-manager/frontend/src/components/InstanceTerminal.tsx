@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   DialogTitle,
   DialogContent,
+  Dialog,
+  DialogActions,
   Button,
   Box,
   TextField,
@@ -47,6 +49,9 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [copySuccess, setCopySuccess] = useState(false);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
+  const [processStartTime, setProcessStartTime] = useState<number | null>(null);
+  const [isProcessRunning, setIsProcessRunning] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [currentTodos, setCurrentTodos] = useState<Array<{id: string, content: string, status: string, priority?: string}>>([]);
 
   // Helper functions
@@ -507,6 +512,10 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               const tokens = message.tokens_used ? `${message.tokens_used} tokens` : '';
               const info = [execTime, tokens].filter(Boolean).join(', ');
               terminal.current?.writeln(`\x1b[32m✅ Command completed${info ? ` (${info})` : ''}\x1b[0m`);
+              
+              // Reset process tracking state
+              setIsProcessRunning(false);
+              setProcessStartTime(null);
               break;
             case 'error':
               if (isWaitingForResponse) {
@@ -518,12 +527,25 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               if (message.status === 'running' && message.message) {
                 terminal.current?.writeln(`\x1b[33m🔄 ${message.message}\x1b[0m`);
                 terminal.current?.writeln(`\x1b[36m📡 You are now connected to the live output stream...\x1b[0m\r\n`);
+                
+                // Track process start time for duration display
+                setIsProcessRunning(true);
+                setProcessStartTime(Date.now());
+                if (!isWaitingForResponse) {
+                  setIsWaitingForResponse(true);
+                  setResponseStartTime(Date.now());
+                }
               } else {
                 terminal.current?.writeln(`\x1b[33mStatus: ${message.status}\x1b[0m`);
               }
               
               if (message.status === 'paused') {
                 setIsPaused(true);
+              } else if (message.status === 'cancelled') {
+                setIsPaused(false);
+                setIsProcessRunning(false);
+                setProcessStartTime(null);
+                setIsCancelling(false); // Reset cancelling state
               } else {
                 setIsPaused(false);
               }
@@ -692,6 +714,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       }
       setIsWaitingForResponse(false);
       setResponseStartTime(null);
+      setIsProcessRunning(false);
+      setProcessStartTime(null);
     };
   }, [instanceId]);
 
@@ -747,7 +771,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         
         // Update terminal with current elapsed time - properly clear and rewrite the line
         if (terminal.current) {
-          terminal.current.write('\r\x1b[K\x1b[33m⏱️  Waiting for response... ' + elapsed.toFixed(1) + 's\x1b[0m');
+          const statusText = isProcessRunning ? 'Process running' : 'Waiting for response';
+          terminal.current.write('\r\x1b[K\x1b[33m⏱️  ' + statusText + '... ' + elapsed.toFixed(1) + 's\x1b[0m');
         }
       }, 100);
     } else if (!isWaitingForResponse && stopwatchIntervalRef.current) {
@@ -763,7 +788,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         stopwatchIntervalRef.current = null;
       }
     };
-  }, [isWaitingForResponse, responseStartTime]);
+  }, [isWaitingForResponse, responseStartTime, isProcessRunning]);
 
   const handleSend = () => {
     if (!input.trim()) {
@@ -789,6 +814,10 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       setIsWaitingForResponse(false);
       setResponseStartTime(null);
     }
+    
+    // Reset process state for new command
+    setIsProcessRunning(false);
+    setProcessStartTime(null);
     
     // Recalculate terminal size if we just cleared markdown (layout change)
     if (previouslyHadMarkdown) {
@@ -867,11 +896,17 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       return;
     }
 
-    console.log('🛑 User requested cancellation of running execution');
+    // Show confirmation dialog instead of immediately cancelling
+    setShowCancelDialog(true);
+  };
+
+  const confirmCancel = async () => {
+    setShowCancelDialog(false);
+    console.log('🛑 User confirmed cancellation of running execution');
     setIsCancelling(true);
     
     try {
-      ws.current.send(JSON.stringify({ 
+      ws.current?.send(JSON.stringify({ 
         type: 'interrupt', 
         feedback: 'Execution cancelled by user' 
       }));
@@ -891,6 +926,10 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       console.error('❌ Error sending interrupt:', error);
       setIsCancelling(false);
     }
+  };
+
+  const cancelConfirmation = () => {
+    setShowCancelDialog(false);
   };
 
   const handleResume = async () => {
@@ -1339,6 +1378,55 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         </DialogContent>
         </Paper>
       </Box>
+
+      {/* Cancellation Confirmation Dialog */}
+      <Dialog 
+        open={showCancelDialog} 
+        onClose={cancelConfirmation}
+        aria-labelledby="cancel-dialog-title"
+        aria-describedby="cancel-dialog-description"
+      >
+        <DialogTitle id="cancel-dialog-title">
+          🛑 Cancel Execution?
+        </DialogTitle>
+        <DialogContent>
+          <Typography id="cancel-dialog-description">
+            <strong>⚠️ Warning: This will forcibly terminate the running process.</strong>
+          </Typography>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              • Any unsaved work may be lost
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              • The Claude CLI process will be killed immediately
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              • This cannot be undone
+            </Typography>
+          </Box>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              {isProcessRunning && processStartTime
+                ? `Process has been running for ${((Date.now() - processStartTime) / 1000).toFixed(1)}s`
+                : 'Are you sure you want to cancel?'
+              }
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelConfirmation} color="primary">
+            Keep Running
+          </Button>
+          <Button 
+            onClick={confirmCancel} 
+            color="error" 
+            variant="contained"
+            startIcon={<Stop />}
+          >
+            Cancel Process
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

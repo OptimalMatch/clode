@@ -1,6 +1,6 @@
 {
-  "short_name": "Claude Workflow Manager",
-  "name": "Claude Workflow Manager",
+  "short_name": "Clode",
+  "name": "Clode",
   "description": "Manage and execute Claude Code workflows with subagent discovery",
   "icons": [],
   "start_url": ".",
