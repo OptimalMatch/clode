@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -67,11 +67,25 @@ const PromptFileManager: React.FC<PromptFileManagerProps> = ({
   const [sequence, setSequence] = useState(1);
   const [parallel, setParallel] = useState('A');
 
-  const { data: repoData, isLoading: repoLoading, refetch: refetchRepo } = useQuery({
+  const { data: repoData, isLoading: repoLoading, refetch: refetchRepo, error: repoError } = useQuery({
     queryKey: ['repo-prompts', workflowId],
     queryFn: () => promptFileApi.getRepoPrompts(workflowId),
     enabled: open,
   });
+
+  // Handle success and error logging with useEffect
+  useEffect(() => {
+    if (repoData) {
+      console.log('🔍 Repository prompts data received:', repoData);
+      console.log('🔍 Prompts count:', (repoData as any)?.prompts?.length || 0);
+    }
+  }, [repoData]);
+
+  useEffect(() => {
+    if (repoError) {
+      console.error('❌ Error fetching repository prompts:', repoError);
+    }
+  }, [repoError]);
 
   const { data: allPrompts } = useQuery({
     queryKey: ['prompts'],
@@ -120,10 +134,10 @@ const PromptFileManager: React.FC<PromptFileManagerProps> = ({
     let previousContext = '';
     if (sequenceNum > 1) {
       const prevSequence = sequenceNum - 1;
-      previousContext = `We have finished implementing claude_prompts/${prevSequence}*.md. `;
+      previousContext = `We have finished implementing .clode/claude_prompts/${prevSequence}*.md. `;
     }
     
-    return `${previousContext}Start the general agent to read the prompt in claude_prompts/${filename} and code what is specified in this file. Check claude_prompts.md, claude_prompts folder, optimalmatch_capabilities.md, and migration_plan.md. The target new code is in the folder named python and the legacy java code is in src folder. Remember to create/use the git branch specified in the ${filename}. If we are making a destructive change, please check the previous prompt claude_prompts/1*.md, prompt claude_prompts/2*.md, python/reviews/tech-lead-review-log-1*.md, and python/reviews/tech-lead-review-log-2*.md to see if there was existing business logic that should not be erased.`;
+    return `${previousContext}Start the general agent to read the prompt in .clode/claude_prompts/${filename} and code what is specified in this file. Check .clode/claude_prompts.md, .clode/claude_prompts folder, .clode/inputs/optimalmatch_capabilities.md, and .clode/strategies/migration_plan.md. The target new code is in the folder named python and the legacy java code is in src folder. Remember to create/use the git branch specified in the ${filename}. If we are making a destructive change, please check the previous prompt .clode/claude_prompts/1*.md, prompt .clode/claude_prompts/2*.md, .clode/reviews/tech-lead-review-log-1*.md, and .clode/reviews/tech-lead-review-log-2*.md to see if there was existing business logic that should not be erased.`;
   };
 
   const runInstanceMutation = useMutation({
@@ -263,7 +277,7 @@ const PromptFileManager: React.FC<PromptFileManagerProps> = ({
   };
 
   const renderExecutionPlan = () => {
-    if (!repoData?.execution_plan) return null;
+    if (!(repoData as any)?.execution_plan) return null;
 
     return (
       <Box sx={{ mt: 2 }}>
@@ -271,7 +285,7 @@ const PromptFileManager: React.FC<PromptFileManagerProps> = ({
           <Timeline sx={{ verticalAlign: 'middle', mr: 1 }} />
           Execution Plan
         </Typography>
-        {repoData.execution_plan.map((group: RepoPrompt[], groupIdx: number) => {
+        {((repoData as any).execution_plan as RepoPrompt[][])?.map((group: RepoPrompt[], groupIdx: number) => {
           // Get prompts that have matching database entries
           const matchablePrompts = group.filter(prompt => findPromptId(prompt) !== null);
           
@@ -523,10 +537,10 @@ const PromptFileManager: React.FC<PromptFileManagerProps> = ({
               </IconButton>
             </Box>
             
-            {repoData?.prompts && repoData.prompts.length > 0 ? (
+            {(repoData as any)?.prompts && (repoData as any).prompts.length > 0 ? (
               <>
                 <List>
-                  {repoData.prompts.map((prompt: RepoPrompt) => (
+                  {(repoData as any).prompts.map((prompt: RepoPrompt) => (
                     <ListItem key={prompt.filename}>
                       <ListItemText
                         primary={
@@ -547,9 +561,21 @@ const PromptFileManager: React.FC<PromptFileManagerProps> = ({
                 {renderExecutionPlan()}
               </>
             ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', p: 4 }}>
-                No prompts found in repository
-              </Typography>
+              <Box sx={{ textAlign: 'center', p: 4 }}>
+                <>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    No prompts found in repository
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                    Expected location: .clode/claude_prompts/
+                  </Typography>
+                  {repoData && (
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                      API Response: {JSON.stringify(repoData)}
+                    </Typography>
+                  )}
+                </>
+              </Box>
             )}
           </>
         )}

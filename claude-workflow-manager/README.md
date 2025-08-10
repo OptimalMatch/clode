@@ -34,8 +34,8 @@ cd claude-workflow-manager
 # Create .env file in the root directory
 CLAUDE_API_KEY=your_claude_api_key_here
 
-# Optional: Customize the prompts folder name (defaults to "claude_prompts")
-CLAUDE_PROMPTS_FOLDER=claude_prompts
+# Optional: Customize the prompts folder name (defaults to ".clode/claude_prompts")
+CLAUDE_PROMPTS_FOLDER=.clode/claude_prompts
 
 # Optional: Customize the agents folder path (defaults to ".claude/agents")
 CLAUDE_AGENTS_FOLDER=.claude/agents
@@ -124,7 +124,7 @@ docker compose up -d
 
 ### Managing Repository Prompts
 
-The system scans your Git repository for prompts in the configured folder (default: `claude_prompts/`). You can:
+The system scans your Git repository for prompts in the configured folder (default: `.clode/claude_prompts/`). You can:
 
 1. Create prompt files directly in your repository
 2. Use the "Sync Prompts" feature to export database prompts to your repository

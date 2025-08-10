@@ -230,6 +230,11 @@ export const promptFileApi = {
     const response = await api.post(`/api/workflows/${workflowId}/import-repo-prompts`);
     return response.data;
   },
+
+  getReviewFiles: async (workflowId: string, promptName: string) => {
+    const response = await api.get(`/api/workflows/${workflowId}/review-files/${encodeURIComponent(promptName)}`);
+    return response.data;
+  },
 };
 
 export const agentDiscoveryApi = {

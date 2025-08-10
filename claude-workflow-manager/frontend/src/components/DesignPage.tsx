@@ -54,6 +54,7 @@ import {
   RateReview,
   Visibility,
   Article,
+  Assessment,
   CallSplit,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -142,6 +143,18 @@ const DesignPage: React.FC = () => {
     content: string;
   } | null>(null);
   const [markdownView, setMarkdownView] = useState(false);
+
+  // Tech lead review modal state
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedReviews, setSelectedReviews] = useState<{
+    promptName: string;
+    reviews: Array<{
+      filename: string;
+      content: string;
+    }>;
+  } | null>(null);
+  const [selectedReviewIndex, setSelectedReviewIndex] = useState(0);
+  const [reviewMarkdownView, setReviewMarkdownView] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -419,7 +432,7 @@ const DesignPage: React.FC = () => {
       prompt += `Start the general agent to read the prompt in ${promptFileName} and code what is specified in this file. `;
 
       // Context files to check
-      prompt += `Check claude_prompts.md, claude_prompts folder, optimalmatch_capabilities.md, and migration_plan.md. `;
+      prompt += `Check .clode/claude_prompts.md, .clode/claude_prompts folder, .clode/inputs/optimalmatch_capabilities.md, and .clode/strategies/migration_plan.md. `;
 
       // Target directories
       prompt += `The target new code is in the folder named python and the legacy java code is in src folder. `;
@@ -430,7 +443,7 @@ const DesignPage: React.FC = () => {
       // Destructive change protection
       if (completedPrompts.length > 0) {
         const reviewFiles = completedPrompts.map((p: any) => 
-          `python/reviews/tech-lead-review-log-${p.filename.replace('.md', '')}.md`
+          `.clode/reviews/tech-lead-review-log-${p.filename.replace('.md', '')}.md`
         ).join(', ');
         const previousPrompts = completedPrompts.map((p: any) => p.filename).join(', ');
         
@@ -508,7 +521,7 @@ const DesignPage: React.FC = () => {
         if (!promptConfig) return '';
         
         const promptFileName = promptConfig.filename;
-        const reviewLogFile = `python/reviews/tech-lead-review-log-${promptFileName.replace('.md', '')}.md`;
+        const reviewLogFile = `.clode/reviews/tech-lead-review-log-${promptFileName.replace('.md', '')}.md`;
         
         return `Have tech-lead-reviewer agent review all the changes made for ${promptFileName} and provide feedback on whether the code meets requirements and whether there are any loose ends that need to be documented as tech debt. Write this into ${reviewLogFile}.`;
       }
@@ -694,6 +707,62 @@ const DesignPage: React.FC = () => {
     }
     setMarkdownView(false); // Reset to raw view when opening
     setFileContentModalOpen(true);
+  };
+
+  // View tech lead reviews for a prompt
+  const handleViewReviews = async (promptConfig: any) => {
+    if (!promptConfig?.filename || !selectedWorkflowId) {
+      setSelectedReviews({
+        promptName: promptConfig?.filename || 'Unknown Prompt',
+        reviews: [{
+          filename: 'Error',
+          content: 'Unable to load reviews: Missing prompt information or workflow ID.'
+        }]
+      });
+      setSelectedReviewIndex(0);
+      setReviewMarkdownView(false);
+      setReviewModalOpen(true);
+      return;
+    }
+
+    try {
+      // Extract the base name from the prompt filename (e.g., "3B_matching_service" from "3B_matching_service.md")
+      const baseName = promptConfig.filename.replace(/\.(md|yaml|json)$/, '');
+      
+      const reviewData = await promptFileApi.getReviewFiles(selectedWorkflowId, baseName);
+      
+      if (reviewData.reviews && reviewData.reviews.length > 0) {
+        setSelectedReviews({
+          promptName: promptConfig.filename,
+          reviews: reviewData.reviews
+        });
+        setSelectedReviewIndex(0); // Start with the first review
+      } else {
+        setSelectedReviews({
+          promptName: promptConfig.filename,
+          reviews: [{
+            filename: 'No Reviews Found',
+            content: `No tech lead reviews found for ${promptConfig.filename}.\n\nExpected review files would be named like:\n.clode/reviews/tech-lead-review-log-${baseName}.md\n\nReviews are generated after executing the "Tech Lead Review" action for this prompt.`
+          }]
+        });
+        setSelectedReviewIndex(0);
+      }
+      
+      setReviewMarkdownView(false); // Reset to raw view when opening
+      setReviewModalOpen(true);
+    } catch (error) {
+      console.error('Error fetching review files:', error);
+      setSelectedReviews({
+        promptName: promptConfig.filename,
+        reviews: [{
+          filename: 'Error Loading Reviews',
+          content: `Failed to load reviews for ${promptConfig.filename}.\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }]
+      });
+      setSelectedReviewIndex(0);
+      setReviewMarkdownView(false);
+      setReviewModalOpen(true);
+    }
   };
 
   // Extract branch information from prompt content
@@ -936,6 +1005,33 @@ const DesignPage: React.FC = () => {
                       }}
                     >
                       <Visibility sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+
+                {/* Fifth button - Only for prompt nodes: View Reviews */}
+                {node.type === 'prompt' && (
+                  <Tooltip 
+                    title="View tech lead reviews"
+                    placement="top"
+                    arrow
+                  >
+                    <IconButton
+                      size="small"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        handleViewReviews(node.data.config);
+                      }}
+                      sx={{ 
+                        padding: '2px',
+                        color: 'secondary.main',
+                        '&:hover': {
+                          backgroundColor: 'secondary.light',
+                          color: 'white',
+                        }
+                      }}
+                    >
+                      <Assessment sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Tooltip>
                 )}
@@ -1379,8 +1475,18 @@ const DesignPage: React.FC = () => {
                     startIcon={<Visibility />}
                     onClick={() => handleViewFileContent(selectedNode.data.config)}
                     color="info"
+                    sx={{ mb: 1 }}
                   >
                     View File Content
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    startIcon={<Assessment />}
+                    onClick={() => handleViewReviews(selectedNode.data.config)}
+                    color="secondary"
+                  >
+                    View Reviews
                   </Button>
                 </Box>
               )}
@@ -1552,8 +1658,20 @@ const DesignPage: React.FC = () => {
                 variant="outlined"
                 startIcon={<Visibility />}
                 color="info"
+                sx={{ mr: 1 }}
               >
                 View Content
+              </Button>
+              <Button
+                onClick={() => {
+                  handleViewReviews(selectedNode.data.config);
+                  setConfigDialogOpen(false);
+                }}
+                variant="outlined"
+                startIcon={<Assessment />}
+                color="secondary"
+              >
+                View Reviews
               </Button>
             </>
           )}
@@ -1765,6 +1883,168 @@ const DesignPage: React.FC = () => {
           </Typography>
           <Button 
             onClick={() => setFileContentModalOpen(false)}
+            sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Tech Lead Reviews Modal */}
+      <Dialog
+        open={reviewModalOpen}
+        onClose={() => setReviewModalOpen(false)}
+        fullWidth
+        maxWidth="md"
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          color: darkMode ? '#ffffff' : 'inherit',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <Typography variant="h6" component="span">
+            📊 Tech Lead Reviews - {selectedReviews?.promptName}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Review selector */}
+            {selectedReviews && selectedReviews.reviews.length > 1 && (
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>Review</InputLabel>
+                <Select
+                  value={selectedReviewIndex}
+                  onChange={(e) => setSelectedReviewIndex(e.target.value as number)}
+                  label="Review"
+                  sx={{
+                    color: darkMode ? '#ffffff' : 'inherit',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: darkMode ? '#555555' : 'inherit',
+                    },
+                  }}
+                >
+                  {selectedReviews.reviews.map((review, index) => (
+                    <MenuItem key={index} value={index}>
+                      {review.filename}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+            {/* View toggle buttons */}
+            <IconButton
+              onClick={() => setReviewMarkdownView(false)}
+              size="small"
+              sx={{ 
+                color: !reviewMarkdownView ? 'primary.main' : (darkMode ? 'grey.400' : 'grey.600'),
+                backgroundColor: !reviewMarkdownView ? (darkMode ? 'primary.dark' : 'primary.light') : 'transparent'
+              }}
+            >
+              <Code />
+            </IconButton>
+            <IconButton
+              onClick={() => setReviewMarkdownView(true)}
+              size="small"
+              sx={{ 
+                color: reviewMarkdownView ? 'primary.main' : (darkMode ? 'grey.400' : 'grey.600'),
+                backgroundColor: reviewMarkdownView ? (darkMode ? 'primary.dark' : 'primary.light') : 'transparent'
+              }}
+            >
+              <Article />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedReviews && selectedReviews.reviews[selectedReviewIndex] && (
+            <>
+              {reviewMarkdownView ? (
+                <Box
+                  sx={{
+                    minHeight: '500px',
+                    padding: 2,
+                    backgroundColor: darkMode ? '#2a2a2a' : '#f8f8f8',
+                    border: `1px solid ${darkMode ? '#555555' : '#cccccc'}`,
+                    borderRadius: 1,
+                    overflow: 'auto',
+                    maxHeight: '500px',
+                    '& h1': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.5rem', marginBottom: '0.5rem' },
+                    '& h2': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.3rem', marginBottom: '0.5rem' },
+                    '& h3': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.1rem', marginBottom: '0.5rem' },
+                    '& p': { color: darkMode ? '#ffffff' : '#000000', marginBottom: '0.5rem' },
+                    '& strong': { fontWeight: 'bold' },
+                    '& em': { fontStyle: 'italic' },
+                    '& code': { 
+                      backgroundColor: darkMode ? '#1a1a1a' : '#e0e0e0',
+                      color: darkMode ? '#ff6b6b' : '#d32f2f',
+                      padding: '0.2rem 0.4rem',
+                      borderRadius: '3px',
+                      fontFamily: 'monospace'
+                    },
+                    '& pre': {
+                      backgroundColor: darkMode ? '#1a1a1a' : '#e0e0e0',
+                      padding: '1rem',
+                      borderRadius: '4px',
+                      overflow: 'auto',
+                      '& code': {
+                        backgroundColor: 'transparent',
+                        color: darkMode ? '#ffffff' : '#000000',
+                        padding: 0
+                      }
+                    },
+                    '& ul': { paddingLeft: '1.5rem', marginBottom: '0.5rem' },
+                    '& li': { color: darkMode ? '#ffffff' : '#000000', marginBottom: '0.2rem' }
+                  }}
+                  dangerouslySetInnerHTML={{ 
+                    __html: renderMarkdown(selectedReviews.reviews[selectedReviewIndex].content || '') 
+                  }}
+                />
+              ) : (
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={20}
+                  value={selectedReviews.reviews[selectedReviewIndex].content || ''}
+                  variant="outlined"
+                  InputProps={{
+                    readOnly: true,
+                    sx: {
+                      backgroundColor: darkMode ? '#2a2a2a' : '#f8f8f8',
+                      color: darkMode ? '#ffffff' : '#000000',
+                      fontFamily: 'monospace',
+                      fontSize: '14px',
+                    },
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': {
+                        borderColor: darkMode ? '#555555' : '#cccccc',
+                      },
+                    },
+                    '& .MuiOutlinedInput-input': {
+                      color: darkMode ? '#ffffff' : '#000000',
+                      fontFamily: 'monospace',
+                      fontSize: '14px',
+                    },
+                  }}
+                />
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Typography variant="caption" sx={{ color: darkMode ? '#b0b0b0' : '#666666', mr: 'auto' }}>
+            {reviewMarkdownView ? '📖 Markdown View' : '📝 Raw Text View'}
+            {selectedReviews && selectedReviews.reviews.length > 1 && (
+              ` | Review ${selectedReviewIndex + 1} of ${selectedReviews.reviews.length}`
+            )}
+          </Typography>
+          <Button 
+            onClick={() => setReviewModalOpen(false)}
             sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
           >
             Close

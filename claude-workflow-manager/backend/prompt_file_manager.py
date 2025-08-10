@@ -17,7 +17,7 @@ class PromptFileManager:
     - Example: 1A-base-infrastructure.md, 2A_core_models.md, 2B-reference-models.md
     """
     
-    PROMPTS_FOLDER = os.getenv("CLAUDE_PROMPTS_FOLDER", "claude_prompts")
+    PROMPTS_FOLDER = os.getenv("CLAUDE_PROMPTS_FOLDER", ".clode/claude_prompts")
     FILE_PATTERN = re.compile(r'^(\d+)([A-Z])[-_](.+)\.(md|yaml|json)$')
     
     def __init__(self, repo_path: str):

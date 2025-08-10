@@ -1077,7 +1077,7 @@ async def get_prompts_from_repo(workflow_id: str):
             raise
         
         # Load prompts
-        print(f"🔍 PROMPT CONFIGURATION: CLAUDE_PROMPTS_FOLDER environment variable: '{os.getenv('CLAUDE_PROMPTS_FOLDER', 'claude_prompts')}'")
+        print(f"🔍 PROMPT CONFIGURATION: CLAUDE_PROMPTS_FOLDER environment variable: '{os.getenv('CLAUDE_PROMPTS_FOLDER', '.clode/claude_prompts')}'")
         file_manager = PromptFileManager(temp_dir)
         prompts = file_manager.load_prompts_from_repo()
         execution_plan = file_manager.get_execution_plan()
@@ -1108,7 +1108,7 @@ async def import_prompts_from_repo(workflow_id: str):
         )
         
         # Load prompts from repo
-        print(f"🔍 PROMPT CONFIGURATION: CLAUDE_PROMPTS_FOLDER environment variable: '{os.getenv('CLAUDE_PROMPTS_FOLDER', 'claude_prompts')}'")
+        print(f"🔍 PROMPT CONFIGURATION: CLAUDE_PROMPTS_FOLDER environment variable: '{os.getenv('CLAUDE_PROMPTS_FOLDER', '.clode/claude_prompts')}'")
         file_manager = PromptFileManager(temp_dir)
         repo_prompts = file_manager.load_prompts_from_repo()
         
@@ -1153,6 +1153,85 @@ async def import_prompts_from_repo(workflow_id: str):
         "imported_count": len(imported_prompts),
         "imported_prompts": imported_prompts
     }
+
+@app.get("/api/workflows/{workflow_id}/review-files/{prompt_name}")
+async def get_review_files(workflow_id: str, prompt_name: str):
+    """Get tech lead review files for a specific prompt"""
+    workflow = await db.get_workflow(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    import tempfile
+    import os
+    import glob
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        try:
+            print(f"🔍 REVIEW FILES: Starting clone for repo: {workflow['git_repo']}")
+            print(f"📁 REVIEW FILES: Using temp directory: {temp_dir}")
+            
+            # Clone the repository with SSH support
+            result = subprocess.run(
+                ["git", "clone", "--depth", "1", workflow["git_repo"], temp_dir],
+                check=True,
+                capture_output=True,
+                env=get_git_env()
+            )
+            print(f"✅ REVIEW FILES: Git clone completed successfully")
+            
+            # Look for review files in .clode/reviews/
+            reviews_path = os.path.join(temp_dir, ".clode", "reviews")
+            review_files = []
+            
+            if os.path.exists(reviews_path):
+                print(f"✅ REVIEW FILES: Found reviews directory: {reviews_path}")
+                
+                # Look for files matching the pattern: tech-lead-review-log-{prompt_name}*.md
+                pattern = f"tech-lead-review-log-{prompt_name}*.md"
+                search_pattern = os.path.join(reviews_path, pattern)
+                
+                print(f"🔍 REVIEW FILES: Searching for pattern: {search_pattern}")
+                matching_files = glob.glob(search_pattern)
+                
+                print(f"📁 REVIEW FILES: Found {len(matching_files)} matching files:")
+                for file_path in matching_files:
+                    print(f"   - {os.path.basename(file_path)}")
+                
+                # Sort files by modification time (newest first)
+                matching_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                
+                for file_path in matching_files:
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            review_files.append({
+                                "filename": os.path.basename(file_path),
+                                "content": content
+                            })
+                    except Exception as e:
+                        print(f"❌ REVIEW FILES: Error reading {file_path}: {e}")
+                        review_files.append({
+                            "filename": os.path.basename(file_path),
+                            "content": f"Error reading file: {str(e)}"
+                        })
+            else:
+                print(f"❌ REVIEW FILES: Reviews directory not found: {reviews_path}")
+            
+            return {
+                "success": True,
+                "prompt_name": prompt_name,
+                "reviews": review_files
+            }
+            
+        except subprocess.CalledProcessError as e:
+            print(f"❌ REVIEW FILES: Error cloning repository {workflow['git_repo']}")
+            print(f"❌ REVIEW FILES: Return code: {e.returncode}")
+            print(f"❌ REVIEW FILES: stdout: {e.stdout.decode() if e.stdout else 'None'}")
+            print(f"❌ REVIEW FILES: stderr: {e.stderr.decode() if e.stderr else 'None'}")
+            raise HTTPException(status_code=500, detail=f"Failed to clone repository: {str(e)}")
+        except Exception as e:
+            print(f"❌ REVIEW FILES: Unexpected error: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to get review files: {str(e)}")
 
 # Agent Discovery endpoints
 @app.post("/api/workflows/{workflow_id}/discover-agents")
