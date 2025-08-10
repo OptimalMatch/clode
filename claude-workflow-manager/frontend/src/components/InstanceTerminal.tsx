@@ -61,12 +61,10 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*m/g, '');
     const cleanContent = stripAnsi(content);
     
-    // Debug logging - check for various todo-related content
-    if (cleanContent.includes('📋') || cleanContent.includes('Managing TODOs') || 
-        cleanContent.includes('TodoWrite') || cleanContent.includes('todo') ||
-        cleanContent.includes('Tool result received') && cleanContent.includes('modified')) {
-      console.log('🔍 Todo-related content detected:', cleanContent);
-    }
+    // Check for todo-related content (optional debug logging)
+    // if (cleanContent.includes('📋') || cleanContent.includes('Managing TODOs')) {
+    //   console.log('🔍 Todo message detected:', cleanContent);
+    // }
     
     // Look for TODO messages like: "📋 **Managing TODOs:** 2 items\n  • Task 1 (pending) [medium]\n  • Task 2 (completed)"
     const todoMatch = cleanContent.match(/📋 \*\*Managing TODOs:\*\* (\d+) items?\n((?:\s*• .+\n?)*)/);
