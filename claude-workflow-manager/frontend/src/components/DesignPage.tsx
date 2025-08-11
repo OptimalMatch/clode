@@ -60,6 +60,7 @@ import {
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { workflowApi, promptFileApi, instanceApi } from '../services/api';
+import LexicalEditor from './LexicalEditor';
 import { Workflow } from '../types';
 
 // Node types for the workflow designer
@@ -142,7 +143,7 @@ const DesignPage: React.FC = () => {
     filename: string;
     content: string;
   } | null>(null);
-  const [markdownView, setMarkdownView] = useState(false);
+
 
   // Tech lead review modal state
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
@@ -705,7 +706,7 @@ const DesignPage: React.FC = () => {
         content: promptConfig.content
       });
     }
-    setMarkdownView(false); // Reset to raw view when opening
+
     setFileContentModalOpen(true);
   };
 
@@ -1698,33 +1699,11 @@ const DesignPage: React.FC = () => {
           <Typography variant="body2" sx={{ mb: 2, color: darkMode ? '#b0b0b0' : '#666666' }}>
             Preview and edit the execution prompt before running. You can modify the prompt below:
           </Typography>
-          <TextField
-            fullWidth
-            multiline
-            rows={12}
+          <LexicalEditor
             value={editablePrompt}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditablePrompt(e.target.value)}
+            onChange={setEditablePrompt}
             placeholder="Execution prompt will appear here..."
-            variant="outlined"
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: darkMode ? '#2a2a2a' : '#f5f5f5',
-                '& fieldset': {
-                  borderColor: darkMode ? '#555555' : '#cccccc',
-                },
-                '&:hover fieldset': {
-                  borderColor: darkMode ? '#777777' : '#999999',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: darkMode ? '#90caf9' : '#1976d2',
-                },
-              },
-              '& .MuiOutlinedInput-input': {
-                color: darkMode ? '#ffffff' : '#000000',
-                fontFamily: 'monospace',
-                fontSize: '14px',
-              },
-            }}
+            darkMode={darkMode}
           />
           {executionContext && (
             <Typography variant="caption" sx={{ mt: 1, display: 'block', color: darkMode ? '#90caf9' : '#1976d2' }}>
@@ -1777,109 +1756,22 @@ const DesignPage: React.FC = () => {
           }
         }}
       >
-        <DialogTitle sx={{ 
-          color: darkMode ? '#ffffff' : 'inherit',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          <Typography variant="h6" component="span">
-            📄 {selectedFileContent?.filename}
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <IconButton
-              onClick={() => setMarkdownView(false)}
-              size="small"
-              sx={{ 
-                color: !markdownView ? 'primary.main' : (darkMode ? 'grey.400' : 'grey.600'),
-                backgroundColor: !markdownView ? (darkMode ? 'primary.dark' : 'primary.light') : 'transparent'
-              }}
-            >
-              <Code />
-            </IconButton>
-            <IconButton
-              onClick={() => setMarkdownView(true)}
-              size="small"
-              sx={{ 
-                color: markdownView ? 'primary.main' : (darkMode ? 'grey.400' : 'grey.600'),
-                backgroundColor: markdownView ? (darkMode ? 'primary.dark' : 'primary.light') : 'transparent'
-              }}
-            >
-              <Article />
-            </IconButton>
-          </Box>
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+          📄 {selectedFileContent?.filename}
         </DialogTitle>
         <DialogContent>
-          {markdownView ? (
-            <Box
-              sx={{
-                minHeight: '500px',
-                padding: 2,
-                backgroundColor: darkMode ? '#2a2a2a' : '#f8f8f8',
-                border: `1px solid ${darkMode ? '#555555' : '#cccccc'}`,
-                borderRadius: 1,
-                overflow: 'auto',
-                maxHeight: '500px',
-                '& h1': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.5rem', marginBottom: '0.5rem' },
-                '& h2': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.3rem', marginBottom: '0.5rem' },
-                '& h3': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.1rem', marginBottom: '0.5rem' },
-                '& p': { color: darkMode ? '#ffffff' : '#000000', marginBottom: '0.5rem' },
-                '& strong': { fontWeight: 'bold' },
-                '& em': { fontStyle: 'italic' },
-                '& code': { 
-                  backgroundColor: darkMode ? '#1a1a1a' : '#e0e0e0',
-                  color: darkMode ? '#ff6b6b' : '#d32f2f',
-                  padding: '0.2rem 0.4rem',
-                  borderRadius: '3px',
-                  fontFamily: 'monospace'
-                },
-                '& pre': {
-                  backgroundColor: darkMode ? '#1a1a1a' : '#e0e0e0',
-                  padding: '1rem',
-                  borderRadius: '4px',
-                  overflow: 'auto',
-                  '& code': {
-                    backgroundColor: 'transparent',
-                    color: darkMode ? '#ffffff' : '#000000',
-                    padding: 0
-                  }
-                },
-                '& ul': { paddingLeft: '1.5rem', marginBottom: '0.5rem' },
-                '& li': { color: darkMode ? '#ffffff' : '#000000', marginBottom: '0.2rem' }
-              }}
-              dangerouslySetInnerHTML={{ 
-                __html: renderMarkdown(selectedFileContent?.content || '') 
-              }}
-            />
-          ) : (
-            <TextField
-              fullWidth
-              multiline
-              rows={20}
-              value={selectedFileContent?.content || ''}
-              variant="outlined"
-              InputProps={{
-                readOnly: true,
-              }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  backgroundColor: darkMode ? '#2a2a2a' : '#f8f8f8',
-                  '& fieldset': {
-                    borderColor: darkMode ? '#555555' : '#cccccc',
-                  },
-                },
-                '& .MuiOutlinedInput-input': {
-                  color: darkMode ? '#ffffff' : '#000000',
-                  fontFamily: 'monospace',
-                  fontSize: '14px',
-                },
-              }}
-            />
-          )}
+          <LexicalEditor
+            value={selectedFileContent?.content || ''}
+            onChange={() => {}} // Read-only, no changes needed
+            placeholder="No content available"
+            darkMode={darkMode}
+            readOnly={true}
+            parseMarkdown={true}
+          />
         </DialogContent>
         <DialogActions>
           <Typography variant="caption" sx={{ color: darkMode ? '#b0b0b0' : '#666666', mr: 'auto' }}>
-            {markdownView ? '📖 Markdown View' : '📝 Raw Text View'}
+            📖 Markdown Content • Rendered with Lexical
           </Typography>
           <Button 
             onClick={() => setFileContentModalOpen(false)}
