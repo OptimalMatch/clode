@@ -16,6 +16,7 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { TRANSFORMERS, $convertFromMarkdownString } from '@lexical/markdown';
 import { MarkdownShortcutPlugin } from '@lexical/react/LexicalMarkdownShortcutPlugin';
+import { registerCodeHighlighting } from '@lexical/code';
 
 const theme = {
   ltr: 'ltr',
@@ -101,9 +102,23 @@ function UpdatePlugin({ value, initialLoad, parseMarkdown }: { value: string; in
         if (parseMarkdown) {
           // Parse markdown content using Lexical's markdown parser
           try {
+            console.log('🔄 Parsing markdown content, length:', value.length);
+            // Check if content has code blocks
+            const hasCodeBlocks = value.includes('```');
+            console.log('📋 Content has triple backtick code blocks:', hasCodeBlocks);
+            if (hasCodeBlocks) {
+              const codeBlockMatches = value.match(/```[\s\S]*?```/g);
+              console.log('📋 Found code block patterns:', codeBlockMatches?.length || 0);
+            }
+            
             $convertFromMarkdownString(value, TRANSFORMERS);
+            console.log('✅ Markdown parsing completed');
+            
+            // Check what nodes were created
+            const allNodes = root.getAllTextNodes();
+            console.log('📋 Total text nodes created:', allNodes.length);
           } catch (error) {
-            console.warn('Markdown parsing failed, falling back to plain text:', error);
+            console.warn('❌ Markdown parsing failed, falling back to plain text:', error);
             // Fallback to plain text if markdown parsing fails
             const paragraph = $createParagraphNode();
             paragraph.append($createTextNode(value));
@@ -130,6 +145,322 @@ function UpdatePlugin({ value, initialLoad, parseMarkdown }: { value: string; in
   return null;
 }
 
+// Plugin to enable code highlighting and language labels
+function CodeHighlightPlugin() {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    console.log('🎨 CodeHighlightPlugin: Registering code highlighting');
+    return registerCodeHighlighting(editor);
+  }, [editor]);
+
+  return null;
+}
+
+// React component that renders language labels as actual DOM elements
+function CodeLanguageLabel({ language }: { language: string }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: '-35px',
+        left: '0',
+        right: '0',
+        background: 'linear-gradient(45deg, #ff4444, #ff8800)',
+        color: 'white',
+        padding: '6px 12px',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        borderRadius: '4px 4px 0 0',
+        textTransform: 'uppercase' as const,
+        textAlign: 'center' as const,
+        zIndex: 1000,
+        border: '2px solid #ffff00',
+        borderBottom: 'none',
+        fontFamily: 'monospace',
+        lineHeight: '1.2',
+        letterSpacing: '1px',
+        textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+        userSelect: 'none' as const,
+        pointerEvents: 'none' as const
+      }}
+    >
+      {language} CODE
+    </div>
+  );
+}
+
+// Plugin that injects React components for language labels
+function CodeLanguagePlugin({ darkMode }: { darkMode: boolean }) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    console.log('🔧 CodeLanguagePlugin: Setting up React-based language labels');
+    
+    // Inject syntax highlighting CSS only
+    const existingStyle = document.getElementById('lexical-syntax-highlighting');
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+    
+    const style = document.createElement('style');
+    style.id = 'lexical-syntax-highlighting';
+    style.textContent = `
+      /* Code block styling to connect with language tabs */
+      .editor-code[data-language] {
+        border-radius: 0 8px 8px 8px !important;
+        margin-top: 0 !important;
+        position: relative !important;
+      }
+      
+      /* Container for language labels */
+      .code-language-container {
+        position: relative !important;
+        margin-bottom: 0 !important;
+      }
+      
+      /* Syntax highlighting colors */
+      .editor-tokenAttr { color: ${darkMode ? '#ff7b72' : '#d73a49'} !important; }
+      .editor-tokenProperty { color: ${darkMode ? '#79c0ff' : '#005cc5'} !important; }
+      .editor-tokenSelector { color: ${darkMode ? '#a5d6ff' : '#032f62'} !important; }
+      .editor-tokenComment { color: ${darkMode ? '#8b949e' : '#6a737d'} !important; font-style: italic !important; }
+      .editor-tokenFunction { color: ${darkMode ? '#d2a8ff' : '#6f42c1'} !important; }
+      .editor-tokenVariable { color: ${darkMode ? '#ffa657' : '#e36209'} !important; }
+      .editor-tokenOperator { color: ${darkMode ? '#ff7b72' : '#d73a49'} !important; }
+      .editor-tokenPunctuation { color: ${darkMode ? '#c9d1d9' : '#24292e'} !important; }
+    `;
+    
+    document.head.appendChild(style);
+    
+    // Use a more aggressive observer that also injects React components
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const element = node as Element;
+            
+            // Find code blocks
+            const codeBlocks = Array.from(element.querySelectorAll?.('.editor-code[data-language]') || []);
+            if (element.classList?.contains('editor-code') && element.hasAttribute('data-language')) {
+              codeBlocks.push(element);
+            }
+            
+            codeBlocks.forEach((codeBlock) => {
+              const language = codeBlock.getAttribute('data-language');
+              if (language && !codeBlock.previousElementSibling?.classList.contains('code-language-label-react')) {
+                console.log(`🏷️ Creating sibling label for: ${language}`);
+                
+                // Create the actual label element as a sibling above the code block
+                const label = document.createElement('div');
+                label.className = 'code-language-label-react';
+                label.setAttribute('data-language', language);
+                label.textContent = language.toUpperCase();
+                // Create proper language tab positioned above code block
+                label.style.cssText = `
+                  display: block !important;
+                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+                  color: white !important;
+                  padding: 4px 8px !important;
+                  font-size: 11px !important;
+                  font-weight: 600 !important;
+                  border-radius: 4px 4px 0 0 !important;
+                  text-transform: uppercase !important;
+                  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace !important;
+                  line-height: 1 !important;
+                  letter-spacing: 0.5px !important;
+                  user-select: none !important;
+                  pointer-events: none !important;
+                  box-sizing: border-box !important;
+                  white-space: nowrap !important;
+                  width: fit-content !important;
+                  margin: 0 0 -1px 0 !important;
+                `;
+                
+                // Insert the label before the code block as a sibling
+                const parentNode = codeBlock.parentNode;
+                if (parentNode) {
+                  parentNode.insertBefore(label, codeBlock);
+                }
+                const codeBlockElement = codeBlock as HTMLElement;
+                console.log(`✅ Language tab created: ${language}`);
+              }
+            });
+          }
+        });
+      });
+    });
+
+    const editorElement = editor.getRootElement();
+    if (editorElement) {
+      observer.observe(editorElement, {
+        childList: true,
+        subtree: true
+      });
+      
+      // Process existing code blocks
+      setTimeout(() => {
+        const existingCodeBlocks = editorElement.querySelectorAll('.editor-code[data-language]');
+        console.log(`🔍 Processing ${existingCodeBlocks.length} existing code blocks`);
+        
+        existingCodeBlocks.forEach((codeBlock) => {
+          const language = codeBlock.getAttribute('data-language');
+          if (language && !codeBlock.previousElementSibling?.classList.contains('code-language-label-react')) {
+            console.log(`🏷️ Creating sibling label for existing: ${language}`);
+            
+            const label = document.createElement('div');
+            label.className = 'code-language-label-react';
+            label.setAttribute('data-language', language);
+            label.textContent = language.toUpperCase();
+            label.style.cssText = `
+              display: block !important;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+              color: white !important;
+              padding: 4px 8px !important;
+              font-size: 11px !important;
+              font-weight: 600 !important;
+              border-radius: 4px 4px 0 0 !important;
+              text-transform: uppercase !important;
+              font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace !important;
+              line-height: 1 !important;
+              letter-spacing: 0.5px !important;
+              user-select: none !important;
+              pointer-events: none !important;
+              box-sizing: border-box !important;
+              white-space: nowrap !important;
+              width: fit-content !important;
+              margin: 0 0 -1px 0 !important;
+            `;
+            
+            // Insert the label before the code block as a sibling
+            const parentNode = codeBlock.parentNode;
+            if (parentNode) {
+              parentNode.insertBefore(label, codeBlock);
+            }
+            const codeBlockElement = codeBlock as HTMLElement;
+            console.log(`✅ Language tab created for existing: ${language}`);
+          }
+        });
+      }, 100);
+    }
+
+    return () => {
+      observer.disconnect();
+      const styleToRemove = document.getElementById('lexical-syntax-highlighting');
+      if (styleToRemove) {
+        styleToRemove.remove();
+      }
+    };
+  }, [editor, darkMode]);
+
+  return null;
+}
+
+// Helper function to extract language from code content or detect common patterns
+function extractLanguageFromCode(content: string): string | null {
+  if (!content || content.trim().length === 0) return null;
+  
+  const trimmedContent = content.trim();
+  
+  // Enhanced language detection with more specific patterns
+  
+  // Python
+  if (/(^|\n)(def |class |import |from \w+|if __name__)/m.test(trimmedContent) || 
+      trimmedContent.includes('print(') || trimmedContent.includes('elif ')) {
+    return 'python';
+  }
+  
+  // JavaScript/TypeScript
+  if (/(^|\n)(function |const |let |var |class )/m.test(trimmedContent) ||
+      trimmedContent.includes('console.log') || trimmedContent.includes('=>') ||
+      trimmedContent.includes('interface ') || trimmedContent.includes('type ')) {
+    return trimmedContent.includes('interface ') || trimmedContent.includes('type ') ? 'typescript' : 'javascript';
+  }
+  
+  // Java
+  if (/(^|\n)(public class|private |import java)/m.test(trimmedContent) ||
+      trimmedContent.includes('System.out.print')) {
+    return 'java';
+  }
+  
+  // C/C++
+  if (/(^|\n)(#include|int main|void |using namespace)/m.test(trimmedContent) ||
+      trimmedContent.includes('printf(') || trimmedContent.includes('std::')) {
+    return 'cpp';
+  }
+  
+  // PHP
+  if (trimmedContent.includes('<?php') || trimmedContent.includes('<?=') ||
+      /(^|\n)(\$\w+|echo |function )/m.test(trimmedContent)) {
+    return 'php';
+  }
+  
+  // Go
+  if (/(^|\n)(package |func |import "|var |type )/m.test(trimmedContent) ||
+      trimmedContent.includes('fmt.Print')) {
+    return 'go';
+  }
+  
+  // Rust
+  if (/(^|\n)(fn |let mut|use |mod |impl )/m.test(trimmedContent) ||
+      trimmedContent.includes('println!')) {
+    return 'rust';
+  }
+  
+  // SQL
+  if (/(^|\n)?(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\s/im.test(trimmedContent)) {
+    return 'sql';
+  }
+  
+  // HTML
+  if (/(^|\n)?<\/?\w+(\s|>)/m.test(trimmedContent) || 
+      trimmedContent.includes('<!DOCTYPE')) {
+    return 'html';
+  }
+  
+  // CSS
+  if (/(^|\n)?[\w-]+\s*:\s*[^;]+;/m.test(trimmedContent) ||
+      /(^|\n)?[.#]?[\w-]+\s*{/m.test(trimmedContent)) {
+    return 'css';
+  }
+  
+  // Shell/Bash
+  if (trimmedContent.startsWith('#!/bin/bash') || trimmedContent.startsWith('#!/bin/sh') ||
+      /(^|\n)(echo |cd |ls |mkdir |chmod )/m.test(trimmedContent)) {
+    return 'bash';
+  }
+  
+  // Docker
+  if (/(^|\n)(FROM |RUN |COPY |ADD |ENV |WORKDIR )/m.test(trimmedContent)) {
+    return 'dockerfile';
+  }
+  
+  // YAML/YML
+  if (/(^|\n)[\w-]+:\s*(\S|$)/m.test(trimmedContent) && 
+      (trimmedContent.includes('apiVersion:') || trimmedContent.includes('kind:') || 
+       trimmedContent.includes('metadata:') || trimmedContent.includes('---'))) {
+    return 'yaml';
+  }
+  
+  // JSON
+  if (/(^|\n)?\s*[{\[]/.test(trimmedContent) && 
+      (trimmedContent.includes('":') || trimmedContent.includes('",'))) {
+    return 'json';
+  }
+  
+  // XML
+  if (/(^|\n)?<\?xml/m.test(trimmedContent) || 
+      (trimmedContent.includes('</') && trimmedContent.includes('/>'))) {
+    return 'xml';
+  }
+  
+  // Markdown
+  if (/(^|\n)(#{1,6}\s|```|\*\*|\*|~~)/m.test(trimmedContent)) {
+    return 'markdown';
+  }
+  
+  return null;
+}
+
 const onError = (error: Error) => {
   console.error('Lexical Error:', error);
 };
@@ -153,8 +484,8 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
 }) => {
   // Debug log to verify Lexical editor is being used
   useEffect(() => {
-    console.log('🎯 Lexical Editor mounted! Dark mode:', darkMode);
-  }, [darkMode]);
+    console.log('🎯 Lexical Editor mounted! Dark mode:', darkMode, 'Parse markdown:', parseMarkdown);
+  }, [darkMode, parseMarkdown]);
 
   // Track initial load state
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -288,8 +619,11 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           fontSize: '13px',
           color: darkMode ? '#ffffff' : '#000000',
           display: 'block',
-          margin: '8px 0',
+          margin: '24px 0 8px 0', // Always leave room for label
+          position: 'relative',
+          overflow: 'auto',
         },
+        // Note: Language labels are now handled via global CSS injection in CodeLanguagePlugin
         '& .editor-text-bold': {
           fontWeight: 'bold',
         },
@@ -339,6 +673,8 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         <HistoryPlugin />
         <AutoFocusPlugin />
         <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
+        <CodeHighlightPlugin />
+        <CodeLanguagePlugin darkMode={darkMode} />
         <UpdatePlugin value={value} initialLoad={isInitialLoad} parseMarkdown={parseMarkdown} />
       </LexicalComposer>
       </Box>
