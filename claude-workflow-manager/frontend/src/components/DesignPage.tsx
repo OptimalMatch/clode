@@ -53,7 +53,6 @@ import {
   LightMode,
   RateReview,
   Visibility,
-  Article,
   Assessment,
   CallSplit,
 } from '@mui/icons-material';
@@ -155,7 +154,6 @@ const DesignPage: React.FC = () => {
     }>;
   } | null>(null);
   const [selectedReviewIndex, setSelectedReviewIndex] = useState(0);
-  const [reviewMarkdownView, setReviewMarkdownView] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -721,7 +719,6 @@ const DesignPage: React.FC = () => {
         }]
       });
       setSelectedReviewIndex(0);
-      setReviewMarkdownView(false);
       setReviewModalOpen(true);
       return;
     }
@@ -749,7 +746,6 @@ const DesignPage: React.FC = () => {
         setSelectedReviewIndex(0);
       }
       
-      setReviewMarkdownView(false); // Reset to raw view when opening
       setReviewModalOpen(true);
     } catch (error) {
       console.error('Error fetching review files:', error);
@@ -761,7 +757,6 @@ const DesignPage: React.FC = () => {
         }]
       });
       setSelectedReviewIndex(0);
-      setReviewMarkdownView(false);
       setReviewModalOpen(true);
     }
   };
@@ -1828,109 +1823,24 @@ const DesignPage: React.FC = () => {
                 </Select>
               </FormControl>
             )}
-            {/* View toggle buttons */}
-            <IconButton
-              onClick={() => setReviewMarkdownView(false)}
-              size="small"
-              sx={{ 
-                color: !reviewMarkdownView ? 'primary.main' : (darkMode ? 'grey.400' : 'grey.600'),
-                backgroundColor: !reviewMarkdownView ? (darkMode ? 'primary.dark' : 'primary.light') : 'transparent'
-              }}
-            >
-              <Code />
-            </IconButton>
-            <IconButton
-              onClick={() => setReviewMarkdownView(true)}
-              size="small"
-              sx={{ 
-                color: reviewMarkdownView ? 'primary.main' : (darkMode ? 'grey.400' : 'grey.600'),
-                backgroundColor: reviewMarkdownView ? (darkMode ? 'primary.dark' : 'primary.light') : 'transparent'
-              }}
-            >
-              <Article />
-            </IconButton>
+
           </Box>
         </DialogTitle>
         <DialogContent>
           {selectedReviews && selectedReviews.reviews[selectedReviewIndex] && (
-            <>
-              {reviewMarkdownView ? (
-                <Box
-                  sx={{
-                    minHeight: '500px',
-                    padding: 2,
-                    backgroundColor: darkMode ? '#2a2a2a' : '#f8f8f8',
-                    border: `1px solid ${darkMode ? '#555555' : '#cccccc'}`,
-                    borderRadius: 1,
-                    overflow: 'auto',
-                    maxHeight: '500px',
-                    '& h1': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.5rem', marginBottom: '0.5rem' },
-                    '& h2': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.3rem', marginBottom: '0.5rem' },
-                    '& h3': { color: darkMode ? '#ffffff' : '#000000', fontSize: '1.1rem', marginBottom: '0.5rem' },
-                    '& p': { color: darkMode ? '#ffffff' : '#000000', marginBottom: '0.5rem' },
-                    '& strong': { fontWeight: 'bold' },
-                    '& em': { fontStyle: 'italic' },
-                    '& code': { 
-                      backgroundColor: darkMode ? '#1a1a1a' : '#e0e0e0',
-                      color: darkMode ? '#ff6b6b' : '#d32f2f',
-                      padding: '0.2rem 0.4rem',
-                      borderRadius: '3px',
-                      fontFamily: 'monospace'
-                    },
-                    '& pre': {
-                      backgroundColor: darkMode ? '#1a1a1a' : '#e0e0e0',
-                      padding: '1rem',
-                      borderRadius: '4px',
-                      overflow: 'auto',
-                      '& code': {
-                        backgroundColor: 'transparent',
-                        color: darkMode ? '#ffffff' : '#000000',
-                        padding: 0
-                      }
-                    },
-                    '& ul': { paddingLeft: '1.5rem', marginBottom: '0.5rem' },
-                    '& li': { color: darkMode ? '#ffffff' : '#000000', marginBottom: '0.2rem' }
-                  }}
-                  dangerouslySetInnerHTML={{ 
-                    __html: renderMarkdown(selectedReviews.reviews[selectedReviewIndex].content || '') 
-                  }}
-                />
-              ) : (
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={20}
-                  value={selectedReviews.reviews[selectedReviewIndex].content || ''}
-                  variant="outlined"
-                  InputProps={{
-                    readOnly: true,
-                    sx: {
-                      backgroundColor: darkMode ? '#2a2a2a' : '#f8f8f8',
-                      color: darkMode ? '#ffffff' : '#000000',
-                      fontFamily: 'monospace',
-                      fontSize: '14px',
-                    },
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      '& fieldset': {
-                        borderColor: darkMode ? '#555555' : '#cccccc',
-                      },
-                    },
-                    '& .MuiOutlinedInput-input': {
-                      color: darkMode ? '#ffffff' : '#000000',
-                      fontFamily: 'monospace',
-                      fontSize: '14px',
-                    },
-                  }}
-                />
-              )}
-            </>
+            <LexicalEditor
+              value={selectedReviews.reviews[selectedReviewIndex].content || ''}
+              onChange={() => {}} // Read-only, no changes needed
+              placeholder="No review content available"
+              darkMode={darkMode}
+              readOnly={true}
+              parseMarkdown={true}
+            />
           )}
         </DialogContent>
         <DialogActions>
           <Typography variant="caption" sx={{ color: darkMode ? '#b0b0b0' : '#666666', mr: 'auto' }}>
-            {reviewMarkdownView ? '📖 Markdown View' : '📝 Raw Text View'}
+            📖 Markdown Content • Rendered with Lexical
             {selectedReviews && selectedReviews.reviews.length > 1 && (
               ` | Review ${selectedReviewIndex + 1} of ${selectedReviews.reviews.length}`
             )}
