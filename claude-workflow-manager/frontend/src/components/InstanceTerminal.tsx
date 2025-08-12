@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   DialogTitle,
   DialogContent,
@@ -12,15 +12,13 @@ import {
   Paper,
 } from '@mui/material';
 import { Pause, PlayArrow, Close, Stop } from '@mui/icons-material';
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import { WebLinksAddon } from 'xterm-addon-web-links';
-import 'xterm/css/xterm.css';
+// Removed xterm dependencies - now using LexicalEditor for rich terminal experience
 
 import { WebSocketMessage, TerminalHistoryEntry } from '../types';
 import { instanceApi } from '../services/api';
 import ReactMarkdown from 'react-markdown';
 import RunnerSprite from './RunnerSprite';
+import LexicalEditor from './LexicalEditor';
 
 interface InstanceTerminalProps {
   instanceId: string;
@@ -31,11 +29,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   instanceId,
   onClose,
 }) => {
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const terminal = useRef<Terminal | null>(null);
-  const fitAddon = useRef<FitAddon | null>(null);
   const ws = useRef<WebSocket | null>(null);
-  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializingRef = useRef(false);
   const stopwatchIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [input, setInput] = useState('');
@@ -45,15 +39,17 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [lastPingTime, setLastPingTime] = useState<Date | null>(null);
   const [wsReadyState, setWsReadyState] = useState<number | null>(null);
-  const [markdownContent, setMarkdownContent] = useState<string | null>(null);
-  const [markdownFullWidth, setMarkdownFullWidth] = useState(false);
+  const [terminalContent, setTerminalContent] = useState<string>('');
   const [copySuccess, setCopySuccess] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
+  const lexicalRef = useRef<HTMLDivElement>(null);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
   const [processStartTime, setProcessStartTime] = useState<number | null>(null);
   const [isProcessRunning, setIsProcessRunning] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [currentTodos, setCurrentTodos] = useState<Array<{id: string, content: string, status: string, priority?: string}>>([]);
+  const [lastContent, setLastContent] = useState<string | null>(null);
 
   // Helper functions
   const parseTodosFromMessage = (content: string) => {
@@ -123,74 +119,20 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     }
   };
 
-  const detectAndExtractMarkdown = (content: string): { hasMarkdown: boolean; markdown: string; plainText: string } => {
-    // First check for wrapped markdown blocks
-    const wrappedMarkdownRegex = /```markdown\n([\s\S]*?)\n```/g;
-    const wrappedMatch = wrappedMarkdownRegex.exec(content);
+  const appendToTerminal = useCallback((content: string) => {
+    console.log('📝 Appending content to terminal:', content.substring(0, 100) + '...');
     
-    if (wrappedMatch) {
-      return {
-        hasMarkdown: true,
-        markdown: wrappedMatch[1],
-        plainText: content.replace(wrappedMarkdownRegex, '[Markdown content detected - displaying formatted version]')
-      };
-    }
+    setTerminalContent(prev => {
+      // Add a newline between entries for better formatting
+      const separator = prev ? '\n\n' : '';
+      return prev + separator + content;
+    });
     
-    // Skip markdown detection for short streaming messages
-    const cleanContent = content.replace(/^💬\s*/, '').trim(); // Remove emoji prefix
-    
-    // Don't trigger markdown for short messages (likely status/progress updates)
-    if (cleanContent.length < 200) {
-      return {
-        hasMarkdown: false,
-        markdown: '',
-        plainText: content
-      };
-    }
-    
-    // Skip markdown for obvious status messages with emojis and short text
-    const isStatusMessage = /^[🚀🔧💬👤✅❌📋🔍📂💻📖🔄✍️].{0,100}(\*\*.*?\*\*).{0,100}$/.test(cleanContent);
-    if (isStatusMessage) {
-      return {
-        hasMarkdown: false,
-        markdown: '',
-        plainText: content
-      };
-    }
-    
-    // Look for common markdown patterns
-    const hasHeaders = /^#{1,6}\s+.+$/m.test(cleanContent);
-    const hasLists = /^[\s]*[-*+]\s+.+$/m.test(cleanContent);
-    const hasNumberedLists = /^[\s]*\d+\.\s+.+$/m.test(cleanContent);
-    const hasCodeBlocks = /```[\s\S]*?```/.test(cleanContent);
-    const hasLinks = /\[.+?\]\(.+?\)/.test(cleanContent);
-    const hasBold = /\*\*.+?\*\*/.test(cleanContent);
-    const hasItalic = /\*.+?\*/.test(cleanContent);
-    const hasBlockquotes = /^>\s+.+$/m.test(cleanContent);
-    
-    // Consider it markdown if it has multiple markdown features AND is substantial content
-    const markdownFeatures = [hasHeaders, hasLists, hasNumberedLists, hasCodeBlocks, hasLinks, hasBold, hasItalic, hasBlockquotes];
-    const featureCount = markdownFeatures.filter(Boolean).length;
-    
-    // Require more features for shorter content, or substantial content with headers
-    const isSubstantialMarkdown = (featureCount >= 3 && cleanContent.length > 300) || 
-                                  (hasHeaders && cleanContent.length > 800) ||
-                                  (hasCodeBlocks && cleanContent.length > 400);
-    
-    if (isSubstantialMarkdown) {
-      return {
-        hasMarkdown: true,
-        markdown: cleanContent,
-        plainText: `📋 Markdown content detected - displaying formatted version\n\n${cleanContent.substring(0, 200)}...`
-      };
-    }
-    
-    return {
-      hasMarkdown: false,
-      markdown: '',
-      plainText: content
-    };
-  };
+    // Debounce force updates to reduce re-renders
+    setTimeout(() => {
+      setForceUpdate(prev => prev + 1);
+    }, 50); // Small delay to batch multiple rapid updates
+  }, []);
 
   // Function to check if content is a TODO message that should be filtered from terminal
   const isTodoMessage = (content: string): boolean => {
@@ -208,84 +150,41 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const writeContentToTerminal = (content: string) => {
     console.log('📝 writeContentToTerminal called, isWaitingForResponse:', isWaitingForResponse, 'intervalRef:', !!stopwatchIntervalRef.current);
     
+    // Store the last content for manual viewing
+    setLastContent(content);
+    
     // Always stop the stopwatch if interval is running (first content received)
     if (stopwatchIntervalRef.current) {
       console.log('🛑 Stopping stopwatch interval due to content received');
       clearInterval(stopwatchIntervalRef.current);
       stopwatchIntervalRef.current = null;
       
-      // Clear the timer line
-      if (terminal.current) {
-        terminal.current.write('\r\x1b[K');
-      }
-      
       // Update state
       setIsWaitingForResponse(false);
       setResponseStartTime(null);
     }
     
-    const { hasMarkdown, markdown, plainText } = detectAndExtractMarkdown(content);
-    
-    if (terminal.current) {
-      if (hasMarkdown) {
-        // Show simplified terminal message and set markdown for inline display
-        terminal.current.writeln('\x1b[36m📋 Markdown content detected - displaying formatted view below:\x1b[0m');
-        setMarkdownContent(markdown);
-        setMarkdownFullWidth(false); // Start in split mode
-        setCopySuccess(false); // Reset copy state
-        // Recalculate terminal size after layout change
-        setTimeout(() => {
-          if (fitAddon.current && terminal.current) {
-            try {
-              fitAddon.current.fit();
-              console.log('🔧 Terminal resized for markdown split layout');
-            } catch (error) {
-              console.warn('⚠️ Failed to resize terminal for split layout:', error);
-            }
-          }
-        }, 100);
-      } else {
-        // Regular content, clear any previous markdown
-        terminal.current.writeln(plainText);
-        const previouslyHadMarkdown = markdownContent !== null;
-        setMarkdownContent(null);
-        setMarkdownFullWidth(false);
-        setCopySuccess(false);
-        
-        // Recalculate terminal size if we just cleared markdown (layout change)
-        if (previouslyHadMarkdown) {
-          setTimeout(() => {
-            if (fitAddon.current && terminal.current) {
-              try {
-                fitAddon.current.fit();
-                console.log('🔧 Terminal resized back to full width');
-              } catch (error) {
-                console.warn('⚠️ Failed to resize terminal to full width:', error);
-              }
-            }
-          }, 100);
-        }
-      }
-    }
+    // Simply append all content to the LexicalEditor
+    appendToTerminal(content);
   };
 
-  const handleCopyMarkdown = async () => {
-    if (markdownContent) {
+  const handleCopyContent = async () => {
+    if (terminalContent) {
       try {
-        await navigator.clipboard.writeText(markdownContent);
+        await navigator.clipboard.writeText(terminalContent);
         setCopySuccess(true);
-        console.log('📋 Markdown content copied to clipboard');
+        console.log('📋 Terminal content copied to clipboard');
         
         // Reset success state after 2 seconds
         setTimeout(() => {
           setCopySuccess(false);
         }, 2000);
       } catch (error) {
-        console.error('❌ Failed to copy markdown to clipboard:', error);
+        console.error('❌ Failed to copy content to clipboard:', error);
         // Fallback for older browsers
         try {
           const textArea = document.createElement('textarea');
-          textArea.value = markdownContent;
+          textArea.value = terminalContent;
           document.body.appendChild(textArea);
           textArea.select();
           document.execCommand('copy');
@@ -299,6 +198,13 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         }
       }
     }
+  };
+
+  const handleClearTerminal = () => {
+    console.log('🧹 Clearing terminal content');
+    setTerminalContent('');
+    setCopySuccess(false);
+    setForceUpdate(prev => prev + 1);
   };
 
   const stopStopwatch = () => {
@@ -318,11 +224,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       setIsWaitingForResponse(false);
       setResponseStartTime(null);
       
-      if (terminal.current) {
-        // Clear the timer line and show error completion
-        terminal.current.write('\r\x1b[K');
-        terminal.current.writeln(`\x1b[33m⏱️  Stopped after ${finalTime.toFixed(1)}s (due to error)\x1b[0m`);
-      }
+      // Show error completion in the LexicalEditor terminal
+      appendToTerminal(`⏱️ **Stopped after ${finalTime.toFixed(1)}s (due to error)**`);
     }
   };
 
@@ -356,153 +259,94 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       
       console.log(`📜 Found ${history.length} terminal history entries`);
       
-      if (terminal.current) {
-        terminal.current.writeln('\x1b[90m--- Previous Session History ---\x1b[0m');
+      // Build history content for LexicalEditor
+      let historyContent = '**--- Previous Session History ---**\n\n';
+      
+      history.forEach((entry) => {
+        let prefix = '';
         
-        history.forEach((entry) => {
-          let color = '';
-          
-          switch (entry.type) {
-            case 'input':
-              color = '\x1b[36m'; // Cyan for input
-              break;
-            case 'output':
-              color = '\x1b[37m'; // White for output  
-              break;
-            case 'error':
-              color = '\x1b[31m'; // Red for errors
-              break;
-            case 'system':
-              color = '\x1b[33m'; // Yellow for system
-              break;
-            default:
-              color = '\x1b[37m'; // Default white
-          }
-          
-          // Process content for markdown detection (show plain text for history)
-          const { hasMarkdown, plainText } = detectAndExtractMarkdown(entry.content);
-          terminal.current?.writeln(`${color}${plainText}\x1b[0m`);
-          
-          if (hasMarkdown) {
-            terminal.current?.writeln('\x1b[36m📋 [This message contained markdown content]\x1b[0m');
-          }
-        });
+        switch (entry.type) {
+          case 'input':
+            prefix = '> '; // Command input
+            break;
+          case 'output':
+            prefix = ''; // Regular output
+            break;
+          case 'error':
+            prefix = '❌ '; // Error
+            break;
+          case 'system':
+            prefix = '📊 '; // System message
+            break;
+          default:
+            prefix = '';
+        }
         
-        terminal.current.writeln('\x1b[90m--- End History ---\x1b[0m\r\n');
-        console.log('📜 Terminal history loaded successfully');
-      }
+        historyContent += `${prefix}${entry.content}\n\n`;
+      });
+      
+      historyContent += '**--- End History ---**';
+      
+      // Set the history as initial terminal content (only on first load)
+      setTerminalContent(prev => prev ? prev + '\n\n' + historyContent : historyContent);
+      console.log('📜 Terminal history loaded successfully');
     } catch (error) {
       console.error('❌ Failed to load terminal history:', error);
-      if (terminal.current) {
-        terminal.current.writeln('\x1b[31m⚠️ Failed to load previous session history\x1b[0m\r\n');
-      }
+      appendToTerminal('⚠️ **Failed to load previous session history**');
     }
   };
 
   useEffect(() => {
-    if (!terminalRef.current) {
-      console.log('⏳ Terminal ref not ready, waiting...');
-      return;
-    }
-
-    // Prevent concurrent initialization attempts
-    if (isInitializingRef.current) {
-      console.log('⏭️ Terminal initialization already in progress, skipping...');
-      return;
-    }
-
-    // Check if terminal is already initialized and functional
-    if (terminal.current && terminalRef.current.querySelector('.xterm')) {
-      console.log('⏭️ Terminal already initialized (found .xterm in DOM), skipping...');
-      return;
-    }
-
-    isInitializingRef.current = true;
-    console.log('🖥️ Initializing terminal...');
-    console.log('📐 Terminal container dimensions:', {
-      width: terminalRef.current.offsetWidth,
-      height: terminalRef.current.offsetHeight,
-      clientWidth: terminalRef.current.clientWidth,
-      clientHeight: terminalRef.current.clientHeight
-    });
-
-    // Initialize terminal with safe defaults
-    terminal.current = new Terminal({
-      cursorBlink: true,
-      fontSize: 14,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      cols: 80,
-      rows: 24,
-      theme: {
-        background: '#1a1a1a',
-        foreground: '#ffffff',
-      },
-      convertEol: true,
-    });
-
-    // Initialize fitAddon
-    fitAddon.current = new FitAddon();
-    let stateMonitor: NodeJS.Timeout | null = null;
+    console.log('🚀 Initializing LexicalEditor terminal with WebSocket connection...');
     
-    try {
-      console.log('🔌 Loading terminal addons...');
-      terminal.current.loadAddon(fitAddon.current);
-      terminal.current.loadAddon(new WebLinksAddon());
+    const initializeWebSocket = () => {
+      console.log('🌐 Starting WebSocket connection...');
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname;
+      const port = process.env.REACT_APP_WS_PORT || '8000';
+      const wsUrl = process.env.REACT_APP_WS_URL || `${protocol}//${host}:${port}`;
       
-      // Function to initialize WebSocket after terminal is ready
-      const initializeWebSocket = () => {
-        console.log('🌐 Starting WebSocket connection...');
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.hostname;
-        const port = process.env.REACT_APP_WS_PORT || '8000';
-        const wsUrl = process.env.REACT_APP_WS_URL || `${protocol}//${host}:${port}`;
-        
-        console.log('🔌 Attempting WebSocket connection to:', `${wsUrl}/ws/${instanceId}`);
-        
-        setConnectionStatus('connecting');
-        if (terminal.current) {
-          terminal.current.writeln('\x1b[33m🔌 Connecting to Claude Code instance...\x1b[0m');
+      console.log('🔌 Attempting WebSocket connection to:', `${wsUrl}/ws/${instanceId}`);
+      
+      setConnectionStatus('connecting');
+      appendToTerminal('🔌 **Connecting to Claude Code instance...**');
+      
+      ws.current = new WebSocket(`${wsUrl}/ws/${instanceId}`);
+      
+      // Monitor WebSocket state changes
+      const stateMonitor = setInterval(() => {
+        if (ws.current) {
+          setWsReadyState(ws.current.readyState);
+          console.log('📡 WebSocket ReadyState:', ws.current.readyState, getReadyStateText(ws.current.readyState));
         }
-        
-        ws.current = new WebSocket(`${wsUrl}/ws/${instanceId}`);
-        
-        // Monitor WebSocket state changes
-        stateMonitor = setInterval(() => {
-          if (ws.current) {
-            setWsReadyState(ws.current.readyState);
-            console.log('📡 WebSocket ReadyState:', ws.current.readyState, getReadyStateText(ws.current.readyState));
-          }
-        }, 1000);
+      }, 1000);
 
-        ws.current.onopen = () => {
-          console.log('✅ WebSocket connected successfully!');
+      ws.current.onopen = () => {
+        console.log('✅ WebSocket connected successfully!');
+        
+        // Mark initialization as complete
+        isInitializingRef.current = false;
+        
+        setIsConnected(true);
+        setConnectionStatus('connected');
+        setLastPingTime(new Date());
+        
+        // Add connection info to the LexicalEditor terminal
+        appendToTerminal(`✅ **Connected to Claude Code instance!**\n🔗 Connection URL: ${wsUrl}/ws/${instanceId}\n⏰ Timestamp: ${new Date().toLocaleTimeString()}\n📖 **Enhanced terminal powered by LexicalEditor** - All content displays with rich formatting!`);
+        
+        // Load and display terminal history
+        loadTerminalHistory();
+        
+        // Load last todos if they exist
+        loadLastTodos();
+      };
           
-          // Mark initialization as complete
-          isInitializingRef.current = false;
-          
-          setIsConnected(true);
-          setConnectionStatus('connected');
-          setLastPingTime(new Date());
-          
-          if (terminal.current) {
-            terminal.current.writeln('\x1b[32m✅ Connected to Claude Code instance!\x1b[0m');
-            terminal.current.writeln(`\x1b[36mConnection URL: ${wsUrl}/ws/${instanceId}\x1b[0m`);
-            terminal.current.writeln(`\x1b[36mTimestamp: ${new Date().toLocaleTimeString()}\x1b[0m\r\n`);
-            
-            // Load and display terminal history
-            loadTerminalHistory();
-            
-            // Load last todos if they exist
-            loadLastTodos();
-          }
-          
-          // Send a ping to test the connection
-          setTimeout(() => {
-            if (ws.current?.readyState === WebSocket.OPEN) {
-              ws.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-            }
-          }, 100);
-        };
+      // Send a ping to test the connection
+      setTimeout(() => {
+        if (ws.current?.readyState === WebSocket.OPEN) {
+          ws.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+        }
+      }, 100);
 
         ws.current.onmessage = (event) => {
           console.log('📨 WebSocket message received:', event.data);
@@ -514,7 +358,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             case 'ping':
             case 'pong':
               console.log('🏓 Ping/Pong received - connection alive');
-              terminal.current?.writeln(`\x1b[90m🏓 Connection alive (${new Date().toLocaleTimeString()})\x1b[0m`);
+              appendToTerminal(`🏓 Connection alive (${new Date().toLocaleTimeString()})`);
               break;
             case 'output':
               if (message.content) {
@@ -539,7 +383,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               const execTime = message.execution_time_ms ? `${(message.execution_time_ms / 1000).toFixed(1)}s` : '';
               const tokens = message.tokens_used ? `${message.tokens_used} tokens` : '';
               const info = [execTime, tokens].filter(Boolean).join(', ');
-              terminal.current?.writeln(`\x1b[32m✅ Command completed${info ? ` (${info})` : ''}\x1b[0m`);
+              appendToTerminal(`✅ **Command completed**${info ? ` (${info})` : ''}`);
               
               // Reset process tracking state
               setIsProcessRunning(false);
@@ -549,12 +393,11 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               if (isWaitingForResponse) {
                 stopStopwatch(); // Stop timer on error
               }
-              terminal.current?.writeln(`\x1b[31mError: ${message.error}\x1b[0m`);
+              appendToTerminal(`❌ **Error:** ${message.error}`);
               break;
             case 'status':
               if (message.status === 'running' && message.message) {
-                terminal.current?.writeln(`\x1b[33m🔄 ${message.message}\x1b[0m`);
-                terminal.current?.writeln(`\x1b[36m📡 You are now connected to the live output stream...\x1b[0m\r\n`);
+                appendToTerminal(`🔄 **${message.message}**\n📡 You are now connected to the live output stream...`);
                 
                 // Track process start time for duration display
                 setIsProcessRunning(true);
@@ -564,7 +407,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                   setResponseStartTime(Date.now());
                 }
               } else {
-                terminal.current?.writeln(`\x1b[33mStatus: ${message.status}\x1b[0m`);
+                appendToTerminal(`📊 **Status:** ${message.status}`);
               }
               
               if (message.status === 'paused') {
@@ -579,17 +422,17 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               }
               break;
             case 'interrupted':
-              terminal.current?.writeln(`\x1b[31m⏸️  Instance paused\x1b[0m`);
+              appendToTerminal(`⏸️  **Instance paused**`);
               setIsPaused(true);
               setIsCancelling(false); // Reset cancelling state
               console.log('✅ Interrupt confirmed, reset cancelling state');
               break;
             case 'resumed':
-              terminal.current?.writeln(`\x1b[32m▶️  Instance resumed\x1b[0m`);
+              appendToTerminal(`▶️  **Instance resumed**`);
               setIsPaused(false);
               break;
             case 'step_start':
-              terminal.current?.writeln(`\x1b[36m>>> Starting step: ${message.step?.content?.substring(0, 50)}...\x1b[0m`);
+              appendToTerminal(`🔄 **Starting step:** ${message.step?.content?.substring(0, 50)}...`);
               break;
           }
         };
@@ -607,123 +450,24 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
           setIsCancelling(false); // Reset cancelling state on disconnect
           
           const reasonText = getCloseReasonText(event.code);
-          terminal.current?.writeln(`\r\n\x1b[31m❌ Disconnected from instance\x1b[0m`);
-          terminal.current?.writeln(`\x1b[31mCode: ${event.code} - ${reasonText}\x1b[0m`);
-          terminal.current?.writeln(`\x1b[31mReason: ${event.reason || 'No reason provided'}\x1b[0m`);
-          terminal.current?.writeln(`\x1b[31mTime: ${new Date().toLocaleTimeString()}\x1b[0m`);
+          appendToTerminal(`❌ **Disconnected from instance**\n📊 Code: ${event.code} - ${reasonText}\n📝 Reason: ${event.reason || 'No reason provided'}\n⏰ Time: ${new Date().toLocaleTimeString()}`);
         };
 
         ws.current.onerror = (error) => {
           console.error('WebSocket error:', error);
           isInitializingRef.current = false;
-          terminal.current?.writeln(`\x1b[31m❌ WebSocket connection error\x1b[0m`);
+          appendToTerminal(`❌ **WebSocket connection error**`);
         };
       };
       
-      // Function will be called after terminal opens
-      const attemptFit = (attempt: number = 1) => {
-        if (attempt > 5) {
-          console.warn('⚠️ Terminal fit failed after 5 attempts');
-          initializeWebSocket(); // Initialize websocket even if fit fails
-          return;
-        }
-        
-        setTimeout(() => {
-          if (fitAddon.current && terminal.current && terminalRef.current) {
-            const container = terminalRef.current;
-            if (container.offsetWidth > 0 && container.offsetHeight > 0) {
-              try {
-                console.log(`📏 Fit attempt ${attempt} - container: ${container.offsetWidth}x${container.offsetHeight}`);
-                fitAddon.current.fit();
-                console.log('✅ Terminal fitted successfully');
-                
-                // Now start WebSocket connection after terminal is ready
-                initializeWebSocket();
-              } catch (error) {
-                console.warn(`⚠️ Terminal fit attempt ${attempt} failed:`, error);
-                attemptFit(attempt + 1);
-              }
-            } else {
-              console.log(`⏳ Container not ready (${container.offsetWidth}x${container.offsetHeight}), retrying...`);
-              attemptFit(attempt + 1);
-            }
-          }
-        }, 200 + (100 * attempt)); // Longer initial delay
-      };
-
-      // Wait for container to be fully rendered with computed styles
-      setTimeout(() => {
-        if (!terminal.current || !terminalRef.current) return;
-        
-        console.log('🔗 Opening terminal in DOM element...');
-        console.log('📐 Final container check:', {
-          offsetWidth: terminalRef.current.offsetWidth,
-          offsetHeight: terminalRef.current.offsetHeight,
-          clientWidth: terminalRef.current.clientWidth,
-          clientHeight: terminalRef.current.clientHeight,
-          scrollWidth: terminalRef.current.scrollWidth,
-          scrollHeight: terminalRef.current.scrollHeight
-        });
-        
-        try {
-          terminal.current.open(terminalRef.current);
-          console.log('✅ Terminal opened successfully');
-          
-          // Write initial message immediately
-          terminal.current.writeln('\x1b[36m🔌 Terminal initialized, connecting...\x1b[0m');
-          
-          // Start the fitting process
-          attemptFit();
-        } catch (openError) {
-          console.error('❌ Terminal open error:', openError);
-        }
-      }, 100);
-      
-    } catch (error) {
-      console.error('❌ Terminal initialization error:', error);
-      isInitializingRef.current = false;
-      return;
-    }
-
-    // Handle window resize with debouncing
-    const handleResize = () => {
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      resizeTimeoutRef.current = setTimeout(() => {
-        if (fitAddon.current && terminal.current && terminalRef.current) {
-          try {
-            fitAddon.current.fit();
-          } catch (error) {
-            console.warn('⚠️ Terminal resize error (non-critical):', error);
-          }
-        }
-      }, 100);
-    };
-    window.addEventListener('resize', handleResize);
+      // Start WebSocket connection immediately
+      initializeWebSocket();
 
     return () => {
-      console.log('🧹 Cleaning up terminal component...');
+      console.log('🧹 Cleaning up LexicalEditor terminal component...');
       
       // Reset initialization flag
       isInitializingRef.current = false;
-      
-      window.removeEventListener('resize', handleResize);
-      
-      if (stateMonitor) {
-        clearInterval(stateMonitor);
-      }
-      
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-        resizeTimeoutRef.current = null;
-      }
-      
-      if (terminal.current) {
-        console.log('🗑️ Disposing terminal...');
-        terminal.current.dispose();
-        terminal.current = null;
-      }
       
       if (ws.current) {
         console.log('🔌 Closing WebSocket connection');
@@ -731,80 +475,102 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         ws.current = null;
       }
       
-      if (fitAddon.current) {
-        fitAddon.current = null;
-      }
-      
-      // Clean up stopwatch state
+      // Clean up all timers and intervals
       if (stopwatchIntervalRef.current) {
         clearInterval(stopwatchIntervalRef.current);
         stopwatchIntervalRef.current = null;
       }
+      
+      // Note: Individual timeout cleanup is handled by each useEffect cleanup
+      // No need for aggressive timeout clearing as each effect manages its own
+      
+      // Reset all states to prevent memory leaks
       setIsWaitingForResponse(false);
       setResponseStartTime(null);
       setIsProcessRunning(false);
       setProcessStartTime(null);
+      setTerminalContent('');
+      setCurrentTodos([]);
     };
   }, [instanceId]);
 
-  // Handle window resize to recalculate terminal dimensions
+  // Debounced auto-scroll effect when terminal content changes
   useEffect(() => {
-    const handleResize = () => {
-      if (fitAddon.current && terminal.current) {
-        try {
-          fitAddon.current.fit();
-          console.log('🔧 Terminal resized due to window resize');
-        } catch (error) {
-          console.warn('⚠️ Failed to resize terminal on window resize:', error);
+    if (!terminalContent) return;
+
+    // Debounce scroll operations to avoid excessive scrolling during rapid updates
+    const scrollTimeout = setTimeout(() => {
+      // Use requestAnimationFrame for smooth scrolling
+      requestAnimationFrame(() => {
+        if (lexicalRef.current) {
+          // Try multiple selectors to find the scrollable container
+          const scrollContainer = 
+            lexicalRef.current.querySelector('[data-lexical-editor="true"]') ||
+            lexicalRef.current.querySelector('.editor-paragraph')?.parentElement ||
+            lexicalRef.current.querySelector('[contenteditable]') ||
+            lexicalRef.current.firstElementChild;
+          
+          if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+            scrollContainer.scrollTo({
+              top: scrollContainer.scrollHeight,
+              behavior: 'smooth'
+            });
+            console.log('📜 Smooth auto-scrolled to bottom');
+          } else {
+            // Fallback: scroll the outer container
+            lexicalRef.current.scrollTo({
+              top: lexicalRef.current.scrollHeight,
+              behavior: 'smooth'
+            });
+            console.log('📜 Smooth auto-scrolled outer container');
+          }
         }
+      });
+    }, 200); // Longer delay to batch scroll operations
+
+    return () => clearTimeout(scrollTimeout);
+  }, [terminalContent]); // Remove forceUpdate dependency to reduce triggers
+
+  // ESC key handler for cancellation
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isWaitingForResponse && !isCancelling) {
+        console.log('⌨️ ESC key pressed - cancelling execution');
+        event.preventDefault();
+        handleInterrupt();
       }
     };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    // Add event listener to document
+    document.addEventListener('keydown', handleKeyDown);
 
-  // Handle markdown view mode changes
-  useEffect(() => {
-    if (fitAddon.current && terminal.current) {
-      // Resize terminal when switching view modes
-      setTimeout(() => {
-        try {
-          if (fitAddon.current && !markdownFullWidth) {
-            // Only fit when terminal is visible
-            fitAddon.current.fit();
-            console.log('🔧 Terminal resized due to markdown view mode change');
-          }
-        } catch (error) {
-          console.warn('⚠️ Failed to resize terminal on view mode change:', error);
-        }
-      }, 150); // Slightly longer delay to ensure layout changes are complete
-    }
-  }, [markdownFullWidth]);
+    // Cleanup
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isWaitingForResponse, isCancelling]); // Dependencies to ensure latest state
 
-  // Stopwatch effect
+  // Optimized stopwatch effect - less frequent updates to reduce performance impact
   useEffect(() => {
     if (isWaitingForResponse && responseStartTime && !stopwatchIntervalRef.current) {
-      console.log('🕐 Starting stopwatch timer');
+      console.log('🕐 Starting background stopwatch timer');
       
       stopwatchIntervalRef.current = setInterval(() => {
-        const now = Date.now();
-        const elapsed = Math.floor((now - responseStartTime) / 100) / 10; // Update every 100ms, show 1 decimal
-        
-        // Check if interval should still be running
         if (!stopwatchIntervalRef.current) {
           console.log('⚠️ Interval cleared during execution');
           return;
         }
         
-        // Update terminal with current elapsed time - properly clear and rewrite the line
-        if (terminal.current) {
-          const statusText = isProcessRunning ? 'Process running' : 'Waiting for response';
-          terminal.current.write('\r\x1b[K\x1b[33m⏱️  ' + statusText + '... ' + elapsed.toFixed(1) + 's\x1b[0m');
+        const now = Date.now();
+        const elapsed = (now - responseStartTime) / 1000;
+        
+        // Only log every 5 seconds to reduce console noise
+        if (elapsed % 5 < 3) {
+          console.log(`⏱️ Process running: ${elapsed.toFixed(0)}s`);
         }
-      }, 100);
+      }, 3000); // Much less frequent updates (every 3 seconds)
     } else if (!isWaitingForResponse && stopwatchIntervalRef.current) {
-      console.log('🛑 Stopping stopwatch timer, isWaitingForResponse:', isWaitingForResponse);
+      console.log('🛑 Stopping stopwatch timer');
       clearInterval(stopwatchIntervalRef.current);
       stopwatchIntervalRef.current = null;
     }
@@ -816,7 +582,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         stopwatchIntervalRef.current = null;
       }
     };
-  }, [isWaitingForResponse, responseStartTime, isProcessRunning]);
+  }, [isWaitingForResponse, responseStartTime]); // Remove isProcessRunning to reduce re-triggers
 
   const handleSend = () => {
     if (!input.trim()) {
@@ -824,13 +590,13 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       return;
     }
     
-    // Clear previous markdown content when sending new command
-    const previouslyHadMarkdown = markdownContent !== null;
-    setMarkdownContent(null);
-    setMarkdownFullWidth(false);
+    // Reset states but keep terminal content (preserve history)
     setCopySuccess(false);
     // Clear previous TODOs when starting a new command
     setCurrentTodos([]);
+    // Clear last content
+    setLastContent(null);
+    // Don't clear terminal content - we want to preserve history!
     
     // Reset stopwatch state in case there was a previous hanging request
     if (isWaitingForResponse) {
@@ -847,38 +613,21 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     setIsProcessRunning(false);
     setProcessStartTime(null);
     
-    // Recalculate terminal size if we just cleared markdown (layout change)
-    if (previouslyHadMarkdown) {
-      setTimeout(() => {
-        if (fitAddon.current && terminal.current) {
-          try {
-            fitAddon.current.fit();
-            console.log('🔧 Terminal resized back to full width on new command');
-          } catch (error) {
-            console.warn('⚠️ Failed to resize terminal on new command:', error);
-          }
-        }
-      }, 100);
-    }
-    
     if (ws.current?.readyState !== WebSocket.OPEN) {
       console.warn('❌ Cannot send - WebSocket not ready:', {
         readyState: ws.current?.readyState,
         readyStateText: ws.current ? getReadyStateText(ws.current.readyState) : 'null'
       });
-      if (terminal.current) {
-        terminal.current.writeln(`\x1b[31m❌ Cannot send - connection not ready (${ws.current ? getReadyStateText(ws.current.readyState) : 'disconnected'})\x1b[0m`);
-      }
+      appendToTerminal(`❌ **Cannot send - connection not ready** (${ws.current ? getReadyStateText(ws.current.readyState) : 'disconnected'})`);
       return;
     }
 
     try {
       console.log('📤 Sending input:', input);
       ws.current.send(JSON.stringify({ type: 'input', content: input }));
-      if (terminal.current) {
-        terminal.current.writeln(`\x1b[32m> ${input}\x1b[0m`);
-        terminal.current.write(`\x1b[33m⏱️  Waiting for response... 0.0s\x1b[0m`);
-      }
+      
+      // Add separator for new command session and show command
+      appendToTerminal(`---\n\n> **${input}**\n⏱️ Waiting for response... *(Press ESC to cancel)*`);
       
       // Start stopwatch
       console.log('🚀 Starting stopwatch for new command');
@@ -888,32 +637,24 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       setInput('');
     } catch (error) {
       console.error('❌ Error sending message:', error);
-      if (terminal.current) {
-        terminal.current.writeln(`\x1b[31m❌ Error sending message: ${error}\x1b[0m`);
-      }
+      appendToTerminal(`❌ **Error sending message:** ${error}`);
     }
   };
 
   const handlePing = () => {
     if (ws.current?.readyState !== WebSocket.OPEN) {
       console.warn('❌ Cannot ping - WebSocket not ready');
-      if (terminal.current) {
-        terminal.current.writeln(`\x1b[31m❌ Cannot ping - connection not ready\x1b[0m`);
-      }
+      appendToTerminal(`❌ **Cannot ping - connection not ready**`);
       return;
     }
 
     try {
       console.log('🏓 Sending ping');
       ws.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-      if (terminal.current) {
-        terminal.current.writeln(`\x1b[36m🏓 Ping sent at ${new Date().toLocaleTimeString()}\x1b[0m`);
-      }
+      appendToTerminal(`🏓 **Ping sent** at ${new Date().toLocaleTimeString()}`);
     } catch (error) {
       console.error('❌ Error sending ping:', error);
-      if (terminal.current) {
-        terminal.current.writeln(`\x1b[31m❌ Error sending ping: ${error}\x1b[0m`);
-      }
+      appendToTerminal(`❌ **Error sending ping:** ${error}`);
     }
   };
 
@@ -940,9 +681,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       }));
       
       // Update UI immediately to show cancellation is in progress
-      if (terminal.current) {
-        terminal.current.writeln('\x1b[33m🛑 Cancelling execution...\x1b[0m');
-      }
+      appendToTerminal('🛑 **Cancelling execution...**');
       
       // Reset cancelling state after a delay to allow for the cancellation to process
       setTimeout(() => {
@@ -1142,7 +881,14 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography>Claude Code Terminal - Instance {instanceId.slice(0, 8)}</Typography>
+              <Typography>
+                Claude Code Terminal (LexicalEditor) - Instance {instanceId.slice(0, 8)}
+                {isWaitingForResponse && !isCancelling && (
+                  <span style={{ color: '#ff9500', fontSize: '0.8em', marginLeft: '8px' }}>
+                    • Press ESC to cancel
+                  </span>
+                )}
+              </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Box 
                   sx={{ 
@@ -1169,60 +915,34 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               <IconButton onClick={handlePing} title="Test Connection (Ping)" disabled={!isConnected}>
                 🏓
               </IconButton>
-              {markdownContent && (
-                <>
-                  <Button 
-                    variant={markdownFullWidth ? "contained" : "outlined"}
-                    size="small" 
-                    onClick={() => setMarkdownFullWidth(!markdownFullWidth)}
-                    title={markdownFullWidth ? "Show Split View" : "Show Full Width Markdown"}
-                    sx={{ minWidth: 'auto', px: 1 }}
-                  >
-                    {markdownFullWidth ? "📱 Split" : "📖 Full"}
-                  </Button>
-                  <Button 
-                    variant={copySuccess ? "contained" : "outlined"}
-                    size="small" 
-                    onClick={handleCopyMarkdown}
-                    title="Copy raw markdown to clipboard"
-                    sx={{ 
-                      minWidth: 'auto', 
-                      px: 1,
-                      backgroundColor: copySuccess ? '#4caf50' : undefined,
-                      color: copySuccess ? 'white' : undefined,
-                      '&:hover': {
-                        backgroundColor: copySuccess ? '#45a049' : undefined,
-                      }
-                    }}
-                  >
-                    {copySuccess ? "✅ Copied!" : "📋 Copy"}
-                  </Button>
-                  <Button 
-                    variant="outlined" 
-                    size="small" 
-                    onClick={() => {
-                      setMarkdownContent(null);
-                      setMarkdownFullWidth(false);
-                      setCopySuccess(false);
-                      // Refresh terminal after closing markdown
-                      setTimeout(() => {
-                        if (fitAddon.current && terminal.current) {
-                          try {
-                            fitAddon.current.fit();
-                            console.log('🔧 Terminal refreshed after closing markdown');
-                          } catch (error) {
-                            console.warn('⚠️ Failed to refresh terminal after closing markdown:', error);
-                          }
-                        }
-                      }, 100);
-                    }}
-                    title="Close Markdown View"
-                    sx={{ minWidth: 'auto', px: 1 }}
-                  >
-                    ✕ Close
-                  </Button>
-                </>
-              )}
+              <Button 
+                variant={copySuccess ? "contained" : "outlined"}
+                size="small" 
+                onClick={handleCopyContent}
+                title="Copy terminal content to clipboard"
+                disabled={!terminalContent}
+                sx={{ 
+                  minWidth: 'auto', 
+                  px: 1,
+                  backgroundColor: copySuccess ? '#4caf50' : undefined,
+                  color: copySuccess ? 'white' : undefined,
+                  '&:hover': {
+                    backgroundColor: copySuccess ? '#45a049' : undefined,
+                  }
+                }}
+              >
+                {copySuccess ? "✅ Copied!" : "📋 Copy"}
+              </Button>
+              <Button 
+                variant="outlined" 
+                size="small" 
+                onClick={handleClearTerminal}
+                title="Clear terminal content"
+                disabled={!terminalContent}
+                sx={{ minWidth: 'auto', px: 1 }}
+              >
+                🧹 Clear
+              </Button>
               {isPaused ? (
                 <IconButton onClick={handleResume} title="Resume execution">
                   <PlayArrow />
@@ -1266,126 +986,37 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
           </Box>
         </DialogTitle>
         <DialogContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ 
-            flex: 1, 
-            display: 'flex', 
-            flexDirection: markdownContent && !markdownFullWidth ? 'row' : 'column', 
-            gap: markdownContent && !markdownFullWidth ? 1 : 0 
-          }}>
-            {/* Terminal Area - Always render but hide when in full-width mode */}
-            <Box
-              ref={terminalRef}
-              sx={{
-                flex: markdownContent && !markdownFullWidth ? '0 0 25%' : markdownFullWidth ? 0 : 1,
-                backgroundColor: '#000',
-                border: '1px solid #333',
-                borderRadius: 1,
-                minHeight: '300px',
-                height: '300px',
-                position: 'relative',
-                display: markdownFullWidth ? 'none' : 'block', // Hide instead of not rendering
-                overflow: 'hidden',
-                transition: 'flex 0.3s ease, width 0.3s ease',
-                '& .xterm': {
-                  height: '100% !important',
-                  width: '100% !important',
-                },
-                '& .xterm-screen': {
-                  height: '100% !important',
-                  width: '100% !important',
+          {/* Enhanced Terminal powered by LexicalEditor */}
+          <Box
+            ref={lexicalRef}
+            sx={{
+              flex: 1,
+              height: '400px', // Fixed height for consistent experience
+              overflow: 'auto', // Enable scrolling
+              border: '1px solid #333',
+              borderRadius: 1,
+              '& .lexical-container': {
+                height: '100%',
+                '& > div': {
+                  height: '100%',
                 }
-              }}
+              },
+              // Ensure the content editable area can scroll
+              '& [contenteditable]': {
+                overflow: 'auto !important',
+                maxHeight: '100% !important',
+              }
+            }}
+          >
+            <LexicalEditor
+              key={`terminal-${Math.floor(forceUpdate / 3)}`} // Less frequent re-renders (every 3 updates)
+              value={terminalContent}
+              onChange={() => {}} // Read-only, no changes needed
+              placeholder="Terminal output will appear here..."
+              darkMode={true} // Match terminal's dark theme
+              readOnly={true}
+              parseMarkdown={true} // Enable automatic markdown parsing for all content
             />
-            
-            {/* Inline Markdown Display */}
-            {markdownContent && (
-              <Paper
-                sx={{
-                  flex: markdownFullWidth ? 1 : '1', // Full width when markdownFullWidth is true
-                  height: '300px',
-                  overflow: 'auto',
-                  p: 3, // More padding for better readability
-                  backgroundColor: 'background.paper',
-                  border: '1px solid #333',
-                  borderRadius: 1,
-                  fontSize: '14px', // Better font size for reading
-                  lineHeight: 1.6,
-                  '& h1, & h2, & h3, & h4, & h5, & h6': {
-                    marginTop: '1.5em',
-                    marginBottom: '0.5em',
-                  },
-                  '& p': {
-                    marginBottom: '1em',
-                  },
-                  '& pre': {
-                    backgroundColor: '#2d2d2d',
-                    color: '#ffffff',
-                    padding: '1em',
-                    borderRadius: '4px',
-                    overflow: 'auto',
-                    border: '1px solid #444',
-                  },
-                  '& pre code': {
-                    backgroundColor: 'transparent',
-                    color: '#ffffff',
-                    padding: 0,
-                  },
-                  '& code': {
-                    backgroundColor: '#2d2d2d',
-                    color: '#e6e6e6',
-                    padding: '0.2em 0.4em',
-                    borderRadius: '3px',
-                    fontSize: '0.9em',
-                    border: '1px solid #444',
-                  },
-                  '& table': {
-                    borderCollapse: 'collapse',
-                    width: '100%',
-                    marginBottom: '1em',
-                  },
-                  '& th, & td': {
-                    border: '1px solid #ddd',
-                    padding: '8px',
-                    textAlign: 'left',
-                  },
-                  '& th': {
-                    backgroundColor: '#f2f2f2',
-                    fontWeight: 'bold',
-                  },
-                  '& blockquote': {
-                    borderLeft: '4px solid #007acc',
-                    paddingLeft: '1em',
-                    marginLeft: 0,
-                    fontStyle: 'italic',
-                    backgroundColor: '#f8f9fa',
-                    padding: '0.5em 1em',
-                    borderRadius: '4px',
-                  },
-                  '& a': {
-                    color: '#007acc',
-                    textDecoration: 'none',
-                    '&:hover': {
-                      textDecoration: 'underline',
-                    },
-                  },
-                  '& strong': {
-                    fontWeight: 'bold',
-                    color: '#ff9500', // Orange for great contrast on dark backgrounds
-                  },
-                  '& em': {
-                    fontStyle: 'italic',
-                    color: '#333', // Darker for better contrast
-                  },
-                }}
-              >
-                <Box sx={{ mb: 2, pb: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="subtitle2" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
-                    📋 {markdownFullWidth ? 'Full Width Document View' : 'Formatted Response'}
-                  </Typography>
-                </Box>
-                <ReactMarkdown>{markdownContent}</ReactMarkdown>
-              </Paper>
-            )}
           </Box>
           
           <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>

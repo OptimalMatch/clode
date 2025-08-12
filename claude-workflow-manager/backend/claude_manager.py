@@ -122,8 +122,8 @@ class ClaudeCodeManager:
                 # Small delay to prevent busy waiting
                 await asyncio.sleep(0.01)
             
-            # Wait for process to complete
-            return_code = process.wait()
+            # Wait for process to complete (async)
+            return_code = await asyncio.create_task(asyncio.to_thread(process.wait))
             execution_time = int((time.time() - start_time) * 1000)
             
             # Remove from running processes
@@ -271,12 +271,16 @@ class ClaudeCodeManager:
             env = os.environ.copy()
             env['GIT_SSH_COMMAND'] = 'ssh -o UserKnownHostsFile=/root/.ssh/known_hosts -o StrictHostKeyChecking=yes'
             
-            subprocess.run(
-                ["git", "clone", instance.git_repo, temp_dir],
-                check=True,
-                capture_output=True,
+            # Clone repository asynchronously to avoid blocking
+            process = await asyncio.create_subprocess_exec(
+                "git", "clone", instance.git_repo, temp_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 env=env
             )
+            stdout, stderr = await process.communicate()
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, ["git", "clone"], output=stdout, stderr=stderr)
             
             # Auto-discover agents from the repository before proceeding
             try:
@@ -542,15 +546,18 @@ class ClaudeCodeManager:
                     # First try graceful termination
                     process.terminate()
                     
-                    # Wait a bit for graceful termination
+                    # Wait a bit for graceful termination (async)
                     try:
-                        process.wait(timeout=3)
+                        await asyncio.wait_for(
+                            asyncio.create_task(asyncio.to_thread(process.wait)), 
+                            timeout=3
+                        )
                         self._log_with_timestamp(f"✅ INTERRUPT: Claude CLI process terminated gracefully")
-                    except subprocess.TimeoutExpired:
+                    except asyncio.TimeoutError:
                         # Force kill if graceful termination fails
                         self._log_with_timestamp(f"⚡ INTERRUPT: Force killing Claude CLI process")
                         process.kill()
-                        process.wait()
+                        await asyncio.create_task(asyncio.to_thread(process.wait))
                     
                     # Clean up the process from tracking
                     del self.running_processes[instance_id]
@@ -855,8 +862,11 @@ class ClaudeCodeManager:
                 self._log_with_timestamp(f"🛑 Terminating running Claude CLI process for instance {instance_id}")
                 process.terminate()
                 try:
-                    process.wait(timeout=5)  # Wait up to 5 seconds for graceful termination
-                except subprocess.TimeoutExpired:
+                    await asyncio.wait_for(
+                        asyncio.create_task(asyncio.to_thread(process.wait)), 
+                        timeout=5
+                    )  # Wait up to 5 seconds for graceful termination
+                except asyncio.TimeoutError:
                     self._log_with_timestamp(f"⚡ Force killing Claude CLI process for instance {instance_id}")
                     process.kill()
             del self.running_processes[instance_id]

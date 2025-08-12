@@ -969,27 +969,33 @@ async def sync_prompt_to_repo(prompt_id: str, data: dict):
     import tempfile
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Clone the repository with SSH support
-        subprocess.run(
-            ["git", "clone", workflow["git_repo"], temp_dir],
-            check=True,
-            capture_output=True,
+        # Clone the repository with SSH support (async)
+        process = await asyncio.create_subprocess_exec(
+            "git", "clone", workflow["git_repo"], temp_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
             env=get_git_env()
         )
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, ["git", "clone"], output=stdout, stderr=stderr)
         
         # Initialize file manager and save prompt
         file_manager = PromptFileManager(temp_dir)
         prompt_obj = Prompt(**prompt)
         filepath = file_manager.save_prompt_to_file(prompt_obj, sequence, parallel)
         
-        # Push changes back to repo with SSH support
-        subprocess.run(
-            ["git", "push"],
+        # Push changes back to repo with SSH support (async)
+        push_process = await asyncio.create_subprocess_exec(
+            "git", "push",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
             cwd=temp_dir,
-            check=True,
-            capture_output=True,
             env=get_git_env()
         )
+        stdout, stderr = await push_process.communicate()
+        if push_process.returncode != 0:
+            raise subprocess.CalledProcessError(push_process.returncode, ["git", "push"], output=stdout, stderr=stderr)
         
     return {"success": True, "filepath": filepath}
 
@@ -1020,27 +1026,33 @@ async def sync_all_prompts_to_repo(workflow_id: str, data: dict):
     import tempfile
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Clone the repository with SSH support
-        subprocess.run(
-            ["git", "clone", workflow["git_repo"], temp_dir],
-            check=True,
-            capture_output=True,
+        # Clone the repository with SSH support (async)
+        process = await asyncio.create_subprocess_exec(
+            "git", "clone", workflow["git_repo"], temp_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
             env=get_git_env()
         )
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, ["git", "clone"], output=stdout, stderr=stderr)
         
         # Initialize file manager and sync prompts
         file_manager = PromptFileManager(temp_dir)
         prompt_objects = [Prompt(**p) for p in workflow_prompts]
         saved_files = file_manager.sync_prompts_to_repo(prompt_objects, auto_sequence)
         
-        # Push changes back to repo with SSH support
-        subprocess.run(
-            ["git", "push"],
+        # Push changes back to repo with SSH support (async)
+        push_process = await asyncio.create_subprocess_exec(
+            "git", "push",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
             cwd=temp_dir,
-            check=True,
-            capture_output=True,
             env=get_git_env()
         )
+        stdout, stderr = await push_process.communicate()
+        if push_process.returncode != 0:
+            raise subprocess.CalledProcessError(push_process.returncode, ["git", "push"], output=stdout, stderr=stderr)
         
     return {"success": True, "saved_files": saved_files}
 
@@ -1058,17 +1070,22 @@ async def get_prompts_from_repo(workflow_id: str):
             print(f"🔍 GIT OPERATION: Starting repo-prompts clone for repo: {workflow['git_repo']}")
             print(f"📁 GIT OPERATION: Using temp directory: {temp_dir}")
             
-            # Clone the repository with SSH support
-            result = subprocess.run(
-                ["git", "clone", "--depth", "1", workflow["git_repo"], temp_dir],
-                check=True,
-                capture_output=True,
+            # Clone the repository with SSH support (async)
+            process = await asyncio.create_subprocess_exec(
+                "git", "clone", "--depth", "1", workflow["git_repo"], temp_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 env=get_git_env()
             )
+            stdout, stderr = await process.communicate()
             print(f"✅ GIT OPERATION: Git clone completed successfully")
-            print(f"📊 GIT OPERATION: Clone stdout: {result.stdout.decode()}")
-            if result.stderr:
-                print(f"⚠️  GIT OPERATION: Clone stderr: {result.stderr.decode()}")
+            if stdout:
+                print(f"📊 GIT OPERATION: Clone stdout: {stdout.decode()}")
+            if stderr:
+                print(f"⚠️  GIT OPERATION: Clone stderr: {stderr.decode()}")
+            
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, ["git", "clone"], output=stdout, stderr=stderr)
         except subprocess.CalledProcessError as e:
             print(f"❌ GIT OPERATION: Error cloning repository {workflow['git_repo']}")
             print(f"❌ GIT OPERATION: Return code: {e.returncode}")
@@ -1099,13 +1116,16 @@ async def import_prompts_from_repo(workflow_id: str):
     imported_prompts = []
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Clone the repository with SSH support
-        subprocess.run(
-            ["git", "clone", "--depth", "1", workflow["git_repo"], temp_dir],
-            check=True,
-            capture_output=True,
+        # Clone the repository with SSH support (async)
+        process = await asyncio.create_subprocess_exec(
+            "git", "clone", "--depth", "1", workflow["git_repo"], temp_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
             env=get_git_env()
         )
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, ["git", "clone"], output=stdout, stderr=stderr)
         
         # Load prompts from repo
         print(f"🔍 PROMPT CONFIGURATION: CLAUDE_PROMPTS_FOLDER environment variable: '{os.getenv('CLAUDE_PROMPTS_FOLDER', '.clode/claude_prompts')}'")
