@@ -126,26 +126,26 @@ jobs:
         
         # Create .env file from GitHub secrets
         cat > .env << EOF
-# MongoDB Configuration
-MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USERNAME }}
-MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+        # MongoDB Configuration
+        MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USERNAME }}
+        MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }}
 
-# Claude API Configuration
-CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
+        # Claude API Configuration
+        CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
 
-# Host Configuration (auto-detected IP address)
-HOST_IP=$FINAL_HOST_IP
+        # Host Configuration (auto-detected IP address)
+        HOST_IP=$FINAL_HOST_IP
 
-# Optional: Custom folders
-CLAUDE_PROMPTS_FOLDER=.clode/claude_prompts
-CLAUDE_AGENTS_FOLDER=.claude/agents
+        # Optional: Custom folders
+        CLAUDE_PROMPTS_FOLDER=.clode/claude_prompts
+        CLAUDE_AGENTS_FOLDER=.claude/agents
 
-# Deployment metadata
-DEPLOYMENT_ENV=$DEPLOYMENT_ENV
-DEPLOYMENT_TIME=$DEPLOYMENT_TIME
-GIT_SHA=$GIT_SHA
-BRANCH_NAME=$BRANCH_NAME
-EOF
+        # Deployment metadata
+        DEPLOYMENT_ENV=$DEPLOYMENT_ENV
+        DEPLOYMENT_TIME=$DEPLOYMENT_TIME
+        GIT_SHA=$GIT_SHA
+        BRANCH_NAME=$BRANCH_NAME
+        EOF
         
         echo "✅ Environment file created with HOST_IP=$FINAL_HOST_IP"
 
