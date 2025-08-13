@@ -75,37 +75,26 @@ jobs:
         echo "DEPLOY_DIR=$DEPLOY_DIR" >> $GITHUB_ENV
         echo "✅ Deployment directory created at $DEPLOY_DIR"
 
-    - name: Stop existing services
+    - name: Stop existing services and clean up
       run: |
         echo "🛑 Stopping existing services..."
         cd $DEPLOY_DIR || cd .
         
         # Stop containers if they exist
-        if [ -f claude-workflow-manager/docker-compose.yml ]; then
+        if [ -d "claude-workflow-manager" ]; then
           cd claude-workflow-manager
-          docker compose down --remove-orphans || true
+          if [ -f docker-compose.yml ]; then
+            docker compose down --remove-orphans || true
+          fi
           cd ..
+          
+          # Remove old deployment
+          echo "🗑️ Removing old deployment..."
+          rm -rf claude-workflow-manager || true
         fi
         
         # Clean up unused Docker resources
         docker system prune -f || true
-
-    - name: Backup current deployment (if exists)
-      run: |
-        echo "💾 Creating backup of current deployment..."
-        cd $DEPLOY_DIR || cd .
-        
-        if [ -d "claude-workflow-manager" ]; then
-          BACKUP_DIR="backups/backup_$(date +%Y%m%d_%H%M%S)"
-          mkdir -p $BACKUP_DIR
-          mv claude-workflow-manager $BACKUP_DIR/ || true
-          echo "✅ Backup created at $DEPLOY_DIR/$BACKUP_DIR"
-          
-          # Keep only last 5 backups
-          cd backups
-          ls -t | tail -n +6 | xargs -r rm -rf
-          cd ..
-        fi
 
     - name: Deploy new version
       run: |
@@ -237,18 +226,13 @@ jobs:
       if: failure()
       run: |
         echo "🧹 Cleaning up failed deployment..."
-        cd $DEPLOY_DIR/claude-workflow-manager || cd .
+        cd $DEPLOY_DIR || cd .
         
-        # Stop and remove containers
-        docker compose down --remove-orphans || true
-        
-        # Restore from backup if available
-        cd $DEPLOY_DIR
-        LATEST_BACKUP=$(ls -t backups/ 2>/dev/null | head -n1)
-        if [ -n "$LATEST_BACKUP" ]; then
-          echo "🔄 Restoring from backup: $LATEST_BACKUP"
-          rm -rf claude-workflow-manager || true
-          mv "backups/$LATEST_BACKUP/claude-workflow-manager" . || true
+        # Stop and remove containers if they exist
+        if [ -d "claude-workflow-manager" ]; then
           cd claude-workflow-manager
-          docker compose up -d || true
+          docker compose down --remove-orphans || true
+          cd ..
         fi
+        
+        echo "❌ Deployment failed - manual intervention may be required"
