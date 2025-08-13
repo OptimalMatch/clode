@@ -4,10 +4,10 @@ services:
     container_name: claude-workflow-mongo
     restart: always
     ports:
-      - "27017:27017"
+      - "27018:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: claudeworkflow123
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: claude_workflows
     volumes:
       - mongo_data:/data/db
@@ -19,9 +19,9 @@ services:
     container_name: claude-workflow-backend
     restart: always
     ports:
-      - "8000:8000"
+      - "8005:8000"
     environment:
-      MONGODB_URL: mongodb://admin:claudeworkflow123@mongodb:27017/claude_workflows?authSource=admin
+      MONGODB_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-claudeworkflow123}@mongodb:27017/claude_workflows?authSource=admin
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
       ANTHROPIC_API_KEY: ${CLAUDE_API_KEY}
       REDIS_URL: redis://redis:6379
@@ -31,7 +31,7 @@ services:
       - mongodb
       - redis
     volumes:
-      - ./backend:/app
+      - ./backend:/app/src
       - ${HOME}/.ssh:/root/.ssh:ro
       - ssh_known_hosts:/root/.ssh_known_hosts
       - ssh_generated_keys:/app/ssh_keys
@@ -43,10 +43,10 @@ services:
     container_name: claude-workflow-frontend
     restart: always
     ports:
-      - "3000:3000"
+      - "3005:3000"
     environment:
-      REACT_APP_API_URL: http://${HOST_IP:-localhost}:8000
-      REACT_APP_WS_URL: ws://${HOST_IP:-localhost}:8000
+      REACT_APP_API_URL: http://${HOST_IP:-localhost}:8005
+      REACT_APP_WS_URL: ws://${HOST_IP:-localhost}:8005
     depends_on:
       - backend
     volumes:

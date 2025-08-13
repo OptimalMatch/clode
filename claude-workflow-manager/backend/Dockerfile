@@ -26,6 +26,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Create src directory for development volume mounting
+RUN mkdir -p /app/src
+
+# Set Python path to include both /app and /app/src
+ENV PYTHONPATH="/app:/app/src:${PYTHONPATH}"
+
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Use the main module from the src directory for development
+CMD ["sh", "-c", "if [ -f /app/src/main.py ]; then cd /app/src && uvicorn main:app --host 0.0.0.0 --port 8000 --reload; else uvicorn main:app --host 0.0.0.0 --port 8000 --reload; fi"]

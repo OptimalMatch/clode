@@ -1,0 +1,268 @@
+name: Deploy to Self-Hosted Runner
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, pop-os-1]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up environment variables
+      run: |
+        echo "Setting up deployment environment..."
+        echo "DEPLOYMENT_ENV=${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_ENV
+        echo "DEPLOYMENT_TIME=$(date -u +%Y%m%d_%H%M%S)" >> $GITHUB_ENV
+        echo "GIT_SHA=${GITHUB_SHA:0:8}" >> $GITHUB_ENV
+        echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+
+    - name: Verify system requirements
+      run: |
+        echo "🔍 Checking system requirements..."
+        
+        # Check Docker
+        if ! command -v docker &> /dev/null; then
+          echo "❌ Docker is not installed"
+          exit 1
+        fi
+        echo "✅ Docker version: $(docker --version)"
+        
+        # Check Docker Compose
+        if ! command -v docker-compose &> /dev/null; then
+          echo "❌ Docker Compose is not installed"
+          exit 1
+        fi
+        echo "✅ Docker Compose version: $(docker-compose --version)"
+        
+        # Check available disk space (require at least 2GB)
+        AVAILABLE_SPACE=$(df / | awk 'NR==2 {print $4}')
+        REQUIRED_SPACE=2097152  # 2GB in KB
+        if [ "$AVAILABLE_SPACE" -lt "$REQUIRED_SPACE" ]; then
+          echo "❌ Insufficient disk space. Available: ${AVAILABLE_SPACE}KB, Required: ${REQUIRED_SPACE}KB"
+          exit 1
+        fi
+        echo "✅ Sufficient disk space available: ${AVAILABLE_SPACE}KB"
+
+    - name: Create deployment directory
+      run: |
+        echo "📁 Setting up deployment directory..."
+        DEPLOY_DIR="/opt/claude-workflow-manager"
+        sudo mkdir -p $DEPLOY_DIR
+        sudo chown $USER:$USER $DEPLOY_DIR
+        echo "DEPLOY_DIR=$DEPLOY_DIR" >> $GITHUB_ENV
+
+    - name: Stop existing services
+      run: |
+        echo "🛑 Stopping existing services..."
+        cd $DEPLOY_DIR || cd .
+        
+        # Stop containers if they exist
+        if [ -f docker-compose.yml ]; then
+          docker-compose down --remove-orphans || true
+        fi
+        
+        # Clean up unused Docker resources
+        docker system prune -f || true
+
+    - name: Backup current deployment (if exists)
+      run: |
+        echo "💾 Creating backup of current deployment..."
+        cd $DEPLOY_DIR || cd .
+        
+        if [ -d "claude-workflow-manager" ]; then
+          BACKUP_DIR="backups/backup_$(date +%Y%m%d_%H%M%S)"
+          mkdir -p $BACKUP_DIR
+          mv claude-workflow-manager $BACKUP_DIR/ || true
+          echo "✅ Backup created at $DEPLOY_DIR/$BACKUP_DIR"
+          
+          # Keep only last 5 backups
+          cd backups
+          ls -t | tail -n +6 | xargs -r rm -rf
+        fi
+
+    - name: Deploy new version
+      run: |
+        echo "🚀 Deploying new version..."
+        cd $DEPLOY_DIR
+        
+        # Copy source code
+        cp -r $GITHUB_WORKSPACE claude-workflow-manager
+        cd claude-workflow-manager
+
+    - name: Set up environment configuration
+      run: |
+        echo "⚙️ Setting up environment configuration..."
+        cd $DEPLOY_DIR/claude-workflow-manager
+        
+        # Create .env file from GitHub secrets
+        cat > .env << EOF
+        # MongoDB Configuration
+        MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USERNAME }}
+        MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+        MONGODB_URL=${{ secrets.MONGODB_URL }}
+        
+        # Claude API Configuration
+        CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
+        
+        # Host Configuration
+        HOST_IP=${{ secrets.HOST_IP || 'localhost' }}
+        
+        # Optional: Custom folders
+        CLAUDE_PROMPTS_FOLDER=.clode/claude_prompts
+        CLAUDE_AGENTS_FOLDER=.claude/agents
+        
+        # Deployment metadata
+        DEPLOYMENT_ENV=$DEPLOYMENT_ENV
+        DEPLOYMENT_TIME=$DEPLOYMENT_TIME
+        GIT_SHA=$GIT_SHA
+        BRANCH_NAME=$BRANCH_NAME
+        EOF
+        
+        echo "✅ Environment file created"
+
+    - name: Build and start services
+      run: |
+        echo "🔨 Building and starting services..."
+        cd $DEPLOY_DIR/claude-workflow-manager
+        
+        # Build containers
+        docker-compose build --no-cache
+        
+        # Start services
+        docker-compose up -d
+        
+        echo "✅ Services started successfully"
+
+    - name: Wait for services to be healthy
+      timeout-minutes: 5
+      run: |
+        echo "🏥 Waiting for services to be healthy..."
+        cd $DEPLOY_DIR/claude-workflow-manager
+        
+        # Wait for backend to be ready
+        echo "Waiting for backend service..."
+        for i in {1..30}; do
+          if curl -f http://localhost:8005/health &>/dev/null; then
+            echo "✅ Backend service is healthy"
+            break
+          fi
+          echo "Attempt $i/30: Backend not ready yet..."
+          sleep 10
+        done
+        
+        # Wait for frontend to be ready
+        echo "Waiting for frontend service..."
+        for i in {1..30}; do
+          if curl -f http://localhost:3005 &>/dev/null; then
+            echo "✅ Frontend service is healthy"
+            break
+          fi
+          echo "Attempt $i/30: Frontend not ready yet..."
+          sleep 10
+        done
+
+    - name: Run smoke tests
+      run: |
+        echo "🧪 Running smoke tests..."
+        cd $DEPLOY_DIR/claude-workflow-manager
+        
+        # Test backend API endpoints
+        echo "Testing backend API..."
+        
+        # Health check
+        if ! curl -f http://localhost:8005/health; then
+          echo "❌ Backend health check failed"
+          exit 1
+        fi
+        
+        # API endpoints
+        if ! curl -f http://localhost:8005/workflows; then
+          echo "❌ Workflows endpoint failed"
+          exit 1
+        fi
+        
+        # Test frontend
+        echo "Testing frontend..."
+        if ! curl -f http://localhost:3005; then
+          echo "❌ Frontend health check failed"
+          exit 1
+        fi
+        
+        echo "✅ All smoke tests passed"
+
+    - name: Display service status
+      run: |
+        echo "📊 Service Status:"
+        cd $DEPLOY_DIR/claude-workflow-manager
+        docker-compose ps
+        
+        echo ""
+        echo "🔗 Service URLs:"
+        echo "Frontend: http://localhost:3005"
+        echo "Backend API: http://localhost:8005"
+        echo "MongoDB: localhost:27018"
+        echo "Redis: localhost:6379"
+
+    - name: Send deployment notification
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Deployment completed successfully!"
+          echo "🎉 Claude Workflow Manager is now running on pop-os-1"
+          echo "📅 Deployed: $DEPLOYMENT_TIME"
+          echo "🌿 Branch: $BRANCH_NAME"
+          echo "📝 Commit: $GIT_SHA"
+        else
+          echo "❌ Deployment failed!"
+          echo "📅 Failed at: $(date -u)"
+          echo "🌿 Branch: $BRANCH_NAME"
+          echo "📝 Commit: $GIT_SHA"
+          
+          # Show recent logs for debugging
+          echo "🔍 Recent logs:"
+          cd $DEPLOY_DIR/claude-workflow-manager || cd .
+          docker-compose logs --tail=50 || true
+        fi
+
+    - name: Cleanup on failure
+      if: failure()
+      run: |
+        echo "🧹 Cleaning up failed deployment..."
+        cd $DEPLOY_DIR/claude-workflow-manager || cd .
+        
+        # Stop and remove containers
+        docker-compose down --remove-orphans || true
+        
+        # Restore from backup if available
+        cd $DEPLOY_DIR
+        LATEST_BACKUP=$(ls -t backups/ 2>/dev/null | head -n1)
+        if [ -n "$LATEST_BACKUP" ]; then
+          echo "🔄 Restoring from backup: $LATEST_BACKUP"
+          rm -rf claude-workflow-manager || true
+          mv "backups/$LATEST_BACKUP/claude-workflow-manager" . || true
+          cd claude-workflow-manager
+          docker-compose up -d || true
+        fi

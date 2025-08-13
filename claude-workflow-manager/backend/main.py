@@ -441,6 +441,59 @@ async def root():
     """API health check endpoint."""
     return {"message": "Claude Workflow Manager API", "success": True}
 
+@app.get(
+    "/health",
+    summary="Comprehensive Health Check",
+    description="Detailed health check including database connectivity and service status.",
+    tags=["Health"]
+)
+async def health_check():
+    """Comprehensive health check for deployment verification."""
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "services": {
+            "api": "healthy",
+            "database": "unknown",
+            "claude_manager": "unknown"
+        },
+        "version": {
+            "deployment_env": os.getenv("DEPLOYMENT_ENV", "unknown"),
+            "deployment_time": os.getenv("DEPLOYMENT_TIME", "unknown"),
+            "git_sha": os.getenv("GIT_SHA", "unknown"),
+            "branch": os.getenv("BRANCH_NAME", "unknown")
+        }
+    }
+    
+    # Check database connectivity
+    try:
+        if db.db is not None:
+            # Try a simple operation
+            await db.db.admin.command('ping')
+            health_status["services"]["database"] = "healthy"
+        else:
+            health_status["services"]["database"] = "disconnected"
+            health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["services"]["database"] = f"error: {str(e)}"
+        health_status["status"] = "unhealthy"
+    
+    # Check Claude manager
+    try:
+        if claude_manager is not None:
+            health_status["services"]["claude_manager"] = "healthy"
+            health_status["active_instances"] = len(claude_manager.instances)
+        else:
+            health_status["services"]["claude_manager"] = "not_initialized"
+            health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["services"]["claude_manager"] = f"error: {str(e)}"
+        health_status["status"] = "unhealthy"
+    
+    # Return appropriate HTTP status code
+    status_code = 200 if health_status["status"] == "healthy" else 503
+    return JSONResponse(content=health_status, status_code=status_code)
+
 @app.post(
     "/api/workflows",
     response_model=IdResponse,
