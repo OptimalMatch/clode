@@ -691,7 +691,8 @@ async def get_instances(workflow_id: str, include_archived: bool = False):
 @app.post("/api/instances/{instance_id}/interrupt")
 async def interrupt_instance(instance_id: str, data: dict):
     feedback = data.get("feedback", "")
-    success = await claude_manager.interrupt_instance(instance_id, feedback)
+    force = data.get("force", False)
+    success = await claude_manager.interrupt_instance(instance_id, feedback, force)
     if not success:
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
@@ -784,7 +785,8 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
                         print(f"❌ MAIN: Traceback: {traceback.format_exc()}")
                         raise
                 elif message_type == "interrupt":
-                    await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""))
+                    force = message.get("force", False)
+                    await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""), force)
                 elif message_type == "resume":
                     await claude_manager.resume_instance(instance_id)
                 elif message_type == "ping":

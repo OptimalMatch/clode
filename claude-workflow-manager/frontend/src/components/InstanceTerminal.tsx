@@ -296,6 +296,39 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     }
   };
 
+  // Add keyboard shortcuts for cancellation
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      // Ctrl+C for graceful cancel, Ctrl+Shift+C for force kill
+      if (event.ctrlKey && event.key === 'c' && !event.shiftKey) {
+        if (isProcessRunning && !isCancelling) {
+          event.preventDefault();
+          console.log('🛑 Ctrl+C pressed - triggering graceful cancellation');
+          confirmCancel(false);
+        }
+      } else if (event.ctrlKey && event.shiftKey && event.key === 'C') {
+        if (isProcessRunning && !isCancelling) {
+          event.preventDefault();
+          console.log('⚡ Ctrl+Shift+C pressed - triggering force kill');
+          confirmCancel(true);
+        }
+      }
+      // ESC to open cancel dialog
+      else if (event.key === 'Escape') {
+        if (isProcessRunning && !isCancelling && !showCancelDialog) {
+          event.preventDefault();
+          console.log('🚪 ESC pressed - opening cancel dialog');
+          setShowCancelDialog(true);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => {
+      document.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [isProcessRunning, isCancelling, showCancelDialog]);
+
   useEffect(() => {
     console.log('🚀 Initializing LexicalEditor terminal with WebSocket connection...');
     
@@ -705,25 +738,32 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     setShowCancelDialog(true);
   };
 
-  const confirmCancel = async () => {
+  const confirmCancel = async (force: boolean = false) => {
     setShowCancelDialog(false);
-    console.log('🛑 User confirmed cancellation of running execution');
+    const cancelType = force ? 'force cancellation' : 'graceful cancellation';
+    console.log(`🛑 User confirmed ${cancelType} of running execution`);
     setIsCancelling(true);
     
     try {
       ws.current?.send(JSON.stringify({ 
         type: 'interrupt', 
-        feedback: 'Execution cancelled by user' 
+        feedback: force ? 'Execution force cancelled by user' : 'Execution cancelled by user',
+        force: force
       }));
       
       // Update UI immediately to show cancellation is in progress
-      appendToTerminal('🛑 **Cancelling execution...**');
+      const cancelMessage = force 
+        ? '⚡ **Force cancelling execution (killing all processes)...**'
+        : '🛑 **Cancelling execution gracefully...**';
+      appendToTerminal(cancelMessage);
       
       // Reset cancelling state after a delay to allow for the cancellation to process
+      // Shorter timeout for force cancel since it should be faster
+      const timeout = force ? 1000 : 3000;
       setTimeout(() => {
         setIsCancelling(false);
         console.log('🔄 Reset cancelling state');
-      }, 2000);
+      }, timeout);
       
     } catch (error) {
       console.error('❌ Error sending interrupt:', error);
@@ -1094,40 +1134,50 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         </DialogTitle>
         <DialogContent>
           <Typography id="cancel-dialog-description">
-            <strong>⚠️ Warning: This will forcibly terminate the running process.</strong>
+            <strong>⚠️ Choose cancellation method for the running process.</strong>
           </Typography>
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              • Any unsaved work may be lost
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              • The Claude CLI process will be killed immediately
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              • This cannot be undone
-            </Typography>
-          </Box>
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2">
               {isProcessRunning && processStartTime
                 ? `Process has been running for ${((Date.now() - processStartTime) / 1000).toFixed(1)}s`
-                : 'Are you sure you want to cancel?'
+                : 'Select how to cancel the execution:'
               }
             </Typography>
           </Box>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              <strong>🛑 Graceful Cancel:</strong> Sends termination signal, waits for cleanup
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              <strong>⚡ Force Kill:</strong> Immediately kills all processes (for stuck Python processes)
+            </Typography>
+            <Typography variant="body2" color="warning.main">
+              Note: Any unsaved work may be lost with either option
+            </Typography>
+          </Box>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 2 }}>
           <Button onClick={cancelConfirmation} color="primary">
             Keep Running
           </Button>
-          <Button 
-            onClick={confirmCancel} 
-            color="error" 
-            variant="contained"
-            startIcon={<Stop />}
-          >
-            Cancel Process
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button 
+              onClick={() => confirmCancel(false)} 
+              color="warning" 
+              variant="outlined"
+              startIcon={<Stop />}
+            >
+              Graceful Cancel
+            </Button>
+            <Button 
+              onClick={() => confirmCancel(true)} 
+              color="error" 
+              variant="contained"
+              startIcon={<Stop />}
+            >
+              Force Kill
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
     </Box>

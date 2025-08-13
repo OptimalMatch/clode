@@ -31,7 +31,8 @@ class ClaudeCodeManager:
         start_time = time.time()
         
         try:
-            # Start the process
+            # Start the process with process group for better termination control
+            import os
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -39,7 +40,8 @@ class ClaudeCodeManager:
                 text=True,
                 env=os.environ.copy(),
                 bufsize=1,  # Line buffered
-                universal_newlines=True
+                universal_newlines=True,
+                preexec_fn=os.setsid if hasattr(os, 'setsid') else None  # Create new process group on Unix
             )
             
             self._log_with_timestamp(f"🚀 Claude CLI process started (PID: {process.pid})")
@@ -580,7 +582,7 @@ class ClaudeCodeManager:
             await self.db.append_terminal_history(instance_id, f"❌ Error: {str(e)}", "error")
             return False
     
-    async def interrupt_instance(self, instance_id: str, feedback: str) -> bool:
+    async def interrupt_instance(self, instance_id: str, feedback: str, force: bool = False) -> bool:
         """Interrupt/cancel a running Claude CLI instance"""
         self._log_with_timestamp(f"🛑 INTERRUPT: Attempting to interrupt instance {instance_id}")
         
@@ -596,21 +598,89 @@ class ClaudeCodeManager:
                 if process.poll() is None:  # Process is still running
                     self._log_with_timestamp(f"🔥 INTERRUPT: Terminating Claude CLI process (PID: {process.pid}) for instance {instance_id}")
                     
-                    # First try graceful termination
-                    process.terminate()
+                    # Enhanced termination for long-running Python processes
+                    import signal
+                    import psutil
                     
-                    # Wait a bit for graceful termination (async)
                     try:
-                        await asyncio.wait_for(
-                            asyncio.create_task(asyncio.to_thread(process.wait)), 
-                            timeout=3
-                        )
-                        self._log_with_timestamp(f"✅ INTERRUPT: Claude CLI process terminated gracefully")
-                    except asyncio.TimeoutError:
-                        # Force kill if graceful termination fails
-                        self._log_with_timestamp(f"⚡ INTERRUPT: Force killing Claude CLI process")
+                        # Get process and all its children using psutil
+                        parent = psutil.Process(process.pid)
+                        children = parent.children(recursive=True)
+                        all_processes = [parent] + children
+                        
+                        self._log_with_timestamp(f"🔍 INTERRUPT: Found {len(all_processes)} processes to terminate (parent + {len(children)} children)")
+                        
+                        if force:
+                            # Force mode: Immediate SIGKILL to all processes
+                            self._log_with_timestamp(f"⚡ INTERRUPT: Force mode enabled - sending immediate SIGKILL")
+                            for proc in all_processes:
+                                try:
+                                    proc.kill()  # SIGKILL
+                                    self._log_with_timestamp(f"⚡ INTERRUPT: Sent SIGKILL to PID {proc.pid}")
+                                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                    pass
+                            
+                            # Shorter wait in force mode
+                            try:
+                                await asyncio.wait_for(
+                                    asyncio.create_task(asyncio.to_thread(process.wait)), 
+                                    timeout=2
+                                )
+                                self._log_with_timestamp(f"✅ INTERRUPT: Force kill successful")
+                            except asyncio.TimeoutError:
+                                self._log_with_timestamp(f"❌ INTERRUPT: Process still running after force kill")
+                        else:
+                            # Normal mode: Try graceful termination first
+                            
+                            # Step 1: Try SIGTERM on all processes (graceful)
+                            for proc in all_processes:
+                                try:
+                                    proc.terminate()
+                                    self._log_with_timestamp(f"📡 INTERRUPT: Sent SIGTERM to PID {proc.pid}")
+                                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                    pass
+                            
+                            # Step 2: Wait for graceful termination (shorter timeout for responsiveness)
+                            try:
+                                await asyncio.wait_for(
+                                    asyncio.create_task(asyncio.to_thread(process.wait)), 
+                                    timeout=2
+                                )
+                                self._log_with_timestamp(f"✅ INTERRUPT: Claude CLI process terminated gracefully")
+                            except asyncio.TimeoutError:
+                                self._log_with_timestamp(f"⏰ INTERRUPT: Graceful termination timeout, trying SIGKILL")
+                                
+                                # Step 3: Force kill all processes with SIGKILL
+                                for proc in all_processes:
+                                    try:
+                                        proc.kill()  # SIGKILL
+                                        self._log_with_timestamp(f"⚡ INTERRUPT: Sent SIGKILL to PID {proc.pid}")
+                                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                        pass
+                                
+                                # Step 4: Final wait with longer timeout
+                                try:
+                                    await asyncio.wait_for(
+                                        asyncio.create_task(asyncio.to_thread(process.wait)), 
+                                        timeout=5
+                                    )
+                                    self._log_with_timestamp(f"✅ INTERRUPT: Process killed successfully")
+                                except asyncio.TimeoutError:
+                                    self._log_with_timestamp(f"❌ INTERRUPT: Process still running after SIGKILL - may be stuck in kernel")
+                    
+                    except psutil.NoSuchProcess:
+                        self._log_with_timestamp(f"ℹ️ INTERRUPT: Process already terminated")
+                    except Exception as e:
+                        self._log_with_timestamp(f"⚠️ INTERRUPT: Error during enhanced termination, falling back to basic kill: {e}")
+                        # Fallback to basic kill
                         process.kill()
-                        await asyncio.create_task(asyncio.to_thread(process.wait))
+                        try:
+                            await asyncio.wait_for(
+                                asyncio.create_task(asyncio.to_thread(process.wait)), 
+                                timeout=3
+                            )
+                        except asyncio.TimeoutError:
+                            self._log_with_timestamp(f"❌ INTERRUPT: Fallback kill also timed out")
                     
                     # Clean up the process from tracking
                     del self.running_processes[instance_id]
