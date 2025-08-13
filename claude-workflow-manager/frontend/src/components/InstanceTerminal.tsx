@@ -302,14 +302,45 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     const initializeWebSocket = () => {
       console.log('🌐 Starting WebSocket connection...');
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname;
-      const port = process.env.REACT_APP_WS_PORT || '8005';  // Fixed: should be 8005, not 8000
-      const wsUrl = process.env.REACT_APP_WS_URL || `${protocol}//${host}:${port}`;
+      const currentHostname = window.location.hostname;
+      const port = process.env.REACT_APP_WS_PORT || '8005';
+      
+      // Apply same hostname-matching logic as API URL
+      let wsUrl;
+      if (process.env.REACT_APP_WS_URL) {
+        try {
+          const envUrl = new URL(process.env.REACT_APP_WS_URL);
+          // If the hostname in the env URL matches current hostname, use env URL
+          if (envUrl.hostname === currentHostname) {
+            wsUrl = process.env.REACT_APP_WS_URL;
+          } else {
+            // Otherwise, use current hostname with the port from env URL or default
+            const envPort = envUrl.port || port;
+            wsUrl = `${protocol}//${currentHostname}:${envPort}`;
+          }
+        } catch (e) {
+          // If env URL is malformed, fall back to dynamic construction
+          console.warn('Invalid REACT_APP_WS_URL, using dynamic construction:', e instanceof Error ? e.message : String(e));
+          wsUrl = `${protocol}//${currentHostname}:${port}`;
+        }
+      } else {
+        // Construct URL from current window location
+        wsUrl = `${protocol}//${currentHostname}:${port}`;
+      }
       
       console.log('🔍 WebSocket environment variables:');
       console.log('  REACT_APP_WS_URL:', process.env.REACT_APP_WS_URL);
       console.log('  REACT_APP_WS_PORT:', process.env.REACT_APP_WS_PORT);
-      console.log('  Fallback host:', host, 'port:', port);
+      console.log('  window.location.hostname:', currentHostname);
+      if (process.env.REACT_APP_WS_URL) {
+        try {
+          const envUrl = new URL(process.env.REACT_APP_WS_URL);
+          console.log('  Env WS URL hostname:', envUrl.hostname);
+          console.log('  Hostname match:', envUrl.hostname === currentHostname);
+        } catch (e) {
+          console.log('  Env WS URL parse error:', e instanceof Error ? e.message : String(e));
+        }
+      }
       console.log('  Final wsUrl:', wsUrl);
       console.log('🔌 Attempting WebSocket connection to:', `${wsUrl}/ws/${instanceId}`);
       
