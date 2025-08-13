@@ -80,8 +80,10 @@ jobs:
         cd $DEPLOY_DIR || cd .
         
         # Stop containers if they exist
-        if [ -f docker-compose.yml ]; then
+        if [ -f claude-workflow-manager/docker-compose.yml ]; then
+          cd claude-workflow-manager
           docker-compose down --remove-orphans || true
+          cd ..
         fi
         
         # Clean up unused Docker resources
@@ -101,6 +103,7 @@ jobs:
           # Keep only last 5 backups
           cd backups
           ls -t | tail -n +6 | xargs -r rm -rf
+          cd ..
         fi
 
     - name: Deploy new version
@@ -108,9 +111,8 @@ jobs:
         echo "🚀 Deploying new version..."
         cd $DEPLOY_DIR
         
-        # Copy source code
-        cp -r $GITHUB_WORKSPACE claude-workflow-manager
-        cd claude-workflow-manager
+        # Copy the claude-workflow-manager subdirectory from the repo
+        cp -r $GITHUB_WORKSPACE/claude-workflow-manager .
 
     - name: Set up environment configuration
       run: |
@@ -120,9 +122,8 @@ jobs:
         # Create .env file from GitHub secrets
         cat > .env << EOF
         # MongoDB Configuration
-        MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USERNAME }}
-        MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }}
-        MONGODB_URL=${{ secrets.MONGODB_URL }}
+        MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USERNAME || 'admin' }}
+        MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD || 'claudeworkflow123' }}
         
         # Claude API Configuration
         CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
@@ -231,7 +232,7 @@ jobs:
       run: |
         if [ "${{ job.status }}" == "success" ]; then
           echo "✅ Deployment completed successfully!"
-          echo "🎉 Claude Workflow Manager is now running on pop-os-1"
+          echo "🎉 Claude Workflow Manager is now running on self-hosted runner"
           echo "📅 Deployed: $DEPLOYMENT_TIME"
           echo "🌿 Branch: $BRANCH_NAME"
           echo "📝 Commit: $GIT_SHA"
