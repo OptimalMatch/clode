@@ -17,7 +17,7 @@ class ClaudeCodeManager:
     def __init__(self, db: Database):
         self.instances: Dict[str, dict] = {}  # Store instance info instead of session objects
         self.websockets: Dict[str, WebSocket] = {}
-        self.running_processes: Dict[str, subprocess.Popen] = {}  # Track running Claude CLI processes
+        self.running_processes: Dict[str, List[subprocess.Popen]] = {}  # Track all running Claude CLI processes for each instance
         self.db = db
     
     def _log_with_timestamp(self, message: str):
@@ -48,7 +48,11 @@ class ClaudeCodeManager:
             
             # Store the running process and track start time
             process._start_time = start_time  # Add start time to the process object
-            self.running_processes[instance_id] = process
+            
+            # Add to the list of running processes for this instance
+            if instance_id not in self.running_processes:
+                self.running_processes[instance_id] = []
+            self.running_processes[instance_id].append(process)
             
             # Read output line by line in real-time
             stdout_lines = []
@@ -128,9 +132,12 @@ class ClaudeCodeManager:
             return_code = await asyncio.create_task(asyncio.to_thread(process.wait))
             execution_time = int((time.time() - start_time) * 1000)
             
-            # Remove from running processes
+            # Remove this specific process from running processes
             if instance_id in self.running_processes:
-                del self.running_processes[instance_id]
+                self.running_processes[instance_id] = [p for p in self.running_processes[instance_id] if p != process]
+                # Clean up empty list
+                if not self.running_processes[instance_id]:
+                    del self.running_processes[instance_id]
             
             self._log_with_timestamp(f"✅ Claude CLI completed with exit code: {return_code}")
             self._log_with_timestamp(f"⏱️ Total execution time: {execution_time}ms")
@@ -201,7 +208,10 @@ class ClaudeCodeManager:
         except Exception as e:
             # Clean up running process on error
             if instance_id in self.running_processes:
-                del self.running_processes[instance_id]
+                # Remove this specific process from the list
+                self.running_processes[instance_id] = [p for p in self.running_processes[instance_id] if p != process]
+                if not self.running_processes[instance_id]:
+                    del self.running_processes[instance_id]
                 
             self._log_with_timestamp(f"❌ Error in streaming execution: {str(e)}")
             await self._send_websocket_update(instance_id, {
@@ -592,137 +602,159 @@ class ClaudeCodeManager:
             return False
         
         try:
-            # Check if there's a running Claude CLI process
-            if instance_id in self.running_processes:
-                process = self.running_processes[instance_id]
-                if process.poll() is None:  # Process is still running
-                    self._log_with_timestamp(f"🔥 INTERRUPT: Terminating Claude CLI process (PID: {process.pid}) for instance {instance_id}")
-                    
-                    # Enhanced termination for long-running Python processes
-                    import signal
-                    import psutil
-                    
+            # Check if there are running Claude CLI processes for this instance
+            if instance_id in self.running_processes and self.running_processes[instance_id]:
+                processes = self.running_processes[instance_id].copy()  # Copy to avoid modification during iteration
+                self._log_with_timestamp(f"🔥 INTERRUPT: Found {len(processes)} Claude CLI processes for instance {instance_id}")
+                
+                # Enhanced termination for long-running Python processes
+                import signal
+                import psutil
+                
+                all_processes_to_kill = []
+                
+                # Collect all processes and their children
+                for process in processes:
+                    if process.poll() is None:  # Process is still running
+                        self._log_with_timestamp(f"🔍 INTERRUPT: Analyzing Claude CLI process (PID: {process.pid})")
+                        try:
+                            # Get process and all its children using psutil
+                            parent = psutil.Process(process.pid)
+                            children = parent.children(recursive=True)
+                            process_group = [parent] + children
+                            all_processes_to_kill.extend(process_group)
+                            
+                            self._log_with_timestamp(f"📊 INTERRUPT: Process {process.pid} has {len(children)} children")
+                        except psutil.NoSuchProcess:
+                            self._log_with_timestamp(f"ℹ️ INTERRUPT: Process {process.pid} already terminated")
+                        except Exception as e:
+                            self._log_with_timestamp(f"⚠️ INTERRUPT: Error analyzing process {process.pid}: {e}")
+                
+                # Remove duplicates (same PID might appear multiple times)
+                unique_pids = set()
+                unique_processes = []
+                for proc in all_processes_to_kill:
+                    if proc.pid not in unique_pids:
+                        unique_pids.add(proc.pid)
+                        unique_processes.append(proc)
+                
+                self._log_with_timestamp(f"🎯 INTERRUPT: Total unique processes to terminate: {len(unique_processes)} (PIDs: {list(unique_pids)})")
+                
+                if unique_processes:
                     try:
-                        # Get process and all its children using psutil
-                        parent = psutil.Process(process.pid)
-                        children = parent.children(recursive=True)
-                        all_processes = [parent] + children
-                        
-                        self._log_with_timestamp(f"🔍 INTERRUPT: Found {len(all_processes)} processes to terminate (parent + {len(children)} children)")
-                        
                         if force:
                             # Force mode: Immediate SIGKILL to all processes
-                            self._log_with_timestamp(f"⚡ INTERRUPT: Force mode enabled - sending immediate SIGKILL")
-                            for proc in all_processes:
+                            self._log_with_timestamp(f"⚡ INTERRUPT: Force mode enabled - sending immediate SIGKILL to all processes")
+                            for proc in unique_processes:
                                 try:
                                     proc.kill()  # SIGKILL
                                     self._log_with_timestamp(f"⚡ INTERRUPT: Sent SIGKILL to PID {proc.pid}")
                                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                                     pass
                             
-                            # Shorter wait in force mode
-                            try:
-                                await asyncio.wait_for(
-                                    asyncio.create_task(asyncio.to_thread(process.wait)), 
-                                    timeout=2
-                                )
-                                self._log_with_timestamp(f"✅ INTERRUPT: Force kill successful")
-                            except asyncio.TimeoutError:
-                                self._log_with_timestamp(f"❌ INTERRUPT: Process still running after force kill")
+                            # Wait for all processes to terminate
+                            for process in processes:
+                                if process.poll() is None:
+                                    try:
+                                        await asyncio.wait_for(
+                                            asyncio.create_task(asyncio.to_thread(process.wait)), 
+                                            timeout=2
+                                        )
+                                    except asyncio.TimeoutError:
+                                        self._log_with_timestamp(f"⚠️ INTERRUPT: Process {process.pid} still running after force kill")
+                            
+                            self._log_with_timestamp(f"✅ INTERRUPT: Force kill completed")
                         else:
                             # Normal mode: Try graceful termination first
+                            self._log_with_timestamp(f"🛑 INTERRUPT: Attempting graceful termination of all processes")
                             
                             # Step 1: Try SIGTERM on all processes (graceful)
-                            for proc in all_processes:
+                            for proc in unique_processes:
                                 try:
                                     proc.terminate()
                                     self._log_with_timestamp(f"📡 INTERRUPT: Sent SIGTERM to PID {proc.pid}")
                                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                                     pass
                             
-                            # Step 2: Wait for graceful termination (shorter timeout for responsiveness)
-                            try:
-                                await asyncio.wait_for(
-                                    asyncio.create_task(asyncio.to_thread(process.wait)), 
-                                    timeout=2
-                                )
-                                self._log_with_timestamp(f"✅ INTERRUPT: Claude CLI process terminated gracefully")
-                            except asyncio.TimeoutError:
+                            # Step 2: Wait for graceful termination
+                            all_terminated = True
+                            for process in processes:
+                                if process.poll() is None:
+                                    try:
+                                        await asyncio.wait_for(
+                                            asyncio.create_task(asyncio.to_thread(process.wait)), 
+                                            timeout=2
+                                        )
+                                    except asyncio.TimeoutError:
+                                        all_terminated = False
+                                        break
+                            
+                            if all_terminated:
+                                self._log_with_timestamp(f"✅ INTERRUPT: All processes terminated gracefully")
+                            else:
                                 self._log_with_timestamp(f"⏰ INTERRUPT: Graceful termination timeout, trying SIGKILL")
                                 
                                 # Step 3: Force kill all processes with SIGKILL
-                                for proc in all_processes:
+                                for proc in unique_processes:
                                     try:
                                         proc.kill()  # SIGKILL
                                         self._log_with_timestamp(f"⚡ INTERRUPT: Sent SIGKILL to PID {proc.pid}")
                                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                                         pass
                                 
-                                # Step 4: Final wait with longer timeout
+                                # Step 4: Final wait
+                                for process in processes:
+                                    if process.poll() is None:
+                                        try:
+                                            await asyncio.wait_for(
+                                                asyncio.create_task(asyncio.to_thread(process.wait)), 
+                                                timeout=5
+                                            )
+                                        except asyncio.TimeoutError:
+                                            self._log_with_timestamp(f"❌ INTERRUPT: Process {process.pid} still running after SIGKILL")
+                                
+                                self._log_with_timestamp(f"✅ INTERRUPT: Force termination completed")
+                    
+                    except Exception as e:
+                        self._log_with_timestamp(f"⚠️ INTERRUPT: Error during enhanced termination: {e}")
+                        # Fallback to basic kill for all processes
+                        for process in processes:
+                            if process.poll() is None:
                                 try:
+                                    process.kill()
                                     await asyncio.wait_for(
                                         asyncio.create_task(asyncio.to_thread(process.wait)), 
-                                        timeout=5
+                                        timeout=3
                                     )
-                                    self._log_with_timestamp(f"✅ INTERRUPT: Process killed successfully")
-                                except asyncio.TimeoutError:
-                                    self._log_with_timestamp(f"❌ INTERRUPT: Process still running after SIGKILL - may be stuck in kernel")
-                    
-                    except psutil.NoSuchProcess:
-                        self._log_with_timestamp(f"ℹ️ INTERRUPT: Process already terminated")
-                    except Exception as e:
-                        self._log_with_timestamp(f"⚠️ INTERRUPT: Error during enhanced termination, falling back to basic kill: {e}")
-                        # Fallback to basic kill
-                        process.kill()
-                        try:
-                            await asyncio.wait_for(
-                                asyncio.create_task(asyncio.to_thread(process.wait)), 
-                                timeout=3
-                            )
-                        except asyncio.TimeoutError:
-                            self._log_with_timestamp(f"❌ INTERRUPT: Fallback kill also timed out")
-                    
-                    # Clean up the process from tracking
-                    del self.running_processes[instance_id]
-                    
-                    # Log the cancellation to terminal history
-                    await self.db.append_terminal_history(instance_id, "❌ Execution cancelled by user", "system")
-                    
-                    # Calculate process duration
-                    process_duration = None
-                    if hasattr(process, '_start_time'):
-                        process_duration = time.time() - process._start_time
-                    
-                    # Send cancellation message via WebSocket
-                    duration_text = f" (after {process_duration:.1f}s)" if process_duration else ""
-                    await self._send_websocket_update(instance_id, {
-                        "type": "partial_output", 
-                        "content": f"🛑 **Execution Cancelled{duration_text}**\n\n⚠️ The Claude CLI process was forcibly terminated. Any unsaved work may be lost."
-                    })
-                    
-                    # Send status update
-                    await self._send_websocket_update(instance_id, {
-                        "type": "status",
-                        "status": "cancelled",
-                        "message": f"Process terminated{duration_text}"
-                    })
-                    
-                else:
-                    self._log_with_timestamp(f"ℹ️ INTERRUPT: Claude CLI process already finished for instance {instance_id}")
-                    
-                    # Calculate process duration if available
-                    process_duration = None
-                    if hasattr(process, '_start_time'):
-                        process_duration = time.time() - process._start_time
-                    
-                    del self.running_processes[instance_id]
-                    
-                    # Inform user that process was already completed
-                    duration_text = f" (completed in {process_duration:.1f}s)" if process_duration else ""
-                    await self._send_websocket_update(instance_id, {
-                        "type": "partial_output",
-                        "content": f"ℹ️ **Process Already Completed{duration_text}**\n\nThe execution finished before the cancellation request was processed."
-                    })
+                                except Exception as fallback_error:
+                                    self._log_with_timestamp(f"❌ INTERRUPT: Fallback kill failed for PID {process.pid}: {fallback_error}")
+                
+                # Clean up all processes from tracking
+                del self.running_processes[instance_id]
+                self._log_with_timestamp(f"🧹 INTERRUPT: Cleaned up process tracking for instance {instance_id}")
+                
+                # Log the cancellation to terminal history
+                await self.db.append_terminal_history(instance_id, "❌ Execution cancelled by user", "system")
+                
+                # Calculate process duration (use the first process as reference)
+                process_duration = None
+                if processes and hasattr(processes[0], '_start_time'):
+                    process_duration = time.time() - processes[0]._start_time
+                
+                # Send cancellation message via WebSocket
+                mode_text = "Force Killed" if force else "Cancelled"
+                duration_text = f" (after {process_duration:.1f}s)" if process_duration else ""
+                await self._send_websocket_update(instance_id, {
+                    "type": "partial_output", 
+                    "content": f"🛑 **Execution {mode_text}{duration_text}**\n\n⚠️ All Claude CLI processes and their children were terminated. Any unsaved work may be lost."
+                })
+                
+                # Send status update
+                await self._send_websocket_update(instance_id, {
+                    "type": "status",
+                    "status": "cancelled",
+                    "message": f"All processes terminated{duration_text}"
+                })
             else:
                 self._log_with_timestamp(f"ℹ️ INTERRUPT: No running Claude CLI process found for instance {instance_id}")
                 
@@ -787,21 +819,22 @@ class ClaudeCodeManager:
                 await websocket.send_json(connection_data)
                 print(f"✅ Connection data sent successfully for instance: {instance_id}")
                 
-                # Check if there's an ongoing Claude CLI process for this instance
-                if instance_id in self.running_processes:
-                    process = self.running_processes[instance_id]
-                    if process.poll() is None:  # Process is still running
-                        self._log_with_timestamp(f"🔄 Found ongoing Claude CLI process for instance {instance_id} (PID: {process.pid})")
+                # Check if there are ongoing Claude CLI processes for this instance
+                if instance_id in self.running_processes and self.running_processes[instance_id]:
+                    active_processes = [p for p in self.running_processes[instance_id] if p.poll() is None]
+                    if active_processes:
+                        latest_process = active_processes[-1]  # Use the most recent process
+                        self._log_with_timestamp(f"🔄 Found {len(active_processes)} ongoing Claude CLI processes for instance {instance_id}, latest PID: {latest_process.pid}")
                         await websocket.send_json({
                             "type": "status",
                             "status": "running",
-                            "message": f"Connected to ongoing Claude CLI execution (PID: {process.pid})"
+                            "message": f"Connected to ongoing Claude CLI execution ({len(active_processes)} processes, latest PID: {latest_process.pid})"
                         })
                         
-                        # Start a background task to monitor this ongoing process and stream its output
-                        asyncio.create_task(self._monitor_ongoing_process(instance_id, process))
+                        # Start a background task to monitor the latest ongoing process
+                        asyncio.create_task(self._monitor_ongoing_process(instance_id, latest_process))
                     else:
-                        # Process finished but wasn't cleaned up yet
+                        # All processes finished but weren't cleaned up yet
                         del self.running_processes[instance_id]
                         
             else:
@@ -919,9 +952,11 @@ class ClaudeCodeManager:
                         total_tokens=total_tokens
                     )
                 
-                # Clean up
+                # Clean up - remove this specific process
                 if instance_id in self.running_processes:
-                    del self.running_processes[instance_id]
+                    self.running_processes[instance_id] = [p for p in self.running_processes[instance_id] if p != process]
+                    if not self.running_processes[instance_id]:
+                        del self.running_processes[instance_id]
                 
                 # Log completion event to database
                 instance_info = self.instances.get(instance_id, {})
@@ -965,9 +1000,11 @@ class ClaudeCodeManager:
                 
         except Exception as e:
             self._log_with_timestamp(f"❌ Error monitoring ongoing process for instance {instance_id}: {str(e)}")
-            # Clean up on error
+            # Clean up on error - remove this specific process
             if instance_id in self.running_processes:
-                del self.running_processes[instance_id]
+                self.running_processes[instance_id] = [p for p in self.running_processes[instance_id] if p != process]
+                if not self.running_processes[instance_id]:
+                    del self.running_processes[instance_id]
     
     async def disconnect_websocket(self, instance_id: str):
         if instance_id in self.websockets:
@@ -980,18 +1017,19 @@ class ClaudeCodeManager:
         
         # Clean up any running processes
         if instance_id in self.running_processes:
-            process = self.running_processes[instance_id]
-            if process.poll() is None:  # Process is still running
-                self._log_with_timestamp(f"🛑 Terminating running Claude CLI process for instance {instance_id}")
-                process.terminate()
-                try:
-                    await asyncio.wait_for(
-                        asyncio.create_task(asyncio.to_thread(process.wait)), 
-                        timeout=5
-                    )  # Wait up to 5 seconds for graceful termination
-                except asyncio.TimeoutError:
-                    self._log_with_timestamp(f"⚡ Force killing Claude CLI process for instance {instance_id}")
-                    process.kill()
+            processes = self.running_processes[instance_id]
+            for process in processes:
+                if process.poll() is None:  # Process is still running
+                    self._log_with_timestamp(f"🛑 Terminating running Claude CLI process (PID: {process.pid}) for instance {instance_id}")
+                    process.terminate()
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.create_task(asyncio.to_thread(process.wait)), 
+                            timeout=5
+                        )  # Wait up to 5 seconds for graceful termination
+                    except asyncio.TimeoutError:
+                        self._log_with_timestamp(f"⚡ Force killing Claude CLI process (PID: {process.pid}) for instance {instance_id}")
+                        process.kill()
             del self.running_processes[instance_id]
         
         # Remove instance from memory
@@ -1014,6 +1052,16 @@ class ClaudeCodeManager:
     
     async def send_input(self, instance_id: str, input_text: str):
         self._log_with_timestamp(f"📝 SEND_INPUT: Called for instance {instance_id} with input: {input_text[:100]}...")
+        
+        # Check for special cancellation commands
+        if input_text.strip().lower() in ['stop', 'cancel', 'quit', 'exit']:
+            self._log_with_timestamp(f"🛑 SPECIAL COMMAND: Detected cancellation command '{input_text.strip()}' - triggering interrupt")
+            await self.interrupt_instance(instance_id, f"Cancelled via '{input_text.strip()}' command", force=False)
+            return
+        elif input_text.strip().lower() in ['force stop', 'force kill', 'kill']:
+            self._log_with_timestamp(f"⚡ SPECIAL COMMAND: Detected force cancellation command '{input_text.strip()}' - triggering force interrupt")
+            await self.interrupt_instance(instance_id, f"Force cancelled via '{input_text.strip()}' command", force=True)
+            return
         
         instance_info = self.instances.get(instance_id)
         if not instance_info:
