@@ -1,3 +1,6 @@
+# Production Docker Compose Configuration
+# For development with hot reload, use: docker-compose -f docker-compose.dev.yml up
+
 services:
   mongodb:
     image: mongo:7.0
@@ -49,9 +52,10 @@ services:
       REACT_APP_WS_URL: ws://${HOST_IP:-localhost}:8005
     depends_on:
       - backend
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    # volumes:
+      # - ./frontend:/app
+      # - /app/node_modules
+    # Note: Volume mounts disabled for production deployment to avoid dev server WebSocket issues
     networks:
       - claude-network
 

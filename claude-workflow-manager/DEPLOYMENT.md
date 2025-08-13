@@ -1,6 +1,55 @@
 # Deployment Guide
 
-This guide covers deploying the Claude Workflow Manager to your self-hosted runner using GitHub Actions.
+This guide covers both local development setup and production deployment of the Claude Workflow Manager.
+
+## 🏠 Local Development Setup
+
+For local development with hot reload and live code changes:
+
+### Quick Start
+```bash
+# Navigate to the project directory
+cd claude-workflow-manager
+
+# Run the development setup script
+./dev-setup.sh
+```
+
+### Manual Setup
+```bash
+# Create .env file (if not exists)
+cp .env.dev .env
+# Edit .env and add your CLAUDE_API_KEY
+
+# Start development services
+docker-compose -f docker-compose.dev.yml up --build -d
+
+# View logs
+docker-compose -f docker-compose.dev.yml logs -f
+```
+
+### Development URLs
+- **Frontend**: http://localhost:3000 (with hot reload)
+- **Backend**: http://localhost:8000
+- **MongoDB**: localhost:27017
+- **Redis**: localhost:6379
+
+### Development Features
+- ✅ **Hot Reload**: Frontend code changes update automatically
+- ✅ **Live Backend Reload**: Backend changes restart automatically
+- ✅ **Volume Mounts**: Code changes reflected immediately
+- ✅ **Development Ports**: Standard development ports (3000, 8000)
+
+### Stopping Development Environment
+```bash
+docker-compose -f docker-compose.dev.yml down
+```
+
+---
+
+## 🚀 Production Deployment
+
+This section covers deploying the Claude Workflow Manager to your self-hosted runner using GitHub Actions.
 
 ## Prerequisites
 

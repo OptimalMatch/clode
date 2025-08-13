@@ -303,9 +303,14 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       console.log('🌐 Starting WebSocket connection...');
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.hostname;
-      const port = process.env.REACT_APP_WS_PORT || '8000';
+      const port = process.env.REACT_APP_WS_PORT || '8005';  // Fixed: should be 8005, not 8000
       const wsUrl = process.env.REACT_APP_WS_URL || `${protocol}//${host}:${port}`;
       
+      console.log('🔍 WebSocket environment variables:');
+      console.log('  REACT_APP_WS_URL:', process.env.REACT_APP_WS_URL);
+      console.log('  REACT_APP_WS_PORT:', process.env.REACT_APP_WS_PORT);
+      console.log('  Fallback host:', host, 'port:', port);
+      console.log('  Final wsUrl:', wsUrl);
       console.log('🔌 Attempting WebSocket connection to:', `${wsUrl}/ws/${instanceId}`);
       
       setConnectionStatus('connecting');

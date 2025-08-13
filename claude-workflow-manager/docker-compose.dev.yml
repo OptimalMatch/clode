@@ -1,0 +1,81 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: claude-workflow-mongo-dev
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: claudeworkflow123
+      MONGO_INITDB_DATABASE: claude_workflows
+    volumes:
+      - mongo_data_dev:/data/db
+    networks:
+      - claude-network-dev
+
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: claude-workflow-backend-dev
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      MONGODB_URL: mongodb://admin:claudeworkflow123@mongodb:27017/claude_workflows?authSource=admin
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+      ANTHROPIC_API_KEY: ${CLAUDE_API_KEY}
+      REDIS_URL: redis://redis:6379
+      CLAUDE_PROMPTS_FOLDER: ${CLAUDE_PROMPTS_FOLDER:-.clode/claude_prompts}
+      CLAUDE_AGENTS_FOLDER: ${CLAUDE_AGENTS_FOLDER:-.claude/agents}
+    depends_on:
+      - mongodb
+      - redis
+    volumes:
+      - ./backend:/app/src
+      - ${HOME}/.ssh:/root/.ssh:ro
+      - ssh_known_hosts_dev:/root/.ssh_known_hosts
+      - ssh_generated_keys_dev:/app/ssh_keys
+    networks:
+      - claude-network-dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev  # Use development Dockerfile
+    container_name: claude-workflow-frontend-dev
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: http://localhost:8000
+      REACT_APP_WS_URL: ws://localhost:8000
+      # Development server environment variables
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # Enable hot reload with volume mounts
+    networks:
+      - claude-network-dev
+
+  redis:
+    image: redis:7-alpine
+    container_name: claude-workflow-redis-dev
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - claude-network-dev
+
+volumes:
+  mongo_data_dev:
+  ssh_known_hosts_dev:
+  ssh_generated_keys_dev:
+
+networks:
+  claude-network-dev:
+    driver: bridge
