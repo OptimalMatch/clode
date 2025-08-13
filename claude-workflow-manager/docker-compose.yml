@@ -47,6 +47,7 @@ services:
       args:
         REACT_APP_API_URL: http://${HOST_IP:-localhost}:8005
         REACT_APP_WS_URL: ws://${HOST_IP:-localhost}:8005
+        REACT_APP_API_PORT: 8005
     container_name: claude-workflow-frontend
     restart: always
     ports:

@@ -1,7 +1,29 @@
 import axios from 'axios';
 import { Workflow, Prompt, ClaudeInstance, Subagent, InstanceLog, LogAnalytics, LogType } from '../types';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// Dynamically determine API URL based on current window location
+const getApiUrl = () => {
+  // If REACT_APP_API_URL is set, use it
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // Otherwise, construct URL from current window location
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  const apiPort = process.env.REACT_APP_API_PORT || '8005';
+  
+  return `${protocol}//${hostname}:${apiPort}`;
+};
+
+const API_URL = getApiUrl();
+
+// Debug logging to help with API URL issues
+console.log('🔍 API Configuration:');
+console.log('  REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
+console.log('  REACT_APP_API_PORT:', process.env.REACT_APP_API_PORT);
+console.log('  window.location.hostname:', window.location.hostname);
+console.log('  Final API_URL:', API_URL);
 
 const api = axios.create({
   baseURL: API_URL,

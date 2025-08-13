@@ -12,10 +12,12 @@ COPY . .
 # Accept build arguments for environment variables
 ARG REACT_APP_API_URL
 ARG REACT_APP_WS_URL
+ARG REACT_APP_API_PORT
 
 # Set environment variables for build
 ENV REACT_APP_API_URL=$REACT_APP_API_URL
 ENV REACT_APP_WS_URL=$REACT_APP_WS_URL
+ENV REACT_APP_API_PORT=$REACT_APP_API_PORT
 
 # Build for production with environment variables
 RUN npm run build
