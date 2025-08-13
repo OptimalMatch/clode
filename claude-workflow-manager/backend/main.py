@@ -697,6 +697,33 @@ async def interrupt_instance(instance_id: str, data: dict):
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
 
+@app.get("/api/debug/pids")
+async def debug_pids():
+    """Debug endpoint to show all tracked PIDs"""
+    result = {}
+    for instance_id, processes in claude_manager.running_processes.items():
+        active_pids = []
+        finished_pids = []
+        for p in processes:
+            if p.poll() is None:
+                active_pids.append({"pid": p.pid, "status": "running"})
+            else:
+                finished_pids.append({"pid": p.pid, "status": "finished", "exit_code": p.returncode})
+        
+        result[instance_id] = {
+            "active": active_pids,
+            "finished": finished_pids,
+            "total_tracked": len(processes)
+        }
+    
+    # Also log to console for debugging
+    claude_manager._log_all_tracked_pids()
+    
+    return {
+        "tracked_processes": result,
+        "total_instances": len(claude_manager.running_processes)
+    }
+
 @app.post("/api/instances/{instance_id}/archive")
 async def archive_instance(instance_id: str):
     """Archive a specific instance (soft delete)"""

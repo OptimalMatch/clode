@@ -26,6 +26,26 @@ class ClaudeCodeManager:
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Include milliseconds
         print(f"[{timestamp}] {message}")
     
+    def _log_all_tracked_pids(self):
+        """Debug function to display all currently tracked PIDs"""
+        if not self.running_processes:
+            self._log_with_timestamp("📊 PID DEBUG: No processes currently tracked")
+            return
+        
+        self._log_with_timestamp("📊 PID DEBUG: Currently tracked processes:")
+        for instance_id, processes in self.running_processes.items():
+            active_pids = []
+            finished_pids = []
+            for p in processes:
+                if p.poll() is None:
+                    active_pids.append(p.pid)
+                else:
+                    finished_pids.append(f"{p.pid}(exit:{p.returncode})")
+            
+            active_str = f"Active: {active_pids}" if active_pids else "Active: None"
+            finished_str = f"Finished: {finished_pids}" if finished_pids else ""
+            self._log_with_timestamp(f"📊   Instance {instance_id}: {active_str} {finished_str}")
+    
     async def _execute_claude_streaming(self, cmd: List[str], instance_id: str):
         """Execute Claude CLI with real-time streaming output"""
         self._log_with_timestamp(f"📡 Starting streaming execution...")
@@ -54,6 +74,8 @@ class ClaudeCodeManager:
             if instance_id not in self.running_processes:
                 self.running_processes[instance_id] = []
             self.running_processes[instance_id].append(process)
+            
+            self._log_with_timestamp(f"📝 PID TRACKING: Added PID {process.pid} to instance {instance_id} (total: {len(self.running_processes[instance_id])} processes)")
             
             # Read output line by line in real-time
             stdout_lines = []
@@ -135,10 +157,14 @@ class ClaudeCodeManager:
             
             # Remove this specific process from running processes
             if instance_id in self.running_processes:
+                old_count = len(self.running_processes[instance_id])
                 self.running_processes[instance_id] = [p for p in self.running_processes[instance_id] if p != process]
+                new_count = len(self.running_processes[instance_id])
+                self._log_with_timestamp(f"📝 PID TRACKING: Removed PID {process.pid} from instance {instance_id} ({old_count} → {new_count} processes)")
                 # Clean up empty list
                 if not self.running_processes[instance_id]:
                     del self.running_processes[instance_id]
+                    self._log_with_timestamp(f"🧹 PID TRACKING: Cleared all processes for instance {instance_id}")
             
             self._log_with_timestamp(f"✅ Claude CLI completed with exit code: {return_code}")
             self._log_with_timestamp(f"⏱️ Total execution time: {execution_time}ms")
@@ -597,6 +623,9 @@ class ClaudeCodeManager:
         """Interrupt/cancel a running Claude CLI instance"""
         self._log_with_timestamp(f"🛑 INTERRUPT: Attempting to interrupt instance {instance_id}")
         
+        # Debug: Show all tracked PIDs before interrupt
+        self._log_all_tracked_pids()
+        
         # Mark instance as explicitly cancelled to prevent session recovery
         self.cancelled_instances.add(instance_id)
         self._log_with_timestamp(f"🏷️ INTERRUPT: Marked instance {instance_id} as cancelled (prevents session recovery)")
@@ -610,7 +639,9 @@ class ClaudeCodeManager:
             # Check if there are running Claude CLI processes for this instance
             if instance_id in self.running_processes and self.running_processes[instance_id]:
                 processes = self.running_processes[instance_id].copy()  # Copy to avoid modification during iteration
+                process_pids = [p.pid for p in processes if p.poll() is None]
                 self._log_with_timestamp(f"🔥 INTERRUPT: Found {len(processes)} Claude CLI processes for instance {instance_id}")
+                self._log_with_timestamp(f"📝 INTERRUPT: Active PIDs: {process_pids}")
                 
                 # Enhanced termination for long-running Python processes
                 import signal
@@ -737,6 +768,9 @@ class ClaudeCodeManager:
                 # Clean up all processes from tracking
                 del self.running_processes[instance_id]
                 self._log_with_timestamp(f"🧹 INTERRUPT: Cleaned up process tracking for instance {instance_id}")
+                
+                # Debug: Show all tracked PIDs after cleanup
+                self._log_all_tracked_pids()
                 
                 # Log the cancellation to terminal history
                 await self.db.append_terminal_history(instance_id, "❌ Execution cancelled by user", "system")
@@ -1062,6 +1096,9 @@ class ClaudeCodeManager:
     
     async def send_input(self, instance_id: str, input_text: str):
         self._log_with_timestamp(f"📝 SEND_INPUT: Called for instance {instance_id} with input: {input_text[:100]}...")
+        
+        # Debug: Show all tracked PIDs before sending input
+        self._log_all_tracked_pids()
         
         # Check for special cancellation commands
         if input_text.strip().lower() in ['stop', 'cancel', 'quit', 'exit']:
