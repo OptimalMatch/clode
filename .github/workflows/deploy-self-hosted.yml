@@ -120,6 +120,12 @@ jobs:
         echo "⚙️ Setting up environment configuration..."
         cd $DEPLOY_DIR/claude-workflow-manager
         
+        # Get the actual IP address of this machine
+        HOST_IP_ADDRESS=$(hostname -I | awk '{print $1}')
+        if [ -z "$HOST_IP_ADDRESS" ]; then
+          HOST_IP_ADDRESS="pop-os-1"  # Fallback to hostname
+        fi
+        
         # Create .env file from GitHub secrets
         cat > .env << EOF
         # MongoDB Configuration
@@ -129,8 +135,8 @@ jobs:
         # Claude API Configuration
         CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
         
-        # Host Configuration
-        HOST_IP=${{ secrets.HOST_IP || 'localhost' }}
+        # Host Configuration (auto-detected IP address)
+        HOST_IP=${{ secrets.HOST_IP || '${HOST_IP_ADDRESS}' }}
         
         # Optional: Custom folders
         CLAUDE_PROMPTS_FOLDER=.clode/claude_prompts
@@ -143,7 +149,7 @@ jobs:
         BRANCH_NAME=$BRANCH_NAME
         EOF
         
-        echo "✅ Environment file created"
+        echo "✅ Environment file created with HOST_IP=${{ secrets.HOST_IP || '${HOST_IP_ADDRESS}' }}"
 
     - name: Build and start services
       run: |
@@ -199,10 +205,12 @@ jobs:
         
         echo ""
         echo "🔗 Service URLs:"
-        echo "Frontend: http://localhost:3005"
-        echo "Backend API: http://localhost:8005"
-        echo "MongoDB: localhost:27018"
-        echo "Redis: localhost:6379"
+        # Get the HOST_IP from the .env file
+        HOST_IP_FROM_ENV=$(grep "HOST_IP=" .env | cut -d'=' -f2)
+        echo "Frontend: http://${HOST_IP_FROM_ENV}:3005"
+        echo "Backend API: http://${HOST_IP_FROM_ENV}:8005"
+        echo "MongoDB: ${HOST_IP_FROM_ENV}:27018"
+        echo "Redis: ${HOST_IP_FROM_ENV}:6379"
 
     - name: Send deployment notification
       if: always()
