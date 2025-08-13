@@ -1121,6 +1121,15 @@ class ClaudeCodeManager:
             await self.db.append_terminal_history(instance_id, f"$ {input_text}", "input")
             self._log_with_timestamp(f"💾 SEND_INPUT: Logged input to terminal history for instance {instance_id}")
             
+            # Update status to running and notify frontend
+            await self.db.update_instance_status(instance_id, InstanceStatus.RUNNING)
+            await self._send_websocket_update(instance_id, {
+                "type": "status",
+                "status": "running", 
+                "message": f"Executing command: {input_text[:50]}{'...' if len(input_text) > 50 else ''}"
+            })
+            self._log_with_timestamp(f"📡 SEND_INPUT: Sent running status update to frontend for instance {instance_id}")
+            
             # Send input to Claude Code and measure time using claude-code-sdk
             start_time = time.time()
             self._log_with_timestamp(f"🚀 SEND_INPUT: Starting Claude CLI execution for instance {instance_id}")

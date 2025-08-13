@@ -315,10 +315,13 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       }
       // ESC to open cancel dialog
       else if (event.key === 'Escape') {
+        console.log(`🚪 ESC pressed - isProcessRunning: ${isProcessRunning}, isCancelling: ${isCancelling}, showCancelDialog: ${showCancelDialog}`);
         if (isProcessRunning && !isCancelling && !showCancelDialog) {
           event.preventDefault();
-          console.log('🚪 ESC pressed - opening cancel dialog');
+          console.log('✅ ESC conditions met - opening cancel dialog');
           setShowCancelDialog(true);
+        } else {
+          console.log('❌ ESC conditions not met - ignoring ESC');
         }
       }
     };
@@ -466,6 +469,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               break;
             case 'status':
               if (message.status === 'running' && message.message) {
+                console.log('🔄 Status update: Process is now running - setting isProcessRunning=true');
                 appendToTerminal(`🔄 **${message.message}**\n📡 You are now connected to the live output stream...`);
                 
                 // Track process start time for duration display
@@ -475,6 +479,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                   setIsWaitingForResponse(true);
                   setResponseStartTime(Date.now());
                 }
+                console.log('✅ Process state updated: isProcessRunning=true, ESC should now work');
               } else {
                 appendToTerminal(`📊 **Status:** ${message.status}`);
               }
@@ -482,10 +487,12 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               if (message.status === 'paused') {
                 setIsPaused(true);
               } else if (message.status === 'cancelled') {
+                console.log('🛑 Status update: Process cancelled - setting isProcessRunning=false');
                 setIsPaused(false);
                 setIsProcessRunning(false);
                 setProcessStartTime(null);
                 setIsCancelling(false); // Reset cancelling state
+                console.log('🔄 Process state updated: isProcessRunning=false, ESC disabled');
               } else {
                 setIsPaused(false);
               }
