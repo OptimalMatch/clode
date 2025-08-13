@@ -306,7 +306,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       const port = process.env.REACT_APP_WS_PORT || '8005';
       
       // Apply same hostname-matching logic as API URL
-      let wsUrl;
+      let wsUrl: string;
       if (process.env.REACT_APP_WS_URL) {
         try {
           const envUrl = new URL(process.env.REACT_APP_WS_URL);
