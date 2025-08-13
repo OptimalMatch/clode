@@ -468,8 +468,8 @@ async def health_check():
     # Check database connectivity
     try:
         if db.db is not None:
-            # Try a simple operation
-            await db.db.admin.command('ping')
+            # Try a simple operation using the correct method
+            await db.db.command('ping')
             health_status["services"]["database"] = "healthy"
         else:
             health_status["services"]["database"] = "disconnected"

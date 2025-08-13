@@ -167,7 +167,7 @@ jobs:
         # Wait for backend to be ready
         echo "Waiting for backend service..."
         for i in {1..30}; do
-          if curl -f http://localhost:8005/health &>/dev/null; then
+          if curl -f http://localhost:8005/ &>/dev/null; then
             echo "✅ Backend service is healthy"
             break
           fi
@@ -195,7 +195,7 @@ jobs:
         echo "Testing backend API..."
         
         # Health check
-        if ! curl -f http://localhost:8005/health; then
+        if ! curl -f http://localhost:8005/; then
           echo "❌ Backend health check failed"
           exit 1
         fi
