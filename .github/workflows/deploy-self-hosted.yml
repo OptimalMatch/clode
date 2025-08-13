@@ -51,11 +51,11 @@ jobs:
         echo "✅ Docker version: $(docker --version)"
         
         # Check Docker Compose
-        if ! command -v docker-compose &> /dev/null; then
+        if ! command -v docker compose &> /dev/null; then
           echo "❌ Docker Compose is not installed"
           exit 1
         fi
-        echo "✅ Docker Compose version: $(docker-compose --version)"
+        echo "✅ Docker Compose version: $(docker compose --version)"
         
         # Check available disk space (require at least 2GB)
         AVAILABLE_SPACE=$(df / | awk 'NR==2 {print $4}')
@@ -80,9 +80,9 @@ jobs:
         cd $DEPLOY_DIR || cd .
         
         # Stop containers if they exist
-        if [ -f claude-workflow-manager/docker-compose.yml ]; then
+        if [ -f claude-workflow-manager/docker compose.yml ]; then
           cd claude-workflow-manager
-          docker-compose down --remove-orphans || true
+          docker compose down --remove-orphans || true
           cd ..
         fi
         
@@ -150,10 +150,10 @@ jobs:
         cd $DEPLOY_DIR/claude-workflow-manager
         
         # Build containers
-        docker-compose build --no-cache
+        docker compose build --no-cache
         
         # Start services
-        docker-compose up -d
+        docker compose up -d
         
         echo "✅ Services started successfully"
 
@@ -218,7 +218,7 @@ jobs:
       run: |
         echo "📊 Service Status:"
         cd $DEPLOY_DIR/claude-workflow-manager
-        docker-compose ps
+        docker compose ps
         
         echo ""
         echo "🔗 Service URLs:"
@@ -245,7 +245,7 @@ jobs:
           # Show recent logs for debugging
           echo "🔍 Recent logs:"
           cd $DEPLOY_DIR/claude-workflow-manager || cd .
-          docker-compose logs --tail=50 || true
+          docker compose logs --tail=50 || true
         fi
 
     - name: Cleanup on failure
@@ -255,7 +255,7 @@ jobs:
         cd $DEPLOY_DIR/claude-workflow-manager || cd .
         
         # Stop and remove containers
-        docker-compose down --remove-orphans || true
+        docker compose down --remove-orphans || true
         
         # Restore from backup if available
         cd $DEPLOY_DIR
@@ -265,5 +265,5 @@ jobs:
           rm -rf claude-workflow-manager || true
           mv "backups/$LATEST_BACKUP/claude-workflow-manager" . || true
           cd claude-workflow-manager
-          docker-compose up -d || true
+          docker compose up -d || true
         fi
