@@ -231,7 +231,7 @@ class ClaudeCodeManager:
             "--print",
             "--verbose",
             "--output-format", "stream-json",
-            "--permission-mode", "acceptEdits",
+            "--permission-mode", "bypassPermissions",
             "--session-id", new_session_id,
             input_text
         ]
@@ -306,6 +306,37 @@ class ClaudeCodeManager:
                 self._log_with_timestamp(f"⚠️ Agent discovery error (non-fatal): {e}")
                 # Don't fail instance creation if agent discovery fails
             
+            # Configure git user settings to avoid commit issues
+            try:
+                self._log_with_timestamp(f"🔧 Configuring git user settings...")
+                
+                # Set git user configuration in the cloned repository
+                git_config_commands = [
+                    ["git", "config", "user.email", "clode@unidatum.com"],
+                    ["git", "config", "user.name", "CLode Automation"],
+                    ["git", "config", "init.defaultBranch", "main"]
+                ]
+                
+                for cmd in git_config_commands:
+                    process = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        cwd=temp_dir,
+                        env=env
+                    )
+                    stdout, stderr = await process.communicate()
+                    if process.returncode != 0:
+                        self._log_with_timestamp(f"⚠️ Git config command failed: {' '.join(cmd)} - {stderr.decode()}")
+                    else:
+                        self._log_with_timestamp(f"✅ Git config command successful: {' '.join(cmd)}")
+                        
+                self._log_with_timestamp(f"✅ Git user configuration completed")
+                
+            except Exception as e:
+                self._log_with_timestamp(f"⚠️ Git configuration error (non-fatal): {e}")
+                # Don't fail instance creation if git config fails
+            
             # Check if instance already has a session ID in database
             existing_session_id = await self.db.get_instance_session_id(instance.id)
             if existing_session_id:
@@ -327,20 +358,29 @@ class ClaudeCodeManager:
                     with open(settings_file, 'r') as f:
                         settings = json.load(f)
                     
-                    # Add missing bash permissions
+                    # Add missing bash permissions including git commands
                     additional_permissions = [
-                        "Bash(for:*)",      # Bash for loops
-                        "Bash(cd:*)",       # Change directory
-                        "Bash(do:*)",       # Do statements in loops
-                        "Bash(done:*)",     # End of loops
-                        "Bash(echo:*)",     # Echo command
-                        "Bash(cat:*)",      # Cat command
-                        "Bash(head:*)",     # Head command
-                        "Bash(tail:*)",     # Tail command
-                        "Bash(grep:*)",     # Grep command
-                        "Bash(find:*)",     # Find command
-                        "Bash(xargs:*)",    # Xargs command
-                        "Bash(*)"           # Allow all bash commands
+                        "Bash(for:*)",        # Bash for loops
+                        "Bash(cd:*)",         # Change directory
+                        "Bash(do:*)",         # Do statements in loops
+                        "Bash(done:*)",       # End of loops
+                        "Bash(echo:*)",       # Echo command
+                        "Bash(cat:*)",        # Cat command
+                        "Bash(head:*)",       # Head command
+                        "Bash(tail:*)",       # Tail command
+                        "Bash(grep:*)",       # Grep command
+                        "Bash(find:*)",       # Find command
+                        "Bash(xargs:*)",      # Xargs command
+                        "Bash(git:*)",        # Git commands
+                        "Bash(git config:*)", # Git config commands
+                        "Bash(git commit:*)", # Git commit commands
+                        "Bash(git push:*)",   # Git push commands
+                        "Bash(git pull:*)",   # Git pull commands
+                        "Bash(git add:*)",    # Git add commands
+                        "Bash(git status:*)", # Git status commands
+                        "Bash(&&:*)",         # Command chaining with &&
+                        "Bash(||:*)",         # Command chaining with ||
+                        "Bash(*)"             # Allow all bash commands
                     ]
                     
                     # Ensure permissions structure exists
@@ -977,7 +1017,7 @@ class ClaudeCodeManager:
                         "--print",
                         "--verbose",
                         "--output-format", "stream-json",
-                        "--permission-mode", "acceptEdits",
+                        "--permission-mode", "bypassPermissions",
                         "--session-id", session_id,
                         input_text
                     ]
@@ -992,7 +1032,7 @@ class ClaudeCodeManager:
                         "--print",
                         "--verbose",
                         "--output-format", "stream-json",
-                        "--permission-mode", "acceptEdits",
+                        "--permission-mode", "bypassPermissions",
                         "--resume", session_id,
                         input_text
                     ]
