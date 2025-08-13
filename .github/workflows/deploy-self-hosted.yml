@@ -1,4 +1,4 @@
-name: Deploy to Self-Hosted Runner
+name: Deploy to pop-os-1
 
 on:
   push:
