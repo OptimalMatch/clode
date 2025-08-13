@@ -69,10 +69,11 @@ jobs:
     - name: Create deployment directory
       run: |
         echo "📁 Setting up deployment directory..."
-        DEPLOY_DIR="/opt/claude-workflow-manager"
-        sudo mkdir -p $DEPLOY_DIR
-        sudo chown $USER:$USER $DEPLOY_DIR
+        # Use home directory instead of /opt to avoid sudo requirements
+        DEPLOY_DIR="$HOME/claude-workflow-manager-deploy"
+        mkdir -p $DEPLOY_DIR
         echo "DEPLOY_DIR=$DEPLOY_DIR" >> $GITHUB_ENV
+        echo "✅ Deployment directory created at $DEPLOY_DIR"
 
     - name: Stop existing services
       run: |

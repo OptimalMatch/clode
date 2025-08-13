@@ -84,7 +84,7 @@ The GitHub Action performs these steps:
 ### File Structure
 
 ```
-/opt/claude-workflow-manager/
+$HOME/claude-workflow-manager-deploy/
 ├── claude-workflow-manager/     # Current deployment
 ├── backups/                     # Backup history
 │   ├── backup_20240101_120000/  # Timestamped backups
@@ -181,35 +181,35 @@ If deployment fails, the system automatically attempts recovery:
 1. **Automatic Rollback** - Restores from latest backup
 2. **Manual Rollback**:
    ```bash
-   cd /opt/claude-workflow-manager
+   cd $HOME/claude-workflow-manager-deploy
    # List available backups
    ls -la backups/
    # Restore specific backup
    rm -rf claude-workflow-manager
    cp -r backups/backup_TIMESTAMP/claude-workflow-manager .
    cd claude-workflow-manager
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ### Service Management
 
 ```bash
-cd /opt/claude-workflow-manager/claude-workflow-manager
+cd $HOME/claude-workflow-manager-deploy/claude-workflow-manager
 
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # Stop services  
-docker-compose down
+docker compose down
 
 # Restart specific service
-docker-compose restart backend
+docker compose restart backend
 
 # View service status
-docker-compose ps
+docker compose ps
 
 # Scale services (if needed)
-docker-compose up -d --scale backend=2
+docker compose up -d --scale backend=2
 ```
 
 ## Maintenance
