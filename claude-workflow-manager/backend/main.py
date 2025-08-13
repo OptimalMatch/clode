@@ -485,10 +485,15 @@ async def health_check():
             health_status["active_instances"] = len(claude_manager.instances)
         else:
             health_status["services"]["claude_manager"] = "not_initialized"
-            health_status["status"] = "degraded"
+            # Don't mark as degraded - Claude manager is optional for basic health
     except Exception as e:
         health_status["services"]["claude_manager"] = f"error: {str(e)}"
-        health_status["status"] = "unhealthy"
+        # Don't mark as unhealthy - Claude manager errors are not critical for basic API health
+    
+    # Service is healthy if API is running and database is connected
+    # Claude manager status is informational but not critical for basic health
+    if health_status["services"]["database"] == "healthy":
+        health_status["status"] = "healthy"
     
     # Return appropriate HTTP status code
     status_code = 200 if health_status["status"] == "healthy" else 503

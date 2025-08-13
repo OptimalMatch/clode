@@ -81,7 +81,7 @@ jobs:
         cd $DEPLOY_DIR || cd .
         
         # Stop containers if they exist
-        if [ -f claude-workflow-manager/docker compose.yml ]; then
+        if [ -f claude-workflow-manager/docker-compose.yml ]; then
           cd claude-workflow-manager
           docker compose down --remove-orphans || true
           cd ..
