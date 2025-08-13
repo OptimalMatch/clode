@@ -20,7 +20,7 @@ const getApiUrl = () => {
       return `${protocol}//${currentHostname}:${envPort}`;
     } catch (e) {
       // If env URL is malformed, fall back to dynamic construction
-      console.warn('Invalid REACT_APP_API_URL, using dynamic construction:', e);
+      console.warn('Invalid REACT_APP_API_URL, using dynamic construction:', e instanceof Error ? e.message : String(e));
     }
   }
   
@@ -41,7 +41,7 @@ if (process.env.REACT_APP_API_URL) {
     console.log('  Env URL hostname:', envUrl.hostname);
     console.log('  Hostname match:', envUrl.hostname === window.location.hostname);
   } catch (e) {
-    console.log('  Env URL parse error:', e.message);
+    console.log('  Env URL parse error:', e instanceof Error ? e.message : String(e));
   }
 }
 console.log('  Final API_URL:', API_URL);
