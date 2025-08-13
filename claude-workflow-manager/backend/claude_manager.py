@@ -18,6 +18,7 @@ class ClaudeCodeManager:
         self.instances: Dict[str, dict] = {}  # Store instance info instead of session objects
         self.websockets: Dict[str, WebSocket] = {}
         self.running_processes: Dict[str, List[subprocess.Popen]] = {}  # Track all running Claude CLI processes for each instance
+        self.cancelled_instances: set = set()  # Track instances that have been explicitly cancelled
         self.db = db
     
     def _log_with_timestamp(self, message: str):
@@ -596,6 +597,10 @@ class ClaudeCodeManager:
         """Interrupt/cancel a running Claude CLI instance"""
         self._log_with_timestamp(f"🛑 INTERRUPT: Attempting to interrupt instance {instance_id}")
         
+        # Mark instance as explicitly cancelled to prevent session recovery
+        self.cancelled_instances.add(instance_id)
+        self._log_with_timestamp(f"🏷️ INTERRUPT: Marked instance {instance_id} as cancelled (prevents session recovery)")
+        
         instance_info = self.instances.get(instance_id)
         if not instance_info:
             self._log_with_timestamp(f"❌ INTERRUPT: Instance {instance_id} not found in memory")
@@ -1049,6 +1054,11 @@ class ClaudeCodeManager:
             # Remove from instances
             del self.instances[instance_id]
             print(f"🗑️ CLAUDE_MANAGER: Cleaned up instance {instance_id} from memory")
+        
+        # Clean up cancellation flag
+        if instance_id in self.cancelled_instances:
+            self.cancelled_instances.remove(instance_id)
+            print(f"🧹 CLAUDE_MANAGER: Cleared cancellation flag for instance {instance_id}")
     
     async def send_input(self, instance_id: str, input_text: str):
         self._log_with_timestamp(f"📝 SEND_INPUT: Called for instance {instance_id} with input: {input_text[:100]}...")
@@ -1062,6 +1072,11 @@ class ClaudeCodeManager:
             self._log_with_timestamp(f"⚡ SPECIAL COMMAND: Detected force cancellation command '{input_text.strip()}' - triggering force interrupt")
             await self.interrupt_instance(instance_id, f"Force cancelled via '{input_text.strip()}' command", force=True)
             return
+        
+        # Clear cancellation flag if this is a new user command (not session recovery)
+        if instance_id in self.cancelled_instances:
+            self.cancelled_instances.remove(instance_id)
+            self._log_with_timestamp(f"🔄 SEND_INPUT: Cleared cancellation flag for instance {instance_id} - user sending new command")
         
         instance_info = self.instances.get(instance_id)
         if not instance_info:
@@ -1177,6 +1192,11 @@ class ClaudeCodeManager:
                 success = await self._execute_claude_streaming(cmd, instance_id)
                 
                 if not success:
+                    # Check if instance was explicitly cancelled - if so, don't attempt session recovery
+                    if instance_id in self.cancelled_instances:
+                        self._log_with_timestamp(f"🚫 SEND_INPUT: Instance {instance_id} was explicitly cancelled - skipping session recovery")
+                        return
+                    
                     # If streaming failed, try session recovery
                     await self._handle_session_recovery(instance_id, session_id, input_text)
                     return
