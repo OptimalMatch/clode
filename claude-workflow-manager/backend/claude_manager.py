@@ -359,7 +359,7 @@ class ClaudeCodeManager:
                     with open(settings_file, 'r') as f:
                         settings = json.load(f)
                     
-                    # Add missing bash permissions including git commands
+                    # Add missing bash permissions including git commands and Python
                     additional_permissions = [
                         "Bash(for:*)",        # Bash for loops
                         "Bash(cd:*)",         # Change directory
@@ -379,8 +379,20 @@ class ClaudeCodeManager:
                         "Bash(git pull:*)",   # Git pull commands
                         "Bash(git add:*)",    # Git add commands
                         "Bash(git status:*)", # Git status commands
+                        "Bash(python:*)",     # Python commands
+                        "Bash(python3:*)",    # Python3 commands
+                        "Bash(pip:*)",        # Pip commands
+                        "Bash(flake8:*)",     # Flake8 linting
+                        "Bash(pylint:*)",     # Pylint linting
+                        "Bash(black:*)",      # Black code formatting
+                        "Bash(isort:*)",      # Import sorting
+                        "Bash(mypy:*)",       # Type checking
+                        "Bash(pytest:*)",     # Python testing
+                        "Bash(autopep8:*)",   # PEP8 formatting
+                        "Bash(bandit:*)",     # Security linting
                         "Bash(&&:*)",         # Command chaining with &&
                         "Bash(||:*)",         # Command chaining with ||
+                        "Python(*)",          # Python tool
                         "Bash(*)"             # Allow all bash commands
                     ]
                     
@@ -1019,7 +1031,7 @@ class ClaudeCodeManager:
                         "--verbose",
                         "--output-format", "stream-json",
                         "--permission-mode", "acceptEdits",
-                        "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*)",
+                        "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
                         "--session-id", session_id,
                         input_text
                     ]
@@ -1035,7 +1047,7 @@ class ClaudeCodeManager:
                         "--verbose",
                         "--output-format", "stream-json",
                         "--permission-mode", "acceptEdits",
-                        "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*)",
+                        "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
                         "--resume", session_id,
                         input_text
                     ]
