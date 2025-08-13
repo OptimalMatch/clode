@@ -3,17 +3,29 @@ import { Workflow, Prompt, ClaudeInstance, Subagent, InstanceLog, LogAnalytics, 
 
 // Dynamically determine API URL based on current window location
 const getApiUrl = () => {
-  // If REACT_APP_API_URL is set, use it
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL;
-  }
-  
-  // Otherwise, construct URL from current window location
+  const currentHostname = window.location.hostname;
   const protocol = window.location.protocol;
-  const hostname = window.location.hostname;
   const apiPort = process.env.REACT_APP_API_PORT || '8005';
   
-  return `${protocol}//${hostname}:${apiPort}`;
+  // If REACT_APP_API_URL is set, check if it matches current hostname
+  if (process.env.REACT_APP_API_URL) {
+    try {
+      const envUrl = new URL(process.env.REACT_APP_API_URL);
+      // If the hostname in the env URL matches current hostname, use env URL
+      if (envUrl.hostname === currentHostname) {
+        return process.env.REACT_APP_API_URL;
+      }
+      // Otherwise, use current hostname with the port from env URL or default
+      const envPort = envUrl.port || apiPort;
+      return `${protocol}//${currentHostname}:${envPort}`;
+    } catch (e) {
+      // If env URL is malformed, fall back to dynamic construction
+      console.warn('Invalid REACT_APP_API_URL, using dynamic construction:', e);
+    }
+  }
+  
+  // Construct URL from current window location
+  return `${protocol}//${currentHostname}:${apiPort}`;
 };
 
 const API_URL = getApiUrl();
@@ -23,6 +35,15 @@ console.log('🔍 API Configuration:');
 console.log('  REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
 console.log('  REACT_APP_API_PORT:', process.env.REACT_APP_API_PORT);
 console.log('  window.location.hostname:', window.location.hostname);
+if (process.env.REACT_APP_API_URL) {
+  try {
+    const envUrl = new URL(process.env.REACT_APP_API_URL);
+    console.log('  Env URL hostname:', envUrl.hostname);
+    console.log('  Hostname match:', envUrl.hostname === window.location.hostname);
+  } catch (e) {
+    console.log('  Env URL parse error:', e.message);
+  }
+}
 console.log('  Final API_URL:', API_URL);
 
 const api = axios.create({
