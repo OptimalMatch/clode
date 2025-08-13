@@ -2,12 +2,22 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
 RUN npm install
 
+# Copy source code
 COPY . .
 
-# Build for production
+# Accept build arguments for environment variables
+ARG REACT_APP_API_URL
+ARG REACT_APP_WS_URL
+
+# Set environment variables for build
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
+ENV REACT_APP_WS_URL=$REACT_APP_WS_URL
+
+# Build for production with environment variables
 RUN npm run build
 
 # Install serve to serve the production build

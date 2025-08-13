@@ -115,30 +115,39 @@ jobs:
           HOST_IP_ADDRESS="pop-os-1"  # Fallback to hostname
         fi
         
+        # Use GitHub secret if set, otherwise use detected IP
+        if [ -n "${{ secrets.HOST_IP }}" ]; then
+          FINAL_HOST_IP="${{ secrets.HOST_IP }}"
+        else
+          FINAL_HOST_IP="$HOST_IP_ADDRESS"
+        fi
+        
+        echo "🌐 Using HOST_IP: $FINAL_HOST_IP"
+        
         # Create .env file from GitHub secrets
         cat > .env << EOF
-        # MongoDB Configuration
-        MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USERNAME || 'admin' }}
-        MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD || 'claudeworkflow123' }}
+# MongoDB Configuration
+MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USERNAME }}
+MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+
+# Claude API Configuration
+CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
+
+# Host Configuration (auto-detected IP address)
+HOST_IP=$FINAL_HOST_IP
+
+# Optional: Custom folders
+CLAUDE_PROMPTS_FOLDER=.clode/claude_prompts
+CLAUDE_AGENTS_FOLDER=.claude/agents
+
+# Deployment metadata
+DEPLOYMENT_ENV=$DEPLOYMENT_ENV
+DEPLOYMENT_TIME=$DEPLOYMENT_TIME
+GIT_SHA=$GIT_SHA
+BRANCH_NAME=$BRANCH_NAME
+EOF
         
-        # Claude API Configuration
-        CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
-        
-        # Host Configuration (auto-detected IP address)
-        HOST_IP=${{ secrets.HOST_IP || '${HOST_IP_ADDRESS}' }}
-        
-        # Optional: Custom folders
-        CLAUDE_PROMPTS_FOLDER=.clode/claude_prompts
-        CLAUDE_AGENTS_FOLDER=.claude/agents
-        
-        # Deployment metadata
-        DEPLOYMENT_ENV=$DEPLOYMENT_ENV
-        DEPLOYMENT_TIME=$DEPLOYMENT_TIME
-        GIT_SHA=$GIT_SHA
-        BRANCH_NAME=$BRANCH_NAME
-        EOF
-        
-        echo "✅ Environment file created with HOST_IP=${{ secrets.HOST_IP || '${HOST_IP_ADDRESS}' }}"
+        echo "✅ Environment file created with HOST_IP=$FINAL_HOST_IP"
 
     - name: Build and start services
       run: |

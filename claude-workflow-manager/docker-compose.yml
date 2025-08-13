@@ -42,14 +42,15 @@ services:
       - claude-network
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_API_URL: http://${HOST_IP:-localhost}:8005
+        REACT_APP_WS_URL: ws://${HOST_IP:-localhost}:8005
     container_name: claude-workflow-frontend
     restart: always
     ports:
       - "3005:3000"
-    environment:
-      REACT_APP_API_URL: http://${HOST_IP:-localhost}:8005
-      REACT_APP_WS_URL: ws://${HOST_IP:-localhost}:8005
     depends_on:
       - backend
     # volumes:
