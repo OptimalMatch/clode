@@ -231,7 +231,8 @@ class ClaudeCodeManager:
             "--print",
             "--verbose",
             "--output-format", "stream-json",
-            "--permission-mode", "bypassPermissions",
+            "--permission-mode", "acceptEdits",
+            "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*)",
             "--session-id", new_session_id,
             input_text
         ]
@@ -1017,7 +1018,8 @@ class ClaudeCodeManager:
                         "--print",
                         "--verbose",
                         "--output-format", "stream-json",
-                        "--permission-mode", "bypassPermissions",
+                        "--permission-mode", "acceptEdits",
+                        "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*)",
                         "--session-id", session_id,
                         input_text
                     ]
@@ -1032,7 +1034,8 @@ class ClaudeCodeManager:
                         "--print",
                         "--verbose",
                         "--output-format", "stream-json",
-                        "--permission-mode", "bypassPermissions",
+                        "--permission-mode", "acceptEdits",
+                        "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*)",
                         "--resume", session_id,
                         input_text
                     ]
