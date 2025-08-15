@@ -537,6 +537,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               setIsProcessRunning(false); // Process is actually stopped now
               setProcessStartTime(null);
               console.log('⚡ Session interrupt completed: isProcessRunning=false, ESC disabled until new process starts');
+              console.log('🔍 WebSocket connection status after interrupt:', ws.current?.readyState);
               break;
             case 'interrupted':
               appendToTerminal(`⏸️  **Instance paused**`);
