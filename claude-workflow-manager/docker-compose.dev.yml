@@ -5,6 +5,9 @@ services:
     restart: always
     ports:
       - "27017:27017"
+    cpus: 1.0
+    mem_limit: 4g
+    mem_reservation: 2g
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: claudeworkflow123
@@ -22,6 +25,9 @@ services:
     restart: always
     ports:
       - "8000:8000"
+    cpus: 4.0                # Cap to 4 CPU cores
+    mem_limit: 2g            # Hard max memory
+    mem_reservation: 1.5g    # Soft reservation
     environment:
       MONGODB_URL: mongodb://admin:claudeworkflow123@mongodb:27017/claude_workflows?authSource=admin
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
@@ -48,6 +54,9 @@ services:
     restart: always
     ports:
       - "3000:3000"
+    cpus: 0.5
+    mem_limit: 512m
+    mem_reservation: 256m
     environment:
       REACT_APP_API_URL: http://localhost:8000
       REACT_APP_WS_URL: ws://localhost:8000
