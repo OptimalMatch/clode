@@ -17,6 +17,8 @@ import { Pause, PlayArrow, Close, Stop } from '@mui/icons-material';
 import { WebSocketMessage, TerminalHistoryEntry } from '../types';
 import { instanceApi } from '../services/api';
 import ReactMarkdown from 'react-markdown';
+import RunnerSprite from './RunnerSprite';
+import LexicalEditor from './LexicalEditor';
 
 // Helper function to get dynamic API URL
 const getApiUrl = () => {
@@ -39,8 +41,6 @@ const getApiUrl = () => {
   
   return `${protocol}//${currentHostname}:${apiPort}`;
 };
-import RunnerSprite from './RunnerSprite';
-import LexicalEditor from './LexicalEditor';
 
 interface InstanceTerminalProps {
   instanceId: string;
