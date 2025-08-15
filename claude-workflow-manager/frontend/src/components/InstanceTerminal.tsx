@@ -799,11 +799,34 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     
     try {
       console.log('📤 About to send session_interrupt WebSocket message');
-      ws.current?.send(JSON.stringify({ 
+      
+      const message = JSON.stringify({ 
         type: 'session_interrupt', 
         feedback: 'User wants to provide new directions - immediately stopping execution'
-      }));
-      console.log('✅ session_interrupt WebSocket message sent successfully');
+      });
+      
+      // Send message with retry mechanism
+      let retryCount = 0;
+      const maxRetries = 3;
+      const sendWithRetry = () => {
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+          ws.current.send(message);
+          console.log(`✅ session_interrupt WebSocket message sent successfully (attempt ${retryCount + 1})`);
+        } else {
+          console.log(`❌ WebSocket not ready, readyState: ${ws.current?.readyState}`);
+        }
+        
+        // Retry after short delay to ensure delivery
+        if (retryCount < maxRetries) {
+          retryCount++;
+          setTimeout(() => {
+            console.log(`🔄 Retrying session_interrupt message (attempt ${retryCount})`);
+            sendWithRetry();
+          }, 100 * retryCount); // 100ms, 200ms, 300ms delays
+        }
+      };
+      
+      sendWithRetry();
       
       // Update UI immediately to show session interrupt is in progress
       const interruptMessage = '⚡ **Session interrupt requested - immediately stopping execution...**';

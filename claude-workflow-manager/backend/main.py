@@ -811,38 +811,45 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
         
         while True:
             try:
-                data = await websocket.receive_text()
+                # Use asyncio.wait_for with timeout to prevent blocking
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=0.1)
                 print(f"📨 Received WebSocket message for {instance_id}: {data[:100]}...")
                 
                 message = json.loads(data)
                 message_type = message.get("type", "unknown")
                 print(f"📋 Processing message type: {message_type}")
-                
-                if message_type == "input":
-                    print(f"🔍 MAIN: About to call send_input for instance {instance_id}")
-                    print(f"🔍 MAIN: Input content length: {len(message['content'])} characters")
-                    try:
-                        await claude_manager.send_input(instance_id, message["content"])
-                        print(f"✅ MAIN: send_input completed successfully")
-                    except Exception as e:
-                        print(f"❌ MAIN: send_input failed with exception: {str(e)}")
-                        import traceback
-                        print(f"❌ MAIN: Traceback: {traceback.format_exc()}")
-                        raise
-                elif message_type == "interrupt":
-                    force = message.get("force", False)
-                    graceful = message.get("graceful", False)
-                    await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""), force, graceful)
-                elif message_type == "graceful_interrupt":
-                    feedback = message.get("feedback", "")
-                    await claude_manager.session_interrupt_instance(instance_id, feedback)
-                elif message_type == "session_interrupt":
-                    feedback = message.get("feedback", "")
-                    print(f"🌐 WEBSOCKET: Received session_interrupt for instance {instance_id}")
-                    await claude_manager.session_interrupt_instance(instance_id, feedback)
-                elif message_type == "resume":
-                    await claude_manager.resume_instance(instance_id)
-                elif message_type == "ping":
+            except asyncio.TimeoutError:
+                # No message received within timeout - continue listening
+                continue
+            except Exception as e:
+                print(f"❌ WebSocket error for {instance_id}: {e}")
+                break
+            
+            if message_type == "input":
+                print(f"🔍 MAIN: About to call send_input for instance {instance_id}")
+                print(f"🔍 MAIN: Input content length: {len(message['content'])} characters")
+                try:
+                    await claude_manager.send_input(instance_id, message["content"])
+                    print(f"✅ MAIN: send_input completed successfully")
+                except Exception as e:
+                    print(f"❌ MAIN: send_input failed with exception: {str(e)}")
+                    import traceback
+                    print(f"❌ MAIN: Traceback: {traceback.format_exc()}")
+                    raise
+            elif message_type == "interrupt":
+                force = message.get("force", False)
+                graceful = message.get("graceful", False)
+                await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""), force, graceful)
+            elif message_type == "graceful_interrupt":
+                feedback = message.get("feedback", "")
+                await claude_manager.session_interrupt_instance(instance_id, feedback)
+            elif message_type == "session_interrupt":
+                feedback = message.get("feedback", "")
+                print(f"🌐 WEBSOCKET: Received session_interrupt for instance {instance_id}")
+                await claude_manager.session_interrupt_instance(instance_id, feedback)
+            elif message_type == "resume":
+                await claude_manager.resume_instance(instance_id)
+            elif message_type == "ping":
                     # Respond to ping with pong
                     pong_data = {
                         "type": "pong",
