@@ -756,6 +756,10 @@ class ClaudeCodeManager:
             })
             return True
         
+        # Mark instance as explicitly interrupted to prevent session recovery
+        self.cancelled_instances.add(instance_id)
+        self._log_with_timestamp(f"🏷️ SESSION INTERRUPT: Marked instance {instance_id} as cancelled (prevents session recovery)")
+        
         # Set the interrupt flag - the streaming loop will pick this up immediately
         self.interrupt_flags[instance_id] = True
         self._log_with_timestamp(f"🚩 SESSION INTERRUPT: Interrupt flag set for instance {instance_id}")
