@@ -511,6 +511,16 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               // Process is still running after graceful interrupt - ready for new input
               setIsCancelling(false);
               break;
+            case 'session_interrupt_requested':
+              appendToTerminal(`⚡ **${message.message}**`);
+              break;
+            case 'session_interrupt':
+              appendToTerminal(`⚡ **${message.message}**`);
+              // Session interrupt completed - ready for immediate new input
+              setIsCancelling(false);
+              setIsProcessRunning(false); // Process is actually stopped now
+              setProcessStartTime(null);
+              break;
             case 'interrupted':
               appendToTerminal(`⏸️  **Instance paused**`);
               setIsPaused(true);
@@ -761,26 +771,26 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
 
   const confirmGracefulInterrupt = async () => {
     setShowCancelDialog(false);
-    console.log('🟡 User confirmed graceful interrupt - letting Claude finish current thought');
+    console.log('⚡ User confirmed session interrupt - immediately stopping execution');
     setIsCancelling(true);
     
     try {
       ws.current?.send(JSON.stringify({ 
-        type: 'graceful_interrupt', 
-        feedback: 'User wants to provide new directions after current task completes'
+        type: 'session_interrupt', 
+        feedback: 'User wants to provide new directions - immediately stopping execution'
       }));
       
-      // Update UI immediately to show graceful interrupt is in progress
-      const interruptMessage = '🟡 **Graceful interrupt requested - waiting for Claude to reach a safe stopping point...**';
+      // Update UI immediately to show session interrupt is in progress
+      const interruptMessage = '⚡ **Session interrupt requested - immediately stopping execution...**';
       appendToTerminal(interruptMessage);
       
-      // Reset state after a short delay since graceful interrupt doesn't kill processes
+      // Reset state after a very short delay since session interrupt is immediate
       setTimeout(() => {
         setIsCancelling(false);
-      }, 2000);
+      }, 500);
       
     } catch (error) {
-      console.error('❌ Failed to send graceful interrupt:', error);
+      console.error('❌ Failed to send session interrupt:', error);
       setIsCancelling(false);
     }
   };
@@ -1193,7 +1203,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
           </Box>
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              <strong>🟡 Graceful Interrupt:</strong> Let Claude finish current thought, then pause for new directions
+              <strong>⚡ Session Interrupt:</strong> Immediately stop execution, preserve session for new directions
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               <strong>🛑 Graceful Cancel:</strong> Sends termination signal, waits for cleanup
@@ -1202,7 +1212,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               <strong>⚡ Force Kill:</strong> Immediately kills all processes (for stuck Python processes)
             </Typography>
             <Typography variant="body2" color="warning.main">
-              Note: Graceful interrupt preserves context. Cancel/kill may lose unsaved work.
+              Note: Session interrupt is immediate and preserves context. Cancel/kill may lose unsaved work.
             </Typography>
           </Box>
         </DialogContent>
@@ -1217,7 +1227,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               variant="outlined"
               startIcon={<Stop />}
             >
-              Graceful Interrupt
+              Session Interrupt
             </Button>
             <Button 
               onClick={() => confirmCancel(false)} 

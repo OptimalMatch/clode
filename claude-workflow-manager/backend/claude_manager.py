@@ -89,56 +89,81 @@ class ClaudeCodeManager:
             total_cost_usd = 0.0
             
             while True:
-                # Check for graceful interrupt flag first
+                # Check for session-level interrupt flag first
                 interrupt_flag = self.interrupt_flags.get(instance_id, False)
                 if interrupt_flag:
-                    self._log_with_timestamp(f"🛑 GRACEFUL INTERRUPT: Detected interrupt flag for instance {instance_id} (flag={interrupt_flag})")
-                    self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Current interrupt flags state: {dict(self.interrupt_flags)}")
-                    # Send graceful interrupt signal to the Claude CLI process
+                    self._log_with_timestamp(f"🛑 SESSION INTERRUPT: Detected interrupt flag for instance {instance_id} (flag={interrupt_flag})")
+                    self._log_with_timestamp(f"🔍 SESSION INTERRUPT: Current interrupt flags state: {dict(self.interrupt_flags)}")
+                    
+                    # SESSION-LEVEL INTERRUPT: Immediately stop streaming and terminate process
                     try:
+                        self._log_with_timestamp(f"⚡ SESSION INTERRUPT: Immediately terminating Claude CLI process (PID: {process.pid})")
+                        
+                        # Don't try SIGINT - go straight to termination for immediate response
                         import signal
-                        process.send_signal(signal.SIGINT)  # Send Ctrl+C signal
-                        self._log_with_timestamp(f"📡 GRACEFUL INTERRUPT: Sent SIGINT to Claude CLI process (PID: {process.pid})")
+                        import psutil
                         
-                        # Wait briefly for graceful shutdown
-                        process_terminated = False
+                        # Get the process and all its children
                         try:
-                            await asyncio.wait_for(
-                                asyncio.create_task(asyncio.to_thread(process.wait)), 
-                                timeout=3.0
-                            )
-                            self._log_with_timestamp(f"✅ GRACEFUL INTERRUPT: Process terminated gracefully")
-                            process_terminated = True
-                        except asyncio.TimeoutError:
-                            self._log_with_timestamp(f"⏰ GRACEFUL INTERRUPT: Timeout, process still running - will retry SIGINT")
-                            # Don't force kill here - but don't break the loop either
-                            # Keep the flag set so we'll try again on the next iteration
+                            parent_process = psutil.Process(process.pid)
+                            children = parent_process.children(recursive=True)
+                            all_processes = [parent_process] + children
+                            
+                            # Terminate all processes immediately
+                            for proc in all_processes:
+                                try:
+                                    proc.terminate()  # SIGTERM first
+                                    self._log_with_timestamp(f"📡 SESSION INTERRUPT: Sent SIGTERM to PID {proc.pid}")
+                                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                    pass
+                            
+                            # Wait a very short time for termination (100ms max)
+                            try:
+                                await asyncio.wait_for(
+                                    asyncio.create_task(asyncio.to_thread(process.wait)), 
+                                    timeout=0.1
+                                )
+                                self._log_with_timestamp(f"✅ SESSION INTERRUPT: Process terminated quickly")
+                            except asyncio.TimeoutError:
+                                # Force kill if needed
+                                self._log_with_timestamp(f"⚡ SESSION INTERRUPT: Force killing stubborn process")
+                                for proc in all_processes:
+                                    try:
+                                        proc.kill()  # SIGKILL
+                                        self._log_with_timestamp(f"⚡ SESSION INTERRUPT: Sent SIGKILL to PID {proc.pid}")
+                                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                        pass
                         
-                        if process_terminated:
-                            # Only clear flag and break if process actually terminated
-                            self.interrupt_flags[instance_id] = False
-                            self._log_with_timestamp(f"🧹 GRACEFUL INTERRUPT: Cleared interrupt flag for instance {instance_id}")
-                            self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
-                            
-                            # Send interrupt notification
-                            await self._send_websocket_update(instance_id, {
-                                "type": "graceful_interrupt",
-                                "message": "Execution gracefully interrupted. You can provide new directions or force kill if needed."
-                            })
-                            
-                            # Exit the streaming loop
-                            break
-                        else:
-                            # Process still running - send another SIGINT and try again
-                            self._log_with_timestamp(f"🔄 GRACEFUL INTERRUPT: Sending another SIGINT to stubborn process (PID: {process.pid})")
-                            # Note: Flag stays set, so we'll try again on next loop iteration
+                        except psutil.NoSuchProcess:
+                            self._log_with_timestamp(f"ℹ️ SESSION INTERRUPT: Process {process.pid} already terminated")
+                        
+                        # Always clear flag and break - don't wait for confirmation
+                        self.interrupt_flags[instance_id] = False
+                        self._log_with_timestamp(f"🧹 SESSION INTERRUPT: Cleared interrupt flag for instance {instance_id}")
+                        self._log_with_timestamp(f"🔍 SESSION INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
+                        
+                        # Send immediate interrupt notification
+                        await self._send_websocket_update(instance_id, {
+                            "type": "session_interrupt",
+                            "message": "Execution immediately stopped. Session preserved - you can provide new directions."
+                        })
+                        
+                        # Exit the streaming loop immediately
+                        self._log_with_timestamp(f"🚪 SESSION INTERRUPT: Exiting streaming loop for instance {instance_id}")
+                        break
                         
                     except Exception as e:
-                        self._log_with_timestamp(f"❌ GRACEFUL INTERRUPT: Error sending interrupt signal: {e}")
-                        # Clear flag even on error
+                        self._log_with_timestamp(f"❌ SESSION INTERRUPT: Error during termination: {e}")
+                        # Always clear flag even on error - don't get stuck
                         self.interrupt_flags[instance_id] = False
-                        self._log_with_timestamp(f"🧹 GRACEFUL INTERRUPT: Cleared interrupt flag after error for instance {instance_id}")
-                        self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
+                        self._log_with_timestamp(f"🧹 SESSION INTERRUPT: Cleared interrupt flag after error for instance {instance_id}")
+                        
+                        # Send error notification but still exit loop
+                        await self._send_websocket_update(instance_id, {
+                            "type": "session_interrupt",
+                            "message": "Execution stopped (with errors). Session preserved - you can provide new directions."
+                        })
+                        break
                 
                 # Check if process is still running
                 if process.poll() is not None:
@@ -705,54 +730,54 @@ class ClaudeCodeManager:
             await self.db.append_terminal_history(instance_id, f"❌ Error: {str(e)}", "error")
             return False
     
-    async def graceful_interrupt_instance(self, instance_id: str, feedback: str = "") -> bool:
-        """Gracefully interrupt a running Claude CLI instance by setting an interrupt flag"""
-        self._log_with_timestamp(f"🟡 GRACEFUL INTERRUPT: Setting interrupt flag for instance {instance_id}")
+    async def session_interrupt_instance(self, instance_id: str, feedback: str = "") -> bool:
+        """Immediately interrupt a running Claude CLI instance at the session level - preserves session but stops execution"""
+        self._log_with_timestamp(f"🟡 SESSION INTERRUPT: Setting interrupt flag for instance {instance_id}")
         
         instance_info = self.instances.get(instance_id)
         if not instance_info:
-            self._log_with_timestamp(f"❌ GRACEFUL INTERRUPT: Instance {instance_id} not found in memory")
+            self._log_with_timestamp(f"❌ SESSION INTERRUPT: Instance {instance_id} not found in memory")
             return False
         
         # Check if there are running processes
-        self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Checking processes for instance {instance_id}")
-        self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: All running processes: {dict(self.running_processes)}")
+        self._log_with_timestamp(f"🔍 SESSION INTERRUPT: Checking processes for instance {instance_id}")
+        self._log_with_timestamp(f"🔍 SESSION INTERRUPT: All running processes: {dict(self.running_processes)}")
         
         if instance_id not in self.running_processes:
-            self._log_with_timestamp(f"❌ GRACEFUL INTERRUPT: Instance {instance_id} not found in running_processes")
+            self._log_with_timestamp(f"❌ SESSION INTERRUPT: Instance {instance_id} not found in running_processes")
         elif not self.running_processes[instance_id]:
-            self._log_with_timestamp(f"❌ GRACEFUL INTERRUPT: Instance {instance_id} has empty process list")
+            self._log_with_timestamp(f"❌ SESSION INTERRUPT: Instance {instance_id} has empty process list")
         
         if instance_id not in self.running_processes or not self.running_processes[instance_id]:
-            self._log_with_timestamp(f"ℹ️ GRACEFUL INTERRUPT: No running processes for instance {instance_id}")
+            self._log_with_timestamp(f"ℹ️ SESSION INTERRUPT: No running processes for instance {instance_id}")
             await self._send_websocket_update(instance_id, {
-                "type": "graceful_interrupt",
+                "type": "session_interrupt",
                 "message": "No active process to interrupt"
             })
             return True
         
-        # Set the interrupt flag - the streaming loop will pick this up
+        # Set the interrupt flag - the streaming loop will pick this up immediately
         self.interrupt_flags[instance_id] = True
-        self._log_with_timestamp(f"🚩 GRACEFUL INTERRUPT: Interrupt flag set for instance {instance_id}")
-        self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
+        self._log_with_timestamp(f"🚩 SESSION INTERRUPT: Interrupt flag set for instance {instance_id}")
+        self._log_with_timestamp(f"🔍 SESSION INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
         
         # Send immediate notification to frontend
         await self._send_websocket_update(instance_id, {
-            "type": "graceful_interrupt_requested",
-            "message": "Graceful interrupt requested. Waiting for Claude to reach a safe stopping point..."
+            "type": "session_interrupt_requested",
+            "message": "Session interrupt requested. Immediately stopping execution..."
         })
         
         # Log the interrupt request to terminal history
-        await self.db.append_terminal_history(instance_id, "🟡 Graceful interrupt requested by user", "system")
+        await self.db.append_terminal_history(instance_id, "🟡 Session interrupt requested by user", "system")
         
         return True
 
     async def interrupt_instance(self, instance_id: str, feedback: str, force: bool = False, graceful: bool = False) -> bool:
         """Interrupt/cancel a running Claude CLI instance"""
         
-        # If graceful interrupt is requested, use the graceful method
+        # If graceful interrupt is requested, use the session interrupt method (more reliable)
         if graceful and not force:
-            return await self.graceful_interrupt_instance(instance_id, feedback)
+            return await self.session_interrupt_instance(instance_id, feedback)
         
         self._log_with_timestamp(f"🛑 INTERRUPT: Attempting to {'force ' if force else ''}interrupt instance {instance_id}")
         

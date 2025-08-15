@@ -698,10 +698,19 @@ async def interrupt_instance(instance_id: str, data: dict):
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
 
+@app.post("/api/instances/{instance_id}/session_interrupt")
+async def session_interrupt_instance(instance_id: str, data: dict):
+    feedback = data.get("feedback", "")
+    success = await claude_manager.session_interrupt_instance(instance_id, feedback)
+    if not success:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    return {"success": True}
+
+# Keep the old endpoint for compatibility but route to session interrupt
 @app.post("/api/instances/{instance_id}/graceful_interrupt")
 async def graceful_interrupt_instance(instance_id: str, data: dict):
     feedback = data.get("feedback", "")
-    success = await claude_manager.graceful_interrupt_instance(instance_id, feedback)
+    success = await claude_manager.session_interrupt_instance(instance_id, feedback)
     if not success:
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
@@ -826,7 +835,10 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
                     await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""), force, graceful)
                 elif message_type == "graceful_interrupt":
                     feedback = message.get("feedback", "")
-                    await claude_manager.graceful_interrupt_instance(instance_id, feedback)
+                    await claude_manager.session_interrupt_instance(instance_id, feedback)
+                elif message_type == "session_interrupt":
+                    feedback = message.get("feedback", "")
+                    await claude_manager.session_interrupt_instance(instance_id, feedback)
                 elif message_type == "resume":
                     await claude_manager.resume_instance(instance_id)
                 elif message_type == "ping":
