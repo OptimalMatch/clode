@@ -91,6 +91,7 @@ export interface WebSocketMessage {
   instance?: ClaudeInstance;
   execution_time_ms?: number;
   tokens_used?: number;
+  process_running?: boolean;
 }
 
 export interface TerminalHistoryEntry {
