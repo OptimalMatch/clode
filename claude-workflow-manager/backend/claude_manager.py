@@ -1401,9 +1401,6 @@ class ClaudeCodeManager:
             start_time = time.time()
             self._log_with_timestamp(f"🚀 SEND_INPUT: Starting Claude CLI execution for instance {instance_id}")
             
-            # Start fallback timer for testing (will be cancelled when process completes normally)
-            await self._start_interrupt_timer(instance_id)
-            
             # Ensure ANTHROPIC_API_KEY is available for subprocess calls
             claude_api_key = os.getenv("CLAUDE_API_KEY")
             if claude_api_key and not os.getenv("ANTHROPIC_API_KEY"):
