@@ -229,6 +229,44 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     setForceUpdate(prev => prev + 1);
   };
 
+  // Direct HTTP cancel function for the dedicated cancel button
+  const handleHttpCancel = async () => {
+    console.log(`🔴 HTTP Cancel button clicked - instanceId: ${instanceId} (full ID)`);
+    setIsCancelling(true);
+    
+    try {
+      const apiUrl = getApiUrl();
+      const fullUrl = `${apiUrl}/api/instances/${instanceId}/session_interrupt`;
+      console.log(`📡 Direct HTTP cancel request to: ${fullUrl}`);
+      
+      const response = await fetch(fullUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          feedback: 'Direct HTTP cancel button - immediately stopping execution'
+        })
+      });
+      
+      if (response.ok) {
+        console.log(`✅ Direct HTTP cancel request sent successfully`);
+        appendToTerminal('🔴 **HTTP Cancel button triggered - stopping execution...**');
+      } else {
+        console.log(`❌ Direct HTTP cancel request failed: ${response.status}`);
+        appendToTerminal(`❌ **HTTP Cancel failed:** ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Direct HTTP cancel request error:', error);
+      appendToTerminal(`❌ **HTTP Cancel error:** ${error}`);
+    }
+    
+    // Reset cancelling state after a delay
+    setTimeout(() => {
+      setIsCancelling(false);
+    }, 1000);
+  };
+
   const stopStopwatch = () => {
     console.log('🛑 stopStopwatch called (for errors), isWaitingForResponse:', isWaitingForResponse);
     
@@ -879,44 +917,6 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       console.error('❌ Failed to send session interrupt:', error);
       setIsCancelling(false);
     }
-  };
-
-  // Direct HTTP cancel function for the dedicated cancel button
-  const handleHttpCancel = async () => {
-    console.log(`🔴 HTTP Cancel button clicked - instanceId: ${instanceId} (full ID)`);
-    setIsCancelling(true);
-    
-    try {
-      const apiUrl = getApiUrl();
-      const fullUrl = `${apiUrl}/api/instances/${instanceId}/session_interrupt`;
-      console.log(`📡 Direct HTTP cancel request to: ${fullUrl}`);
-      
-      const response = await fetch(fullUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          feedback: 'Direct HTTP cancel button - immediately stopping execution'
-        })
-      });
-      
-      if (response.ok) {
-        console.log(`✅ Direct HTTP cancel request sent successfully`);
-        appendToTerminal('🔴 **HTTP Cancel button triggered - stopping execution...**');
-      } else {
-        console.log(`❌ Direct HTTP cancel request failed: ${response.status}`);
-        appendToTerminal(`❌ **HTTP Cancel failed:** ${response.status}`);
-      }
-    } catch (error) {
-      console.error('❌ Direct HTTP cancel request error:', error);
-      appendToTerminal(`❌ **HTTP Cancel error:** ${error}`);
-    }
-    
-    // Reset cancelling state after a delay
-    setTimeout(() => {
-      setIsCancelling(false);
-    }, 1000);
   };
 
   const confirmCancel = async (force: boolean = false) => {
