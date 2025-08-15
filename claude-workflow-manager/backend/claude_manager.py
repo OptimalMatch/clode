@@ -20,12 +20,45 @@ class ClaudeCodeManager:
         self.running_processes: Dict[str, List[subprocess.Popen]] = {}  # Track all running Claude CLI processes for each instance
         self.cancelled_instances: set = set()  # Track instances that have been explicitly cancelled
         self.interrupt_flags: Dict[str, bool] = {}  # Track graceful interrupt requests per instance
+        self.interrupt_timers: Dict[str, asyncio.Task] = {}  # Track 30-second fallback interrupt timers
         self.db = db
     
     def _log_with_timestamp(self, message: str):
         """Add timestamp to log messages"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Include milliseconds
         print(f"[{timestamp}] {message}")
+    
+    async def _start_interrupt_timer(self, instance_id: str):
+        """Start a 30-second timer that will force interrupt if the process is still running"""
+        self._log_with_timestamp(f"⏰ TIMER: Starting 30-second fallback timer for instance {instance_id}")
+        
+        async def timer_callback():
+            await asyncio.sleep(30)  # Wait 30 seconds
+            
+            # Check if process is still running
+            if instance_id in self.running_processes and self.running_processes[instance_id]:
+                self._log_with_timestamp(f"⏰ TIMER: 30 seconds elapsed - forcing interrupt for instance {instance_id}")
+                await self.interrupt_instance(instance_id, "30-second timer forced cancellation", force=True)
+            else:
+                self._log_with_timestamp(f"⏰ TIMER: 30 seconds elapsed but process {instance_id} already stopped")
+            
+            # Clean up timer
+            if instance_id in self.interrupt_timers:
+                del self.interrupt_timers[instance_id]
+        
+        # Cancel existing timer if any
+        if instance_id in self.interrupt_timers:
+            self.interrupt_timers[instance_id].cancel()
+        
+        # Start new timer
+        self.interrupt_timers[instance_id] = asyncio.create_task(timer_callback())
+    
+    def _cancel_interrupt_timer(self, instance_id: str):
+        """Cancel the interrupt timer for an instance"""
+        if instance_id in self.interrupt_timers:
+            self.interrupt_timers[instance_id].cancel()
+            del self.interrupt_timers[instance_id]
+            self._log_with_timestamp(f"⏰ TIMER: Cancelled fallback timer for instance {instance_id}")
     
     def _log_all_tracked_pids(self):
         """Debug function to display all currently tracked PIDs"""
@@ -149,6 +182,9 @@ class ClaudeCodeManager:
                         self.interrupt_flags[instance_id] = False
                         self._log_with_timestamp(f"🧹 SESSION INTERRUPT: Cleared interrupt flag for instance {instance_id}")
                         self._log_with_timestamp(f"🔍 SESSION INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
+                        
+                        # Cancel the fallback timer since interrupt succeeded
+                        self._cancel_interrupt_timer(instance_id)
                         
                         # Send immediate interrupt notification
                         await self._send_websocket_update(instance_id, {
@@ -787,6 +823,9 @@ class ClaudeCodeManager:
         # Log the interrupt request to terminal history
         await self.db.append_terminal_history(instance_id, "🟡 Session interrupt requested by user", "system")
         
+        # Start 30-second fallback timer in case the first interrupt doesn't work
+        await self._start_interrupt_timer(instance_id)
+        
         return True
 
     async def interrupt_instance(self, instance_id: str, feedback: str, force: bool = False, graceful: bool = False) -> bool:
@@ -1277,6 +1316,9 @@ class ClaudeCodeManager:
         if instance_id in self.interrupt_flags:
             del self.interrupt_flags[instance_id]
             print(f"🧹 CLAUDE_MANAGER: Cleared interrupt flag for instance {instance_id}")
+        
+        # Cancel any running interrupt timer
+        self._cancel_interrupt_timer(instance_id)
     
     async def send_input(self, instance_id: str, input_text: str):
         self._log_with_timestamp(f"📝 SEND_INPUT: Called for instance {instance_id} with input: {input_text[:100]}...")
