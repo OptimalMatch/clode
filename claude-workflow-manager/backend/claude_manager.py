@@ -89,8 +89,10 @@ class ClaudeCodeManager:
             
             while True:
                 # Check for graceful interrupt flag first
-                if self.interrupt_flags.get(instance_id, False):
-                    self._log_with_timestamp(f"🛑 GRACEFUL INTERRUPT: Detected interrupt flag for instance {instance_id}")
+                interrupt_flag = self.interrupt_flags.get(instance_id, False)
+                if interrupt_flag:
+                    self._log_with_timestamp(f"🛑 GRACEFUL INTERRUPT: Detected interrupt flag for instance {instance_id} (flag={interrupt_flag})")
+                    self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Current interrupt flags state: {dict(self.interrupt_flags)}")
                     # Send graceful interrupt signal to the Claude CLI process
                     try:
                         import signal
@@ -110,6 +112,8 @@ class ClaudeCodeManager:
                         
                         # Clear the interrupt flag
                         self.interrupt_flags[instance_id] = False
+                        self._log_with_timestamp(f"🧹 GRACEFUL INTERRUPT: Cleared interrupt flag for instance {instance_id}")
+                        self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
                         
                         # Send interrupt notification
                         await self._send_websocket_update(instance_id, {
@@ -124,6 +128,8 @@ class ClaudeCodeManager:
                         self._log_with_timestamp(f"❌ GRACEFUL INTERRUPT: Error sending interrupt signal: {e}")
                         # Clear flag even on error
                         self.interrupt_flags[instance_id] = False
+                        self._log_with_timestamp(f"🧹 GRACEFUL INTERRUPT: Cleared interrupt flag after error for instance {instance_id}")
+                        self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
                 
                 # Check if process is still running
                 if process.poll() is not None:
@@ -134,8 +140,30 @@ class ClaudeCodeManager:
                         self._log_with_timestamp(f"📤 Final output: {remaining_stdout}")
                     break
                 
-                # Read a line from stdout
-                line = process.stdout.readline()
+                # Check interrupt flag again before trying to read (in case it was set while processing previous lines)
+                if self.interrupt_flags.get(instance_id, False):
+                    continue  # Go back to the top of the loop to handle the interrupt
+                
+                # Read a line from stdout (with timeout to avoid blocking)
+                try:
+                    # Use a non-blocking approach with poll() first
+                    import select
+                    ready, _, _ = select.select([process.stdout], [], [], 0.01)  # 10ms timeout
+                    if ready:
+                        line = process.stdout.readline()
+                    else:
+                        line = None
+                        # Periodically log that we're waiting for output (but only every 100 iterations to avoid spam)
+                        if not hasattr(self, '_wait_count'):
+                            self._wait_count = {}
+                        self._wait_count[instance_id] = self._wait_count.get(instance_id, 0) + 1
+                        if self._wait_count[instance_id] % 100 == 0:
+                            self._log_with_timestamp(f"🔄 STREAMING: Waiting for output from PID {process.pid} (checked {self._wait_count[instance_id]} times)")
+                except Exception as e:
+                    # Fallback to blocking read if select() fails (e.g., on Windows)
+                    self._log_with_timestamp(f"⚠️ STREAMING: select() failed, using blocking read: {e}")
+                    line = process.stdout.readline()
+                
                 if line:
                     line = line.strip()
                     if line:
@@ -186,8 +214,8 @@ class ClaudeCodeManager:
                             # Not a JSON line, might be error or other output
                             self._log_with_timestamp(f"⚠️ Non-JSON line: {line}")
                 
-                # Small delay to prevent busy waiting
-                await asyncio.sleep(0.01)
+                # Small delay to prevent busy waiting (reduced for more responsive interrupts)
+                await asyncio.sleep(0.005)  # 5ms instead of 10ms for more responsive interrupts
             
             # Wait for process to complete (async)
             return_code = await asyncio.create_task(asyncio.to_thread(process.wait))
@@ -678,6 +706,7 @@ class ClaudeCodeManager:
         # Set the interrupt flag - the streaming loop will pick this up
         self.interrupt_flags[instance_id] = True
         self._log_with_timestamp(f"🚩 GRACEFUL INTERRUPT: Interrupt flag set for instance {instance_id}")
+        self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
         
         # Send immediate notification to frontend
         await self._send_websocket_update(instance_id, {
