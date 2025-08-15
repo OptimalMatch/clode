@@ -838,6 +838,7 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
                     await claude_manager.session_interrupt_instance(instance_id, feedback)
                 elif message_type == "session_interrupt":
                     feedback = message.get("feedback", "")
+                    print(f"🌐 WEBSOCKET: Received session_interrupt for instance {instance_id}")
                     await claude_manager.session_interrupt_instance(instance_id, feedback)
                 elif message_type == "resume":
                     await claude_manager.resume_instance(instance_id)

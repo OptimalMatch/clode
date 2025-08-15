@@ -495,7 +495,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               
               // Handle explicit process_running flag from backend (for session interrupt sync)
               if (message.process_running !== undefined) {
-                console.log(`🔄 Explicit process_running update: ${message.process_running}`);
+                console.log(`🔄 Explicit process_running update: ${message.process_running} (status: ${message.status})`);
                 setIsProcessRunning(message.process_running);
                 if (message.process_running) {
                   setProcessStartTime(Date.now());
@@ -787,15 +787,18 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   };
 
   const confirmGracefulInterrupt = async () => {
+    console.log(`🚀 confirmGracefulInterrupt called - isProcessRunning: ${isProcessRunning}, ws.readyState: ${ws.current?.readyState}, instanceId: ${instanceId}`);
     setShowCancelDialog(false);
     console.log('⚡ User confirmed session interrupt - immediately stopping execution');
     setIsCancelling(true);
     
     try {
+      console.log('📤 About to send session_interrupt WebSocket message');
       ws.current?.send(JSON.stringify({ 
         type: 'session_interrupt', 
         feedback: 'User wants to provide new directions - immediately stopping execution'
       }));
+      console.log('✅ session_interrupt WebSocket message sent successfully');
       
       // Update UI immediately to show session interrupt is in progress
       const interruptMessage = '⚡ **Session interrupt requested - immediately stopping execution...**';
