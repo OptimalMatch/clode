@@ -17,6 +17,28 @@ import { Pause, PlayArrow, Close, Stop } from '@mui/icons-material';
 import { WebSocketMessage, TerminalHistoryEntry } from '../types';
 import { instanceApi } from '../services/api';
 import ReactMarkdown from 'react-markdown';
+
+// Helper function to get dynamic API URL
+const getApiUrl = () => {
+  const currentHostname = window.location.hostname;
+  const protocol = window.location.protocol;
+  const apiPort = process.env.REACT_APP_API_PORT || '8005';
+  
+  if (process.env.REACT_APP_API_URL) {
+    try {
+      const envUrl = new URL(process.env.REACT_APP_API_URL);
+      if (envUrl.hostname === currentHostname) {
+        return process.env.REACT_APP_API_URL;
+      }
+      const envPort = envUrl.port || apiPort;
+      return `${protocol}//${currentHostname}:${envPort}`;
+    } catch (e) {
+      console.warn('Invalid REACT_APP_API_URL, using dynamic construction:', e instanceof Error ? e.message : String(e));
+    }
+  }
+  
+  return `${protocol}//${currentHostname}:${apiPort}`;
+};
 import RunnerSprite from './RunnerSprite';
 import LexicalEditor from './LexicalEditor';
 
@@ -820,7 +842,9 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       // ALWAYS send via HTTP as backup (this will ensure delivery even if WebSocket is overwhelmed)
       console.log(`📡 Sending session_interrupt via HTTP as backup/redundancy`);
       try {
-        const response = await fetch(`${process.env.REACT_APP_API_URL || `http://${window.location.hostname}:8005`}/api/instances/${instanceId}/session_interrupt`, {
+        const apiUrl = getApiUrl();
+        console.log(`🔗 Using API URL: ${apiUrl}`);
+        const response = await fetch(`${apiUrl}/api/instances/${instanceId}/session_interrupt`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
