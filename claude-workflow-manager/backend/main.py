@@ -809,18 +809,46 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
         await claude_manager.connect_websocket(instance_id, websocket)
         print(f"🔗 ClaudeManager connected for instance: {instance_id}")
         
+        message_queue = []
+        
         while True:
             try:
                 # Use asyncio.wait_for with timeout to prevent blocking
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=0.1)
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=0.05)  # Reduced to 50ms
                 print(f"📨 Received WebSocket message for {instance_id}: {data[:100]}...")
                 
                 message = json.loads(data)
                 message_type = message.get("type", "unknown")
-                print(f"📋 Processing message type: {message_type}")
+                
+                # Priority handling: interrupt messages get processed immediately
+                if message_type in ["session_interrupt", "interrupt", "graceful_interrupt"]:
+                    print(f"🚨 PRIORITY: Interrupt message received - processing immediately")
+                    print(f"📋 Processing message type: {message_type}")
+                    # Process interrupt immediately, skip queue
+                else:
+                    # Non-interrupt messages go to queue
+                    message_queue.append((message, message_type))
+                    print(f"📋 Queued message type: {message_type} (queue size: {len(message_queue)})")
+                    
+                    # Limit queue size to prevent memory issues
+                    if len(message_queue) > 100:
+                        message_queue.pop(0)  # Remove oldest message
+                        print(f"⚠️ Message queue full, dropped oldest message")
+                    
+                    # Process one queued message if no more interrupts pending
+                    if message_queue:
+                        message, message_type = message_queue.pop(0)
+                        print(f"📋 Processing queued message type: {message_type}")
+                    else:
+                        continue  # No queued messages, continue listening
+                        
             except asyncio.TimeoutError:
-                # No message received within timeout - continue listening
-                continue
+                # No message received within timeout - process queued messages
+                if message_queue:
+                    message, message_type = message_queue.pop(0)
+                    print(f"📋 Processing queued message type: {message_type} (timeout)")
+                else:
+                    continue  # No queued messages, continue listening
             except Exception as e:
                 print(f"❌ WebSocket error for {instance_id}: {e}")
                 break
