@@ -167,6 +167,12 @@ class ClaudeCodeManager:
                         self._wait_count[instance_id] = self._wait_count.get(instance_id, 0) + 1
                         if self._wait_count[instance_id] % 100 == 0:
                             self._log_with_timestamp(f"🔄 STREAMING: Waiting for output from PID {process.pid} (checked {self._wait_count[instance_id]} times)")
+                        
+                        # CRITICAL: Check interrupt flag here too, since we might be stuck waiting for output
+                        if self.interrupt_flags.get(instance_id, False):
+                            self._log_with_timestamp(f"🛑 GRACEFUL INTERRUPT: Flag detected while waiting for output (check #{self._wait_count[instance_id]})")
+                            # Don't set line, let the main flag check at top of loop handle the interrupt
+                            break  # Break out of select/readline logic to get to main flag check
                 except Exception as e:
                     # Fallback to blocking read if select() fails (e.g., on Windows)
                     self._log_with_timestamp(f"⚠️ STREAMING: select() failed, using blocking read: {e}")
@@ -224,6 +230,11 @@ class ClaudeCodeManager:
                 
                 # Small delay to prevent busy waiting (reduced for more responsive interrupts)
                 await asyncio.sleep(0.005)  # 5ms instead of 10ms for more responsive interrupts
+                
+                # Extra interrupt flag check after sleep to ensure we check every iteration
+                if self.interrupt_flags.get(instance_id, False):
+                    self._log_with_timestamp(f"🛑 GRACEFUL INTERRUPT: Flag detected after sleep - will handle on next iteration")
+                    # Let the main flag check at top of loop handle it on next iteration
             
             # Wait for process to complete (async)
             return_code = await asyncio.create_task(asyncio.to_thread(process.wait))
