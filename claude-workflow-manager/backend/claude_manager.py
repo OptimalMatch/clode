@@ -77,6 +77,7 @@ class ClaudeCodeManager:
             self.running_processes[instance_id].append(process)
             
             self._log_with_timestamp(f"📝 PID TRACKING: Added PID {process.pid} to instance {instance_id} (total: {len(self.running_processes[instance_id])} processes)")
+            self._log_with_timestamp(f"🔍 PID TRACKING: Current running processes: {dict(self.running_processes)}")
             
             # Read output line by line in real-time
             stdout_lines = []
@@ -231,6 +232,7 @@ class ClaudeCodeManager:
                 if not self.running_processes[instance_id]:
                     del self.running_processes[instance_id]
                     self._log_with_timestamp(f"🧹 PID TRACKING: Cleared all processes for instance {instance_id}")
+                self._log_with_timestamp(f"🔍 PID TRACKING: Current running processes after removal: {dict(self.running_processes)}")
             
             self._log_with_timestamp(f"✅ Claude CLI completed with exit code: {return_code}")
             self._log_with_timestamp(f"⏱️ Total execution time: {execution_time}ms")
@@ -695,6 +697,14 @@ class ClaudeCodeManager:
             return False
         
         # Check if there are running processes
+        self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Checking processes for instance {instance_id}")
+        self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: All running processes: {dict(self.running_processes)}")
+        
+        if instance_id not in self.running_processes:
+            self._log_with_timestamp(f"❌ GRACEFUL INTERRUPT: Instance {instance_id} not found in running_processes")
+        elif not self.running_processes[instance_id]:
+            self._log_with_timestamp(f"❌ GRACEFUL INTERRUPT: Instance {instance_id} has empty process list")
+        
         if instance_id not in self.running_processes or not self.running_processes[instance_id]:
             self._log_with_timestamp(f"ℹ️ GRACEFUL INTERRUPT: No running processes for instance {instance_id}")
             await self._send_websocket_update(instance_id, {
