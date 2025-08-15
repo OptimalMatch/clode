@@ -21,6 +21,7 @@ class ClaudeCodeManager:
         self.cancelled_instances: set = set()  # Track instances that have been explicitly cancelled
         self.interrupt_flags: Dict[str, bool] = {}  # Track graceful interrupt requests per instance
         self.interrupt_timers: Dict[str, asyncio.Task] = {}  # Track 30-second fallback interrupt timers
+        self.interrupt_listeners: Dict[str, asyncio.Task] = {}  # Track background interrupt listeners
         self.db = db
     
     def _log_with_timestamp(self, message: str):
@@ -62,6 +63,51 @@ class ClaudeCodeManager:
             self.interrupt_timers[instance_id].cancel()
             del self.interrupt_timers[instance_id]
             self._log_with_timestamp(f"⏰ TIMER: Cancelled fallback timer for instance {instance_id}")
+    
+    async def _start_interrupt_listener(self, instance_id: str):
+        """Start a background listener that continuously monitors interrupt flags"""
+        self._log_with_timestamp(f"👂 LISTENER: Starting interrupt listener for instance {instance_id}")
+        
+        async def listener_callback():
+            while True:
+                await asyncio.sleep(0.1)  # Check every 100ms
+                
+                # Check if interrupt flag is set
+                if self.interrupt_flags.get(instance_id, False):
+                    self._log_with_timestamp(f"👂 LISTENER: Interrupt flag detected for instance {instance_id}")
+                    
+                    # Check if process is still running
+                    if instance_id in self.running_processes and self.running_processes[instance_id]:
+                        self._log_with_timestamp(f"👂 LISTENER: Forcing interrupt for busy instance {instance_id}")
+                        await self.interrupt_instance(instance_id, "Background listener forced interrupt", force=True)
+                    
+                    # Clear the flag and stop listening
+                    if instance_id in self.interrupt_flags:
+                        self.interrupt_flags[instance_id] = False
+                    break
+                
+                # Stop listening if process is no longer running
+                if instance_id not in self.running_processes or not self.running_processes[instance_id]:
+                    self._log_with_timestamp(f"👂 LISTENER: Process {instance_id} stopped - ending listener")
+                    break
+            
+            # Clean up listener
+            if instance_id in self.interrupt_listeners:
+                del self.interrupt_listeners[instance_id]
+        
+        # Cancel existing listener if any
+        if instance_id in self.interrupt_listeners:
+            self.interrupt_listeners[instance_id].cancel()
+        
+        # Start new listener
+        self.interrupt_listeners[instance_id] = asyncio.create_task(listener_callback())
+    
+    def _cancel_interrupt_listener(self, instance_id: str):
+        """Cancel the interrupt listener for an instance"""
+        if instance_id in self.interrupt_listeners:
+            self.interrupt_listeners[instance_id].cancel()
+            del self.interrupt_listeners[instance_id]
+            self._log_with_timestamp(f"👂 LISTENER: Cancelled interrupt listener for instance {instance_id}")
     
     def _log_all_tracked_pids(self):
         """Debug function to display all currently tracked PIDs"""
@@ -332,8 +378,9 @@ class ClaudeCodeManager:
             self._log_with_timestamp(f"✅ Claude CLI completed with exit code: {return_code}")
             self._log_with_timestamp(f"⏱️ Total execution time: {execution_time}ms")
             
-            # Cancel fallback timer since process completed normally
+            # Cancel fallback timer and listener since process completed normally
             self._cancel_interrupt_timer(instance_id)
+            self._cancel_interrupt_listener(instance_id)
             
             # Handle stderr if any
             stderr_output = process.stderr.read()
@@ -1320,8 +1367,9 @@ class ClaudeCodeManager:
             del self.interrupt_flags[instance_id]
             print(f"🧹 CLAUDE_MANAGER: Cleared interrupt flag for instance {instance_id}")
         
-        # Cancel any running interrupt timer
+        # Cancel any running interrupt timer and listener
         self._cancel_interrupt_timer(instance_id)
+        self._cancel_interrupt_listener(instance_id)
     
     async def send_input(self, instance_id: str, input_text: str):
         self._log_with_timestamp(f"📝 SEND_INPUT: Called for instance {instance_id} with input: {input_text[:100]}...")
@@ -1400,6 +1448,9 @@ class ClaudeCodeManager:
             # Send input to Claude Code and measure time using claude-code-sdk
             start_time = time.time()
             self._log_with_timestamp(f"🚀 SEND_INPUT: Starting Claude CLI execution for instance {instance_id}")
+            
+            # Start background interrupt listener to monitor for interrupt flags
+            await self._start_interrupt_listener(instance_id)
             
             # Ensure ANTHROPIC_API_KEY is available for subprocess calls
             claude_api_key = os.getenv("CLAUDE_API_KEY")
