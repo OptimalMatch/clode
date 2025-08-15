@@ -341,14 +341,14 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
           confirmCancel(true);
         }
       }
-      // ESC to open cancel dialog
+      // ESC to trigger direct HTTP cancel
       else if (event.key === 'Escape') {
         console.log(`🚪 ESC pressed - isProcessRunning: ${isProcessRunning}, isCancelling: ${isCancelling}, showCancelDialog: ${showCancelDialog}, processStartTime: ${processStartTime}`);
         console.log(`🚪 ESC pressed - ws.readyState: ${ws.current?.readyState}, instanceId: ${instanceId}`);
         if (isProcessRunning && !isCancelling && !showCancelDialog) {
           event.preventDefault();
-          console.log('✅ ESC conditions met - opening cancel dialog');
-          setShowCancelDialog(true);
+          console.log('✅ ESC conditions met - triggering direct HTTP cancel');
+          handleHttpCancel();
         } else {
           console.log(`❌ ESC conditions NOT met - ignoring ESC. Failing condition: isProcessRunning=${isProcessRunning}, isCancelling=${isCancelling}, showCancelDialog=${showCancelDialog}`);
         }
@@ -359,7 +359,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     return () => {
       document.removeEventListener('keydown', handleKeyPress);
     };
-  }, [isProcessRunning, isCancelling, showCancelDialog]);
+  }, [isProcessRunning, isCancelling, showCancelDialog, handleHttpCancel]);
 
   useEffect(() => {
     console.log('🚀 Initializing LexicalEditor terminal with WebSocket connection...');
@@ -771,7 +771,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       ws.current.send(JSON.stringify({ type: 'input', content: input }));
       
       // Add separator for new command session and show command
-      appendToTerminal(`---\n\n> **${input}**\n⏱️ Waiting for response... *(Press ESC to cancel)*`);
+      appendToTerminal(`---\n\n> **${input}**\n⏱️ Waiting for response... *(Press ESC for HTTP cancel)*`);
       
       // Start stopwatch
       console.log('🚀 Starting stopwatch for new command');
@@ -1142,7 +1142,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                 Claude Code Terminal (LexicalEditor) - Instance {instanceId.slice(0, 8)}
                 {isWaitingForResponse && !isCancelling && (
                   <span style={{ color: '#ff9500', fontSize: '0.8em', marginLeft: '8px' }}>
-                    • Press ESC to cancel
+                    • Press ESC for HTTP cancel
                   </span>
                 )}
               </Typography>
@@ -1306,7 +1306,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                 }
                 // Shift+Enter will allow natural line breaks
               }}
-              placeholder="Type command and press Enter to send, Shift+Enter for new line..."
+              placeholder="Type command and press Enter to send, Shift+Enter for new line... (Press ESC for cancel)"
               variant="outlined"
               size="small"
               disabled={!isConnected}
