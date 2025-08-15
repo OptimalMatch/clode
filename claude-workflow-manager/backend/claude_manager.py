@@ -19,6 +19,7 @@ class ClaudeCodeManager:
         self.websockets: Dict[str, WebSocket] = {}
         self.running_processes: Dict[str, List[subprocess.Popen]] = {}  # Track all running Claude CLI processes for each instance
         self.cancelled_instances: set = set()  # Track instances that have been explicitly cancelled
+        self.interrupt_flags: Dict[str, bool] = {}  # Track graceful interrupt requests per instance
         self.db = db
     
     def _log_with_timestamp(self, message: str):
@@ -87,6 +88,43 @@ class ClaudeCodeManager:
             total_cost_usd = 0.0
             
             while True:
+                # Check for graceful interrupt flag first
+                if self.interrupt_flags.get(instance_id, False):
+                    self._log_with_timestamp(f"🛑 GRACEFUL INTERRUPT: Detected interrupt flag for instance {instance_id}")
+                    # Send graceful interrupt signal to the Claude CLI process
+                    try:
+                        import signal
+                        process.send_signal(signal.SIGINT)  # Send Ctrl+C signal
+                        self._log_with_timestamp(f"📡 GRACEFUL INTERRUPT: Sent SIGINT to Claude CLI process (PID: {process.pid})")
+                        
+                        # Wait briefly for graceful shutdown
+                        try:
+                            await asyncio.wait_for(
+                                asyncio.create_task(asyncio.to_thread(process.wait)), 
+                                timeout=3.0
+                            )
+                            self._log_with_timestamp(f"✅ GRACEFUL INTERRUPT: Process terminated gracefully")
+                        except asyncio.TimeoutError:
+                            self._log_with_timestamp(f"⏰ GRACEFUL INTERRUPT: Timeout, process still running")
+                            # Don't force kill here - let the user decide if they want to force kill
+                        
+                        # Clear the interrupt flag
+                        self.interrupt_flags[instance_id] = False
+                        
+                        # Send interrupt notification
+                        await self._send_websocket_update(instance_id, {
+                            "type": "graceful_interrupt",
+                            "message": "Execution gracefully interrupted. You can provide new directions or force kill if needed."
+                        })
+                        
+                        # Exit the streaming loop
+                        break
+                        
+                    except Exception as e:
+                        self._log_with_timestamp(f"❌ GRACEFUL INTERRUPT: Error sending interrupt signal: {e}")
+                        # Clear flag even on error
+                        self.interrupt_flags[instance_id] = False
+                
                 # Check if process is still running
                 if process.poll() is not None:
                     # Process finished, read any remaining output
@@ -619,9 +657,47 @@ class ClaudeCodeManager:
             await self.db.append_terminal_history(instance_id, f"❌ Error: {str(e)}", "error")
             return False
     
-    async def interrupt_instance(self, instance_id: str, feedback: str, force: bool = False) -> bool:
+    async def graceful_interrupt_instance(self, instance_id: str, feedback: str = "") -> bool:
+        """Gracefully interrupt a running Claude CLI instance by setting an interrupt flag"""
+        self._log_with_timestamp(f"🟡 GRACEFUL INTERRUPT: Setting interrupt flag for instance {instance_id}")
+        
+        instance_info = self.instances.get(instance_id)
+        if not instance_info:
+            self._log_with_timestamp(f"❌ GRACEFUL INTERRUPT: Instance {instance_id} not found in memory")
+            return False
+        
+        # Check if there are running processes
+        if instance_id not in self.running_processes or not self.running_processes[instance_id]:
+            self._log_with_timestamp(f"ℹ️ GRACEFUL INTERRUPT: No running processes for instance {instance_id}")
+            await self._send_websocket_update(instance_id, {
+                "type": "graceful_interrupt",
+                "message": "No active process to interrupt"
+            })
+            return True
+        
+        # Set the interrupt flag - the streaming loop will pick this up
+        self.interrupt_flags[instance_id] = True
+        self._log_with_timestamp(f"🚩 GRACEFUL INTERRUPT: Interrupt flag set for instance {instance_id}")
+        
+        # Send immediate notification to frontend
+        await self._send_websocket_update(instance_id, {
+            "type": "graceful_interrupt_requested",
+            "message": "Graceful interrupt requested. Waiting for Claude to reach a safe stopping point..."
+        })
+        
+        # Log the interrupt request to terminal history
+        await self.db.append_terminal_history(instance_id, "🟡 Graceful interrupt requested by user", "system")
+        
+        return True
+
+    async def interrupt_instance(self, instance_id: str, feedback: str, force: bool = False, graceful: bool = False) -> bool:
         """Interrupt/cancel a running Claude CLI instance"""
-        self._log_with_timestamp(f"🛑 INTERRUPT: Attempting to interrupt instance {instance_id}")
+        
+        # If graceful interrupt is requested, use the graceful method
+        if graceful and not force:
+            return await self.graceful_interrupt_instance(instance_id, feedback)
+        
+        self._log_with_timestamp(f"🛑 INTERRUPT: Attempting to {'force ' if force else ''}interrupt instance {instance_id}")
         
         # Debug: Show all tracked PIDs before interrupt
         self._log_all_tracked_pids()
@@ -629,6 +705,10 @@ class ClaudeCodeManager:
         # Mark instance as explicitly cancelled to prevent session recovery
         self.cancelled_instances.add(instance_id)
         self._log_with_timestamp(f"🏷️ INTERRUPT: Marked instance {instance_id} as cancelled (prevents session recovery)")
+        
+        # Clear any graceful interrupt flag since we're doing a hard interrupt
+        if instance_id in self.interrupt_flags:
+            del self.interrupt_flags[instance_id]
         
         instance_info = self.instances.get(instance_id)
         if not instance_info:
@@ -1093,6 +1173,11 @@ class ClaudeCodeManager:
         if instance_id in self.cancelled_instances:
             self.cancelled_instances.remove(instance_id)
             print(f"🧹 CLAUDE_MANAGER: Cleared cancellation flag for instance {instance_id}")
+        
+        # Clean up interrupt flag
+        if instance_id in self.interrupt_flags:
+            del self.interrupt_flags[instance_id]
+            print(f"🧹 CLAUDE_MANAGER: Cleared interrupt flag for instance {instance_id}")
     
     async def send_input(self, instance_id: str, input_text: str):
         self._log_with_timestamp(f"📝 SEND_INPUT: Called for instance {instance_id} with input: {input_text[:100]}...")

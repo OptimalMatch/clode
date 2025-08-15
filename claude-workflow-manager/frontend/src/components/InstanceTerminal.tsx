@@ -299,8 +299,14 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   // Add keyboard shortcuts for cancellation
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
-      // Ctrl+C for graceful cancel, Ctrl+Shift+C for force kill
-      if (event.ctrlKey && event.key === 'c' && !event.shiftKey) {
+      // Ctrl+I for graceful interrupt, Ctrl+C for graceful cancel, Ctrl+Shift+C for force kill
+      if (event.ctrlKey && event.key === 'i' && !event.shiftKey) {
+        if (isProcessRunning && !isCancelling) {
+          event.preventDefault();
+          console.log('🟡 Ctrl+I pressed - triggering graceful interrupt');
+          confirmGracefulInterrupt();
+        }
+      } else if (event.ctrlKey && event.key === 'c' && !event.shiftKey) {
         if (isProcessRunning && !isCancelling) {
           event.preventDefault();
           console.log('🛑 Ctrl+C pressed - triggering graceful cancellation');
@@ -496,6 +502,14 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               } else {
                 setIsPaused(false);
               }
+              break;
+            case 'graceful_interrupt_requested':
+              appendToTerminal(`🟡 **${message.message}**`);
+              break;
+            case 'graceful_interrupt':
+              appendToTerminal(`🟡 **${message.message}**`);
+              // Process is still running after graceful interrupt - ready for new input
+              setIsCancelling(false);
               break;
             case 'interrupted':
               appendToTerminal(`⏸️  **Instance paused**`);
@@ -743,6 +757,32 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
 
     // Show confirmation dialog instead of immediately cancelling
     setShowCancelDialog(true);
+  };
+
+  const confirmGracefulInterrupt = async () => {
+    setShowCancelDialog(false);
+    console.log('🟡 User confirmed graceful interrupt - letting Claude finish current thought');
+    setIsCancelling(true);
+    
+    try {
+      ws.current?.send(JSON.stringify({ 
+        type: 'graceful_interrupt', 
+        feedback: 'User wants to provide new directions after current task completes'
+      }));
+      
+      // Update UI immediately to show graceful interrupt is in progress
+      const interruptMessage = '🟡 **Graceful interrupt requested - waiting for Claude to reach a safe stopping point...**';
+      appendToTerminal(interruptMessage);
+      
+      // Reset state after a short delay since graceful interrupt doesn't kill processes
+      setTimeout(() => {
+        setIsCancelling(false);
+      }, 2000);
+      
+    } catch (error) {
+      console.error('❌ Failed to send graceful interrupt:', error);
+      setIsCancelling(false);
+    }
   };
 
   const confirmCancel = async (force: boolean = false) => {
@@ -1153,13 +1193,16 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
           </Box>
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              <strong>🟡 Graceful Interrupt:</strong> Let Claude finish current thought, then pause for new directions
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               <strong>🛑 Graceful Cancel:</strong> Sends termination signal, waits for cleanup
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               <strong>⚡ Force Kill:</strong> Immediately kills all processes (for stuck Python processes)
             </Typography>
             <Typography variant="body2" color="warning.main">
-              Note: Any unsaved work may be lost with either option
+              Note: Graceful interrupt preserves context. Cancel/kill may lose unsaved work.
             </Typography>
           </Box>
         </DialogContent>
@@ -1168,6 +1211,14 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             Keep Running
           </Button>
           <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button 
+              onClick={() => confirmGracefulInterrupt()} 
+              color="info" 
+              variant="outlined"
+              startIcon={<Stop />}
+            >
+              Graceful Interrupt
+            </Button>
             <Button 
               onClick={() => confirmCancel(false)} 
               color="warning" 

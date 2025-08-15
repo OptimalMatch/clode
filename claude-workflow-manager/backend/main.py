@@ -692,7 +692,16 @@ async def get_instances(workflow_id: str, include_archived: bool = False):
 async def interrupt_instance(instance_id: str, data: dict):
     feedback = data.get("feedback", "")
     force = data.get("force", False)
-    success = await claude_manager.interrupt_instance(instance_id, feedback, force)
+    graceful = data.get("graceful", False)
+    success = await claude_manager.interrupt_instance(instance_id, feedback, force, graceful)
+    if not success:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    return {"success": True}
+
+@app.post("/api/instances/{instance_id}/graceful_interrupt")
+async def graceful_interrupt_instance(instance_id: str, data: dict):
+    feedback = data.get("feedback", "")
+    success = await claude_manager.graceful_interrupt_instance(instance_id, feedback)
     if not success:
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
@@ -813,7 +822,11 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
                         raise
                 elif message_type == "interrupt":
                     force = message.get("force", False)
-                    await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""), force)
+                    graceful = message.get("graceful", False)
+                    await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""), force, graceful)
+                elif message_type == "graceful_interrupt":
+                    feedback = message.get("feedback", "")
+                    await claude_manager.graceful_interrupt_instance(instance_id, feedback)
                 elif message_type == "resume":
                     await claude_manager.resume_instance(instance_id)
                 elif message_type == "ping":
