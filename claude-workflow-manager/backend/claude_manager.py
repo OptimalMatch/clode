@@ -23,11 +23,79 @@ class ClaudeCodeManager:
         self.interrupt_timers: Dict[str, asyncio.Task] = {}  # Track 30-second fallback interrupt timers
         self.interrupt_listeners: Dict[str, asyncio.Task] = {}  # Track background interrupt listeners
         self.db = db
+        # Configuration for Claude CLI execution mode
+        self.use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "false").lower() == "true"
     
     def _log_with_timestamp(self, message: str):
         """Add timestamp to log messages"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Include milliseconds
         print(f"[{timestamp}] {message}")
+    
+    def _build_claude_command(self, session_id: str, input_text: str, is_resume: bool = False) -> tuple[list, dict]:
+        """
+        Build Claude CLI command with support for both API key and max plan modes
+        Returns: (command_list, environment_dict)
+        """
+        # Base environment
+        env = os.environ.copy()
+        
+        if self.use_max_plan:
+            # Max plan mode: unset API key and use text-only mode
+            self._log_with_timestamp(f"🎯 Using Claude Code max plan account (text-only mode)")
+            if "ANTHROPIC_API_KEY" in env:
+                del env["ANTHROPIC_API_KEY"]
+            if "CLAUDE_API_KEY" in env:
+                del env["CLAUDE_API_KEY"]
+            
+            # Build command for max plan (text-only mode)
+            if is_resume:
+                cmd = [
+                    "claude", 
+                    "-p",  # text-only mode
+                    "--resume", session_id,
+                    input_text
+                ]
+            else:
+                cmd = [
+                    "claude", 
+                    "-p",  # text-only mode
+                    "--session-id", session_id,
+                    input_text
+                ]
+        else:
+            # API key mode: standard streaming JSON mode
+            self._log_with_timestamp(f"🔑 Using ANTHROPIC_API_KEY (streaming JSON mode)")
+            
+            # Ensure API key is available
+            claude_api_key = os.getenv("CLAUDE_API_KEY")
+            if claude_api_key and not env.get("ANTHROPIC_API_KEY"):
+                env["ANTHROPIC_API_KEY"] = claude_api_key
+            
+            # Build command for API key mode (streaming JSON)
+            if is_resume:
+                cmd = [
+                    "claude", 
+                    "--print",
+                    "--verbose",
+                    "--output-format", "stream-json",
+                    "--permission-mode", "acceptEdits",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
+                    "--resume", session_id,
+                    input_text
+                ]
+            else:
+                cmd = [
+                    "claude", 
+                    "--print",
+                    "--verbose",
+                    "--output-format", "stream-json",
+                    "--permission-mode", "acceptEdits",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
+                    "--session-id", session_id,
+                    input_text
+                ]
+        
+        return cmd, env
     
     async def _start_interrupt_timer(self, instance_id: str):
         """Start a 30-second timer that will force interrupt if the process is still running"""
@@ -129,12 +197,16 @@ class ClaudeCodeManager:
             finished_str = f"Finished: {finished_pids}" if finished_pids else ""
             self._log_with_timestamp(f"📊   Instance {instance_id}: {active_str} {finished_str}")
     
-    async def _execute_claude_streaming(self, cmd: List[str], instance_id: str):
+    async def _execute_claude_streaming(self, cmd: List[str], instance_id: str, env: dict = None):
         """Execute Claude CLI with real-time streaming output"""
         self._log_with_timestamp(f"📡 Starting streaming execution...")
         start_time = time.time()
         
         try:
+            # Use provided environment or default
+            if env is None:
+                env = os.environ.copy()
+            
             # Start the process with process group for better termination control
             import os
             process = subprocess.Popen(
@@ -142,7 +214,7 @@ class ClaudeCodeManager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=os.environ.copy(),
+                env=env,
                 bufsize=1,  # Line buffered
                 universal_newlines=True,
                 preexec_fn=os.setsid if hasattr(os, 'setsid') else None  # Create new process group on Unix
@@ -302,54 +374,71 @@ class ClaudeCodeManager:
                         stdout_lines.append(line)
                         self._log_with_timestamp(f"📤 Stream line: {line}")
                         
-                        # Process this line immediately
-                        try:
-                            event = json.loads(line)
-                            
-                            # Extract detailed token usage and cost from result events
-                            if event.get('type') == 'result':
-                                usage = event.get('usage', {})
-                                cost = event.get('total_cost_usd', 0.0)
+                        # Process this line based on execution mode
+                        if self.use_max_plan:
+                            # Text-only mode: send raw text output
+                            await self._send_websocket_update(instance_id, {
+                                "type": "partial_output",
+                                "content": line
+                            })
+                            # Store in terminal history
+                            await self.db.append_terminal_history(instance_id, line, "output")
+                        else:
+                            # JSON streaming mode: parse events
+                            try:
+                                event = json.loads(line)
                                 
-                                if usage:
-                                    # Track individual token categories
-                                    input_tokens = usage.get('input_tokens', 0)
-                                    output_tokens = usage.get('output_tokens', 0)
-                                    cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
-                                    cache_read_tokens = usage.get('cache_read_input_tokens', 0)
+                                # Extract detailed token usage and cost from result events
+                                if event.get('type') == 'result':
+                                    usage = event.get('usage', {})
+                                    cost = event.get('total_cost_usd', 0.0)
                                     
-                                    # Accumulate totals
-                                    total_input_tokens += input_tokens
-                                    total_output_tokens += output_tokens
-                                    total_cache_creation_tokens += cache_creation_tokens
-                                    total_cache_read_tokens += cache_read_tokens
-                                    if cost > 0:
-                                        total_cost_usd += cost
-                                    
-                                    result_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
-                                    if result_tokens > 0:
-                                        total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
-                                        self._log_with_timestamp(f"🔢 Result tokens: {result_tokens} (in:{input_tokens}, out:{output_tokens}, cache_create:{cache_creation_tokens}, cache_read:{cache_read_tokens})")
-                                        self._log_with_timestamp(f"💰 Session totals: {total_tokens} tokens, ${total_cost_usd:.4f} USD")
-                            
-                            formatted_msg = self._format_streaming_event(event)
-                            if formatted_msg:
-                                await self._send_websocket_update(instance_id, {
-                                    "type": "partial_output",
-                                    "content": formatted_msg
-                                })
-                                # Store in terminal history
-                                await self.db.append_terminal_history(instance_id, formatted_msg, "output")
-                                # Also create instance logs for analytics
-                                await self._create_event_logs(instance_id, event, formatted_msg)
+                                    if usage:
+                                        # Track individual token categories
+                                        input_tokens = usage.get('input_tokens', 0)
+                                        output_tokens = usage.get('output_tokens', 0)
+                                        cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
+                                        cache_read_tokens = usage.get('cache_read_input_tokens', 0)
+                                        
+                                        # Accumulate totals
+                                        total_input_tokens += input_tokens
+                                        total_output_tokens += output_tokens
+                                        total_cache_creation_tokens += cache_creation_tokens
+                                        total_cache_read_tokens += cache_read_tokens
+                                        if cost > 0:
+                                            total_cost_usd += cost
+                                        
+                                        result_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
+                                        if result_tokens > 0:
+                                            total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
+                                            self._log_with_timestamp(f"🔢 Result tokens: {result_tokens} (in:{input_tokens}, out:{output_tokens}, cache_create:{cache_creation_tokens}, cache_read:{cache_read_tokens})")
+                                            self._log_with_timestamp(f"💰 Session totals: {total_tokens} tokens, ${total_cost_usd:.4f} USD")
                                 
-                                # CRITICAL: Check interrupt flag after processing each line during busy output
-                                if self.interrupt_flags.get(instance_id, False):
-                                    self._log_with_timestamp(f"🛑 SESSION INTERRUPT: Flag detected while processing output line")
-                                    break  # Break out of line processing to get to main flag check
-                        except json.JSONDecodeError:
-                            # Not a JSON line, might be error or other output
-                            self._log_with_timestamp(f"⚠️ Non-JSON line: {line}")
+                                formatted_msg = self._format_streaming_event(event)
+                                if formatted_msg:
+                                    await self._send_websocket_update(instance_id, {
+                                        "type": "partial_output",
+                                        "content": formatted_msg
+                                    })
+                                    # Store in terminal history
+                                    await self.db.append_terminal_history(instance_id, formatted_msg, "output")
+                                    # Also create instance logs for analytics
+                                    await self._create_event_logs(instance_id, event, formatted_msg)
+                            except json.JSONDecodeError:
+                                # Not a JSON line in streaming mode, might be error or other output
+                                if line.strip():  # Only log non-empty lines
+                                    self._log_with_timestamp(f"⚠️ Non-JSON line: {line}")
+                                    # Send as raw text in case it's important output
+                                    await self._send_websocket_update(instance_id, {
+                                        "type": "partial_output",
+                                        "content": line
+                                    })
+                                    await self.db.append_terminal_history(instance_id, line, "output")
+                        
+                        # CRITICAL: Check interrupt flag after processing each line during busy output
+                        if self.interrupt_flags.get(instance_id, False):
+                            self._log_with_timestamp(f"🛑 SESSION INTERRUPT: Flag detected while processing output line")
+                            break  # Break out of line processing to get to main flag check
                 
                 # Small delay to prevent busy waiting (reduced for more responsive interrupts)
                 await asyncio.sleep(0.005)  # 5ms instead of 10ms for more responsive interrupts
@@ -477,20 +566,11 @@ class ClaudeCodeManager:
         instance_info["session_id"] = new_session_id
         self._log_with_timestamp(f"🆕 Creating new session {new_session_id} (retry)")
         
-        # Create retry command
-        retry_cmd = [
-            "claude", 
-            "--print",
-            "--verbose",
-            "--output-format", "stream-json",
-            "--permission-mode", "acceptEdits",
-            "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*)",
-            "--session-id", new_session_id,
-            input_text
-        ]
+        # Create retry command using command builder
+        retry_cmd, retry_env = self._build_claude_command(new_session_id, input_text, is_resume=False)
         
         # Try streaming execution again with new session
-        success = await self._execute_claude_streaming(retry_cmd, instance_id)
+        success = await self._execute_claude_streaming(retry_cmd, instance_id, retry_env)
         
         if success:
             # Save the new session ID and mark as created
@@ -1452,11 +1532,6 @@ class ClaudeCodeManager:
             # Start background interrupt listener to monitor for interrupt flags
             await self._start_interrupt_listener(instance_id)
             
-            # Ensure ANTHROPIC_API_KEY is available for subprocess calls
-            claude_api_key = os.getenv("CLAUDE_API_KEY")
-            if claude_api_key and not os.getenv("ANTHROPIC_API_KEY"):
-                os.environ["ANTHROPIC_API_KEY"] = claude_api_key
-            
             # Change to the working directory for this instance
             original_cwd = os.getcwd()
             working_dir = instance_info["working_directory"]
@@ -1485,38 +1560,20 @@ class ClaudeCodeManager:
                 if not session_created:
                     # First command - create session with specific ID
                     self._log_with_timestamp(f"🆕 Creating new session {session_id}")
-                    cmd = [
-                        "claude", 
-                        "--print",
-                        "--verbose",
-                        "--output-format", "stream-json",
-                        "--permission-mode", "acceptEdits",
-                        "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
-                        "--session-id", session_id,
-                        input_text
-                    ]
+                    cmd, env = self._build_claude_command(session_id, input_text, is_resume=False)
                     instance_info["session_created"] = True
                     # Save session ID to database for future use
                     await self.db.update_instance_session_id(instance_id, session_id)
                 else:
                     # Subsequent commands - resume existing session
                     self._log_with_timestamp(f"🔄 Resuming session {session_id}")
-                    cmd = [
-                        "claude", 
-                        "--print",
-                        "--verbose",
-                        "--output-format", "stream-json",
-                        "--permission-mode", "acceptEdits",
-                        "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
-                        "--resume", session_id,
-                        input_text
-                    ]
+                    cmd, env = self._build_claude_command(session_id, input_text, is_resume=True)
                 
                 self._log_with_timestamp(f"🚀 About to execute Claude CLI command: {' '.join(cmd)}")
                 self._log_with_timestamp(f"🔍 Command length: {len(cmd)} arguments")
                 
                 # Use Popen for real-time streaming instead of run()
-                success = await self._execute_claude_streaming(cmd, instance_id)
+                success = await self._execute_claude_streaming(cmd, instance_id, env)
                 
                 if not success:
                     # Check if instance was explicitly cancelled - if so, don't attempt session recovery

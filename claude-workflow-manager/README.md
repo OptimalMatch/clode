@@ -21,6 +21,29 @@ A full-stack application for managing Claude Code instances in Git workflows wit
 - **WebSocket**: Real-time communication between frontend and Claude instances
 - **Claude Code SDK**: Integration for managing Claude Code sessions
 
+## Claude Code Execution Modes
+
+The application supports two execution modes for Claude Code:
+
+### 1. API Key Mode (Default)
+- Uses your `ANTHROPIC_API_KEY` or `CLAUDE_API_KEY`
+- Provides streaming JSON output with detailed tool usage and token tracking
+- Full feature set including permissions management and tool controls
+- Set `USE_CLAUDE_MAX_PLAN=false` or omit the variable
+
+### 2. Max Plan Mode
+- Uses Claude Code's max plan account (no API key required)
+- Text-only output mode
+- Ideal for users with Claude Code max plan subscriptions
+- Set `USE_CLAUDE_MAX_PLAN=true` in your environment
+
+**To use Max Plan Mode:**
+```bash
+# In your .env file
+USE_CLAUDE_MAX_PLAN=true
+# Note: You can still set CLAUDE_API_KEY but it will be ignored in max plan mode
+```
+
 ## Quick Start
 
 1. Clone the repository:
@@ -39,6 +62,9 @@ CLAUDE_PROMPTS_FOLDER=.clode/claude_prompts
 
 # Optional: Customize the agents folder path (defaults to ".claude/agents")
 CLAUDE_AGENTS_FOLDER=.claude/agents
+
+# Optional: Use Claude Code max plan account instead of API key (defaults to "false")
+USE_CLAUDE_MAX_PLAN=false
 ```
 
 3. Set up Git authentication (choose one method):

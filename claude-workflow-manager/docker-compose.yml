@@ -36,6 +36,7 @@ services:
       REDIS_URL: redis://redis:6379
       CLAUDE_PROMPTS_FOLDER: ${CLAUDE_PROMPTS_FOLDER:-.clode/claude_prompts}
       CLAUDE_AGENTS_FOLDER: ${CLAUDE_AGENTS_FOLDER:-.claude/agents}
+      USE_CLAUDE_MAX_PLAN: ${USE_CLAUDE_MAX_PLAN:-false}
     depends_on:
       - mongodb
       - redis
