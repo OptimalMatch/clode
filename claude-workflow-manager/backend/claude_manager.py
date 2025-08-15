@@ -33,14 +33,17 @@ class ClaudeCodeManager:
         self._log_with_timestamp(f"⏰ TIMER: Starting 30-second fallback timer for instance {instance_id}")
         
         async def timer_callback():
-            await asyncio.sleep(30)  # Wait 30 seconds
+            self._log_with_timestamp(f"⏰ TIMER: Timer callback started, waiting 15 seconds for instance {instance_id}")
+            await asyncio.sleep(15)  # Wait 15 seconds (reduced for testing)
             
             # Check if process is still running
             if instance_id in self.running_processes and self.running_processes[instance_id]:
-                self._log_with_timestamp(f"⏰ TIMER: 30 seconds elapsed - forcing interrupt for instance {instance_id}")
-                await self.interrupt_instance(instance_id, "30-second timer forced cancellation", force=True)
+                self._log_with_timestamp(f"⏰ TIMER: 15 seconds elapsed - forcing interrupt for instance {instance_id}")
+                self._log_with_timestamp(f"⏰ TIMER: Current running processes: {dict(self.running_processes)}")
+                await self.interrupt_instance(instance_id, "15-second timer forced cancellation", force=True)
             else:
-                self._log_with_timestamp(f"⏰ TIMER: 30 seconds elapsed but process {instance_id} already stopped")
+                self._log_with_timestamp(f"⏰ TIMER: 15 seconds elapsed but process {instance_id} already stopped")
+                self._log_with_timestamp(f"⏰ TIMER: Current running processes: {dict(self.running_processes)}")
             
             # Clean up timer
             if instance_id in self.interrupt_timers:
@@ -328,6 +331,9 @@ class ClaudeCodeManager:
             
             self._log_with_timestamp(f"✅ Claude CLI completed with exit code: {return_code}")
             self._log_with_timestamp(f"⏱️ Total execution time: {execution_time}ms")
+            
+            # Cancel fallback timer since process completed normally
+            self._cancel_interrupt_timer(instance_id)
             
             # Handle stderr if any
             stderr_output = process.stderr.read()
@@ -822,9 +828,6 @@ class ClaudeCodeManager:
         
         # Log the interrupt request to terminal history
         await self.db.append_terminal_history(instance_id, "🟡 Session interrupt requested by user", "system")
-        
-        # Start 30-second fallback timer in case the first interrupt doesn't work
-        await self._start_interrupt_timer(instance_id)
         
         return True
 
@@ -1397,6 +1400,9 @@ class ClaudeCodeManager:
             # Send input to Claude Code and measure time using claude-code-sdk
             start_time = time.time()
             self._log_with_timestamp(f"🚀 SEND_INPUT: Starting Claude CLI execution for instance {instance_id}")
+            
+            # Start fallback timer for testing (will be cancelled when process completes normally)
+            await self._start_interrupt_timer(instance_id)
             
             # Ensure ANTHROPIC_API_KEY is available for subprocess calls
             claude_api_key = os.getenv("CLAUDE_API_KEY")
