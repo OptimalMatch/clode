@@ -257,6 +257,11 @@ class ClaudeCodeManager:
                                 await self.db.append_terminal_history(instance_id, formatted_msg, "output")
                                 # Also create instance logs for analytics
                                 await self._create_event_logs(instance_id, event, formatted_msg)
+                                
+                                # CRITICAL: Check interrupt flag after processing each line during busy output
+                                if self.interrupt_flags.get(instance_id, False):
+                                    self._log_with_timestamp(f"🛑 SESSION INTERRUPT: Flag detected while processing output line")
+                                    break  # Break out of line processing to get to main flag check
                         except json.JSONDecodeError:
                             # Not a JSON line, might be error or other output
                             self._log_with_timestamp(f"⚠️ Non-JSON line: {line}")
