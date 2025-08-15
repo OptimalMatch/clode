@@ -71,14 +71,13 @@ class ClaudeCodeManager:
             # Store the running process and track start time
             process._start_time = start_time  # Add start time to the process object
             
-            # NOW notify frontend that process is actually running (for session interrupt sync)
+            # Log process start (process_running=true already sent by send_input)
             await self._send_websocket_update(instance_id, {
                 "type": "status",
                 "status": "process_started", 
-                "message": f"Claude process started (PID: {process.pid})",
-                "process_running": True  # Explicitly tell frontend process is running
+                "message": f"Claude process started (PID: {process.pid})"
             })
-            self._log_with_timestamp(f"📡 EXECUTE_STREAMING: Sent process_running=true to frontend for instance {instance_id}")
+            self._log_with_timestamp(f"📡 EXECUTE_STREAMING: Logged process start for instance {instance_id}")
             
             # Add to the list of running processes for this instance
             if instance_id not in self.running_processes:
@@ -1343,9 +1342,10 @@ class ClaudeCodeManager:
             await self._send_websocket_update(instance_id, {
                 "type": "status",
                 "status": "running", 
-                "message": f"Executing command: {input_text[:50]}{'...' if len(input_text) > 50 else ''}"
+                "message": f"Executing command: {input_text[:50]}{'...' if len(input_text) > 50 else ''}",
+                "process_running": True  # Ensure frontend knows process will be running
             })
-            self._log_with_timestamp(f"📡 SEND_INPUT: Sent running status update to frontend for instance {instance_id}")
+            self._log_with_timestamp(f"📡 SEND_INPUT: Sent running status with process_running=true to frontend for instance {instance_id}")
             
             # Send input to Claude Code and measure time using claude-code-sdk
             start_time = time.time()

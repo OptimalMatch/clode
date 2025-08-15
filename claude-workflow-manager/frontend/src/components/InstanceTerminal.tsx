@@ -321,13 +321,14 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       }
       // ESC to open cancel dialog
       else if (event.key === 'Escape') {
-        console.log(`🚪 ESC pressed - isProcessRunning: ${isProcessRunning}, isCancelling: ${isCancelling}, showCancelDialog: ${showCancelDialog}`);
+        console.log(`🚪 ESC pressed - isProcessRunning: ${isProcessRunning}, isCancelling: ${isCancelling}, showCancelDialog: ${showCancelDialog}, processStartTime: ${processStartTime}`);
+        console.log(`🚪 ESC pressed - ws.readyState: ${ws.current?.readyState}, instanceId: ${instanceId}`);
         if (isProcessRunning && !isCancelling && !showCancelDialog) {
           event.preventDefault();
           console.log('✅ ESC conditions met - opening cancel dialog');
           setShowCancelDialog(true);
         } else {
-          console.log('❌ ESC conditions not met - ignoring ESC');
+          console.log(`❌ ESC conditions NOT met - ignoring ESC. Failing condition: isProcessRunning=${isProcessRunning}, isCancelling=${isCancelling}, showCancelDialog=${showCancelDialog}`);
         }
       }
     };
@@ -496,13 +497,16 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               // Handle explicit process_running flag from backend (for session interrupt sync)
               if (message.process_running !== undefined) {
                 console.log(`🔄 Explicit process_running update: ${message.process_running} (status: ${message.status})`);
+                console.log(`🔄 Before update: isProcessRunning=${isProcessRunning}`);
                 setIsProcessRunning(message.process_running);
                 if (message.process_running) {
                   setProcessStartTime(Date.now());
                   console.log('🔄 ESC interrupt re-enabled after new process start');
+                  console.log('🔄 After update: isProcessRunning should be TRUE');
                 } else {
                   setProcessStartTime(null);
                   console.log('🔄 ESC interrupt disabled - no process running');
+                  console.log('🔄 After update: isProcessRunning should be FALSE');
                 }
               }
               
