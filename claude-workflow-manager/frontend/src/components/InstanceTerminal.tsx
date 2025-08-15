@@ -805,28 +805,39 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         feedback: 'User wants to provide new directions - immediately stopping execution'
       });
       
-      // Send message with retry mechanism
-      let retryCount = 0;
-      const maxRetries = 3;
-      const sendWithRetry = () => {
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      // Try WebSocket first, then fallback to HTTP if WebSocket is overwhelmed
+      let webSocketSent = false;
+      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        try {
           ws.current.send(message);
-          console.log(`✅ session_interrupt WebSocket message sent successfully (attempt ${retryCount + 1})`);
-        } else {
-          console.log(`❌ WebSocket not ready, readyState: ${ws.current?.readyState}`);
+          console.log(`✅ session_interrupt WebSocket message sent successfully`);
+          webSocketSent = true;
+        } catch (error) {
+          console.log(`❌ WebSocket send failed: ${error}`);
         }
-        
-        // Retry after short delay to ensure delivery
-        if (retryCount < maxRetries) {
-          retryCount++;
-          setTimeout(() => {
-            console.log(`🔄 Retrying session_interrupt message (attempt ${retryCount})`);
-            sendWithRetry();
-          }, 100 * retryCount); // 100ms, 200ms, 300ms delays
-        }
-      };
+      }
       
-      sendWithRetry();
+      // ALWAYS send via HTTP as backup (this will ensure delivery even if WebSocket is overwhelmed)
+      console.log(`📡 Sending session_interrupt via HTTP as backup/redundancy`);
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL || `http://${window.location.hostname}:8005`}/api/instances/${instanceId}/session_interrupt`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            feedback: 'User wants to provide new directions - immediately stopping execution'
+          })
+        });
+        
+        if (response.ok) {
+          console.log(`✅ session_interrupt HTTP request sent successfully`);
+        } else {
+          console.log(`❌ session_interrupt HTTP request failed: ${response.status}`);
+        }
+      } catch (error) {
+        console.log(`❌ session_interrupt HTTP request error: ${error}`);
+      }
       
       // Update UI immediately to show session interrupt is in progress
       const interruptMessage = '⚡ **Session interrupt requested - immediately stopping execution...**';
