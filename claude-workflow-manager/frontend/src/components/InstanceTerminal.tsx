@@ -486,6 +486,9 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                   setResponseStartTime(Date.now());
                 }
                 console.log('✅ Process state updated: isProcessRunning=true, ESC should now work');
+              } else if (message.status === 'process_started' && message.message) {
+                console.log('🚀 Process started - this is the REAL moment ESC should work');
+                appendToTerminal(`🚀 **${message.message}**`);
               } else {
                 appendToTerminal(`📊 **Status:** ${message.status}`);
               }
