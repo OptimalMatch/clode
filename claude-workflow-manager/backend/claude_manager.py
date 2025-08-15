@@ -1334,7 +1334,8 @@ class ClaudeCodeManager:
             await self._send_websocket_update(instance_id, {
                 "type": "status",
                 "status": "running", 
-                "message": f"Executing command: {input_text[:50]}{'...' if len(input_text) > 50 else ''}"
+                "message": f"Executing command: {input_text[:50]}{'...' if len(input_text) > 50 else ''}",
+                "process_running": True  # Explicitly tell frontend process is running
             })
             self._log_with_timestamp(f"📡 SEND_INPUT: Sent running status update to frontend for instance {instance_id}")
             

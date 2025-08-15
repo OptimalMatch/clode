@@ -490,6 +490,19 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                 appendToTerminal(`📊 **Status:** ${message.status}`);
               }
               
+              // Handle explicit process_running flag from backend (for session interrupt sync)
+              if (message.process_running !== undefined) {
+                console.log(`🔄 Explicit process_running update: ${message.process_running}`);
+                setIsProcessRunning(message.process_running);
+                if (message.process_running) {
+                  setProcessStartTime(Date.now());
+                  console.log('🔄 ESC interrupt re-enabled after new process start');
+                } else {
+                  setProcessStartTime(null);
+                  console.log('🔄 ESC interrupt disabled - no process running');
+                }
+              }
+              
               if (message.status === 'paused') {
                 setIsPaused(true);
               } else if (message.status === 'cancelled') {
@@ -520,6 +533,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               setIsCancelling(false);
               setIsProcessRunning(false); // Process is actually stopped now
               setProcessStartTime(null);
+              console.log('⚡ Session interrupt completed: isProcessRunning=false, ESC disabled until new process starts');
               break;
             case 'interrupted':
               appendToTerminal(`⏸️  **Instance paused**`);
