@@ -815,6 +815,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
 
   const confirmGracefulInterrupt = async () => {
     console.log(`🚀 confirmGracefulInterrupt called - isProcessRunning: ${isProcessRunning}, ws.readyState: ${ws.current?.readyState}, instanceId: ${instanceId}`);
+    console.log(`🔍 INSTANCE ID DEBUG: Using instanceId for HTTP request: ${instanceId}`);
     setShowCancelDialog(false);
     console.log('⚡ User confirmed session interrupt - immediately stopping execution');
     setIsCancelling(true);
@@ -843,8 +844,10 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       console.log(`📡 Sending session_interrupt via HTTP as backup/redundancy`);
       try {
         const apiUrl = getApiUrl();
+        const fullUrl = `${apiUrl}/api/instances/${instanceId}/session_interrupt`;
         console.log(`🔗 Using API URL: ${apiUrl}`);
-        const response = await fetch(`${apiUrl}/api/instances/${instanceId}/session_interrupt`, {
+        console.log(`📡 Full HTTP request URL: ${fullUrl}`);
+        const response = await fetch(fullUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -876,6 +879,44 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       console.error('❌ Failed to send session interrupt:', error);
       setIsCancelling(false);
     }
+  };
+
+  // Direct HTTP cancel function for the dedicated cancel button
+  const handleHttpCancel = async () => {
+    console.log(`🔴 HTTP Cancel button clicked - instanceId: ${instanceId} (full ID)`);
+    setIsCancelling(true);
+    
+    try {
+      const apiUrl = getApiUrl();
+      const fullUrl = `${apiUrl}/api/instances/${instanceId}/session_interrupt`;
+      console.log(`📡 Direct HTTP cancel request to: ${fullUrl}`);
+      
+      const response = await fetch(fullUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          feedback: 'Direct HTTP cancel button - immediately stopping execution'
+        })
+      });
+      
+      if (response.ok) {
+        console.log(`✅ Direct HTTP cancel request sent successfully`);
+        appendToTerminal('🔴 **HTTP Cancel button triggered - stopping execution...**');
+      } else {
+        console.log(`❌ Direct HTTP cancel request failed: ${response.status}`);
+        appendToTerminal(`❌ **HTTP Cancel failed:** ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Direct HTTP cancel request error:', error);
+      appendToTerminal(`❌ **HTTP Cancel error:** ${error}`);
+    }
+    
+    // Reset cancelling state after a delay
+    setTimeout(() => {
+      setIsCancelling(false);
+    }, 1000);
   };
 
   const confirmCancel = async (force: boolean = false) => {
@@ -1131,6 +1172,22 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               <IconButton onClick={handlePing} title="Test Connection (Ping)" disabled={!isConnected}>
                 🏓
               </IconButton>
+              <Button 
+                variant="contained"
+                color="error"
+                size="small" 
+                onClick={handleHttpCancel}
+                title={`HTTP Cancel (Instance: ${instanceId})`}
+                disabled={isCancelling}
+                sx={{ 
+                  minWidth: 'auto', 
+                  px: 2,
+                  opacity: isCancelling ? 0.6 : 1,
+                  fontWeight: 'bold'
+                }}
+              >
+                {isCancelling ? "🔄 Cancelling..." : "🔴 HTTP Cancel"}
+              </Button>
               <Button 
                 variant={copySuccess ? "contained" : "outlined"}
                 size="small" 
