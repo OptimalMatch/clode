@@ -101,29 +101,37 @@ class ClaudeCodeManager:
                         self._log_with_timestamp(f"📡 GRACEFUL INTERRUPT: Sent SIGINT to Claude CLI process (PID: {process.pid})")
                         
                         # Wait briefly for graceful shutdown
+                        process_terminated = False
                         try:
                             await asyncio.wait_for(
                                 asyncio.create_task(asyncio.to_thread(process.wait)), 
                                 timeout=3.0
                             )
                             self._log_with_timestamp(f"✅ GRACEFUL INTERRUPT: Process terminated gracefully")
+                            process_terminated = True
                         except asyncio.TimeoutError:
-                            self._log_with_timestamp(f"⏰ GRACEFUL INTERRUPT: Timeout, process still running")
-                            # Don't force kill here - let the user decide if they want to force kill
+                            self._log_with_timestamp(f"⏰ GRACEFUL INTERRUPT: Timeout, process still running - will retry SIGINT")
+                            # Don't force kill here - but don't break the loop either
+                            # Keep the flag set so we'll try again on the next iteration
                         
-                        # Clear the interrupt flag
-                        self.interrupt_flags[instance_id] = False
-                        self._log_with_timestamp(f"🧹 GRACEFUL INTERRUPT: Cleared interrupt flag for instance {instance_id}")
-                        self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
-                        
-                        # Send interrupt notification
-                        await self._send_websocket_update(instance_id, {
-                            "type": "graceful_interrupt",
-                            "message": "Execution gracefully interrupted. You can provide new directions or force kill if needed."
-                        })
-                        
-                        # Exit the streaming loop
-                        break
+                        if process_terminated:
+                            # Only clear flag and break if process actually terminated
+                            self.interrupt_flags[instance_id] = False
+                            self._log_with_timestamp(f"🧹 GRACEFUL INTERRUPT: Cleared interrupt flag for instance {instance_id}")
+                            self._log_with_timestamp(f"🔍 GRACEFUL INTERRUPT: Updated interrupt flags state: {dict(self.interrupt_flags)}")
+                            
+                            # Send interrupt notification
+                            await self._send_websocket_update(instance_id, {
+                                "type": "graceful_interrupt",
+                                "message": "Execution gracefully interrupted. You can provide new directions or force kill if needed."
+                            })
+                            
+                            # Exit the streaming loop
+                            break
+                        else:
+                            # Process still running - send another SIGINT and try again
+                            self._log_with_timestamp(f"🔄 GRACEFUL INTERRUPT: Sending another SIGINT to stubborn process (PID: {process.pid})")
+                            # Note: Flag stays set, so we'll try again on next loop iteration
                         
                     except Exception as e:
                         self._log_with_timestamp(f"❌ GRACEFUL INTERRUPT: Error sending interrupt signal: {e}")
@@ -142,8 +150,7 @@ class ClaudeCodeManager:
                     break
                 
                 # Check interrupt flag again before trying to read (in case it was set while processing previous lines)
-                if self.interrupt_flags.get(instance_id, False):
-                    continue  # Go back to the top of the loop to handle the interrupt
+                # Note: Don't use continue here - let the main flag check at top of loop handle it
                 
                 # Read a line from stdout (with timeout to avoid blocking)
                 try:
