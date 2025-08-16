@@ -17,13 +17,13 @@ on:
           - staging
           - development
       use_claude_max_plan:
-        description: 'Use Claude Max Plan (true) or API Key (false)'
+        description: 'Claude Authentication Mode'
         required: true
-        default: 'true'
+        default: 'max-plan'
         type: choice
         options:
-          - 'true'
-          - 'false'
+          - 'max-plan'
+          - 'api-key'
 
 env:
   DOCKER_BUILDKIT: 1
@@ -133,10 +133,12 @@ jobs:
         echo "🌐 Using HOST_IP: $FINAL_HOST_IP"
         
         # Determine Claude mode
-        CLAUDE_MODE="${{ github.event.inputs.use_claude_max_plan || 'true' }}"
-        if [ "$CLAUDE_MODE" = "true" ]; then
+        CLAUDE_MODE_INPUT="${{ github.event.inputs.use_claude_max_plan || 'max-plan' }}"
+        if [ "$CLAUDE_MODE_INPUT" = "max-plan" ]; then
+          CLAUDE_MODE="true"
           echo "🤖 Claude Mode: Max Plan (authenticated via claude /login)"
         else
+          CLAUDE_MODE="false"
           echo "🔑 Claude Mode: API Key (using CLAUDE_API_KEY)"
         fi
         
@@ -237,7 +239,12 @@ jobs:
           echo "📅 Deployed: $DEPLOYMENT_TIME"
           echo "🌿 Branch: $BRANCH_NAME"
           echo "📝 Commit: $GIT_SHA"
-          echo "🤖 Claude Mode: ${{ github.event.inputs.use_claude_max_plan || 'true' }}"
+          CLAUDE_DISPLAY_MODE="${{ github.event.inputs.use_claude_max_plan || 'max-plan' }}"
+          if [ "$CLAUDE_DISPLAY_MODE" = "max-plan" ]; then
+            echo "🤖 Claude Mode: Max Plan"
+          else
+            echo "🔑 Claude Mode: API Key"
+          fi
         else
           echo "❌ Deployment failed!"
           echo "📅 Failed at: $(date -u)"
