@@ -40,25 +40,33 @@ class ClaudeCodeManager:
         env = os.environ.copy()
         
         if self.use_max_plan:
-            # Max plan mode: unset API key and use text-only mode
-            self._log_with_timestamp(f"🎯 Using Claude Code max plan account (text-only mode)")
+            # Max plan mode: unset API key and use JSON stream mode for proper authentication
+            self._log_with_timestamp(f"🎯 Using Claude Code max plan account (JSON stream mode)")
             if "ANTHROPIC_API_KEY" in env:
                 del env["ANTHROPIC_API_KEY"]
             if "CLAUDE_API_KEY" in env:
                 del env["CLAUDE_API_KEY"]
             
-            # Build command for max plan (text-only mode)
+            # Build command for max plan (JSON stream mode with permissions)
             if is_resume:
                 cmd = [
                     "claude", 
-                    "-p",  # text-only mode
+                    "--print",
+                    "--verbose",
+                    "--output-format", "stream-json",
+                    "--permission-mode", "acceptEdits",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
                     "--resume", session_id,
                     input_text
                 ]
             else:
                 cmd = [
                     "claude", 
-                    "-p",  # text-only mode
+                    "--print",
+                    "--verbose",
+                    "--output-format", "stream-json",
+                    "--permission-mode", "acceptEdits",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
                     "--session-id", session_id,
                     input_text
                 ]
@@ -405,66 +413,56 @@ class ClaudeCodeManager:
                             # Return False to trigger session recovery with permission grant
                             return False
                         
-                        # Process this line based on execution mode
-                        if self.use_max_plan:
-                            # Text-only mode: send raw text output
-                            await self._send_websocket_update(instance_id, {
-                                "type": "partial_output",
-                                "content": line
-                            })
-                            # Store in terminal history
-                            await self.db.append_terminal_history(instance_id, line, "output")
-                        else:
-                            # JSON streaming mode: parse events
-                            try:
-                                event = json.loads(line)
+                        # Process this line - both modes now use JSON streaming
+                        try:
+                            event = json.loads(line)
+                            
+                            # Extract detailed token usage and cost from result events
+                            if event.get('type') == 'result':
+                                usage = event.get('usage', {})
+                                cost = event.get('total_cost_usd', 0.0)
                                 
-                                # Extract detailed token usage and cost from result events
-                                if event.get('type') == 'result':
-                                    usage = event.get('usage', {})
-                                    cost = event.get('total_cost_usd', 0.0)
+                                if usage:
+                                    # Track individual token categories
+                                    input_tokens = usage.get('input_tokens', 0)
+                                    output_tokens = usage.get('output_tokens', 0)
+                                    cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
+                                    cache_read_tokens = usage.get('cache_read_input_tokens', 0)
                                     
-                                    if usage:
-                                        # Track individual token categories
-                                        input_tokens = usage.get('input_tokens', 0)
-                                        output_tokens = usage.get('output_tokens', 0)
-                                        cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
-                                        cache_read_tokens = usage.get('cache_read_input_tokens', 0)
-                                        
-                                        # Accumulate totals
-                                        total_input_tokens += input_tokens
-                                        total_output_tokens += output_tokens
-                                        total_cache_creation_tokens += cache_creation_tokens
-                                        total_cache_read_tokens += cache_read_tokens
-                                        if cost > 0:
-                                            total_cost_usd += cost
-                                        
-                                        result_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
-                                        if result_tokens > 0:
-                                            total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
-                                            self._log_with_timestamp(f"🔢 Result tokens: {result_tokens} (in:{input_tokens}, out:{output_tokens}, cache_create:{cache_creation_tokens}, cache_read:{cache_read_tokens})")
-                                            self._log_with_timestamp(f"💰 Session totals: {total_tokens} tokens, ${total_cost_usd:.4f} USD")
-                                
-                                formatted_msg = self._format_streaming_event(event)
-                                if formatted_msg:
-                                    await self._send_websocket_update(instance_id, {
-                                        "type": "partial_output",
-                                        "content": formatted_msg
-                                    })
-                                    # Store in terminal history
-                                    await self.db.append_terminal_history(instance_id, formatted_msg, "output")
-                                    # Also create instance logs for analytics
-                                    await self._create_event_logs(instance_id, event, formatted_msg)
-                            except json.JSONDecodeError:
-                                # Not a JSON line in streaming mode, might be error or other output
-                                if line.strip():  # Only log non-empty lines
-                                    self._log_with_timestamp(f"⚠️ Non-JSON line: {line}")
-                                    # Send as raw text in case it's important output
-                                    await self._send_websocket_update(instance_id, {
-                                        "type": "partial_output",
-                                        "content": line
-                                    })
-                                    await self.db.append_terminal_history(instance_id, line, "output")
+                                    # Accumulate totals
+                                    total_input_tokens += input_tokens
+                                    total_output_tokens += output_tokens
+                                    total_cache_creation_tokens += cache_creation_tokens
+                                    total_cache_read_tokens += cache_read_tokens
+                                    if cost > 0:
+                                        total_cost_usd += cost
+                                    
+                                    result_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
+                                    if result_tokens > 0:
+                                        total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
+                                        self._log_with_timestamp(f"🔢 Result tokens: {result_tokens} (in:{input_tokens}, out:{output_tokens}, cache_create:{cache_creation_tokens}, cache_read:{cache_read_tokens})")
+                                        self._log_with_timestamp(f"💰 Session totals: {total_tokens} tokens, ${total_cost_usd:.4f} USD")
+                            
+                            formatted_msg = self._format_streaming_event(event)
+                            if formatted_msg:
+                                await self._send_websocket_update(instance_id, {
+                                    "type": "partial_output",
+                                    "content": formatted_msg
+                                })
+                                # Store in terminal history
+                                await self.db.append_terminal_history(instance_id, formatted_msg, "output")
+                                # Also create instance logs for analytics
+                                await self._create_event_logs(instance_id, event, formatted_msg)
+                        except json.JSONDecodeError:
+                            # Not a JSON line in streaming mode, might be error or other output
+                            if line.strip():  # Only log non-empty lines
+                                self._log_with_timestamp(f"⚠️ Non-JSON line: {line}")
+                                # Send as raw text in case it's important output
+                                await self._send_websocket_update(instance_id, {
+                                    "type": "partial_output",
+                                    "content": line
+                                })
+                                await self.db.append_terminal_history(instance_id, line, "output")
                         
                         # CRITICAL: Check interrupt flag after processing each line during busy output
                         if self.interrupt_flags.get(instance_id, False):
@@ -1627,22 +1625,19 @@ class ClaudeCodeManager:
                 session_id = instance_info.get("session_id")
                 session_created = instance_info.get("session_created", False)
                 
-                if not session_created or self.use_max_plan:
-                    # First command OR max plan mode - create/use session with specific ID (no resume in max plan)
-                    if self.use_max_plan:
-                        # In max plan mode, always use fresh sessions for each command
-                        session_id = str(uuid.uuid4())
-                        instance_info["session_id"] = session_id
-                        self._log_with_timestamp(f"🎯 Max plan mode - new session {session_id} (no resume support)")
-                    else:
-                        self._log_with_timestamp(f"🆕 Creating new session {session_id}")
-                    
+                if not session_created:
+                    # First command - create session with specific ID
+                    self._log_with_timestamp(f"🆕 Creating new session {session_id}")
                     cmd, env = self._build_claude_command(session_id, input_text, is_resume=False)
                     instance_info["session_created"] = True
                     # Save session ID to database for future use
                     await self.db.update_instance_session_id(instance_id, session_id)
+                elif self.use_max_plan:
+                    # Max plan mode - use same session but don't resume (fresh command each time)
+                    self._log_with_timestamp(f"🎯 Max plan mode - using session {session_id} (fresh JSON command)")
+                    cmd, env = self._build_claude_command(session_id, input_text, is_resume=False)
                 else:
-                    # Subsequent commands in API key mode - resume existing session
+                    # API key mode - resume existing session
                     self._log_with_timestamp(f"🔄 Resuming session {session_id}")
                     cmd, env = self._build_claude_command(session_id, input_text, is_resume=True)
                 
