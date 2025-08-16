@@ -10,6 +10,7 @@ import {
   IconButton,
   Typography,
   Paper,
+  Chip,
 } from '@mui/material';
 import { Pause, PlayArrow, Close, Stop } from '@mui/icons-material';
 // Removed xterm dependencies - now using LexicalEditor for rich terminal experience
@@ -73,6 +74,27 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [currentTodos, setCurrentTodos] = useState<Array<{id: string, content: string, status: string, priority?: string}>>([]);
   const [lastContent, setLastContent] = useState<string | null>(null);
+  const [claudeMode, setClaudeMode] = useState<{mode: string, description: string} | null>(null);
+
+  // Fetch Claude authentication mode
+  const fetchClaudeMode = async () => {
+    try {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/claude-mode`);
+      if (response.ok) {
+        const data = await response.json();
+        setClaudeMode({
+          mode: data.mode,
+          description: data.description
+        });
+        console.log('🤖 Claude mode fetched:', data);
+      } else {
+        console.error('❌ Failed to fetch Claude mode:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching Claude mode:', error);
+    }
+  };
 
   // Helper functions
   const parseTodosFromMessage = (content: string) => {
@@ -400,6 +422,11 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     };
   }, [isProcessRunning, isCancelling, showCancelDialog, handleHttpCancel]);
 
+  // Fetch Claude mode on component mount
+  useEffect(() => {
+    fetchClaudeMode();
+  }, []);
+
   useEffect(() => {
     console.log('🚀 Initializing LexicalEditor terminal with WebSocket connection...');
     
@@ -472,7 +499,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         setLastPingTime(new Date());
         
         // Add connection info to the LexicalEditor terminal
-        appendToTerminal(`✅ **Connected to Claude Code instance!**\n🔗 Connection URL: ${wsUrl}/ws/${instanceId}\n⏰ Timestamp: ${new Date().toLocaleTimeString()}\n📖 **Enhanced terminal powered by LexicalEditor** - All content displays with rich formatting!`);
+        appendToTerminal(`✅ **Connected to Claude Code instance!**\n🔗 Connection URL: ${wsUrl}/ws/${instanceId}\n⏰ Timestamp: ${new Date().toLocaleTimeString()}\n📖`);
         
         // Load and display terminal history
         loadTerminalHistory();
@@ -1185,6 +1212,22 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                   </span>
                 )}
               </Typography>
+              {claudeMode && (
+                <Chip
+                  label={claudeMode.mode === 'max-plan' ? '🤖 Max Plan' : '🔑 API Key'}
+                  size="small"
+                  color={claudeMode.mode === 'max-plan' ? 'primary' : 'secondary'}
+                  variant="outlined"
+                  title={claudeMode.description}
+                  sx={{ 
+                    fontSize: '0.75rem',
+                    height: '22px',
+                    '& .MuiChip-label': {
+                      paddingX: 1
+                    }
+                  }}
+                />
+              )}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Box 
                   sx={{ 

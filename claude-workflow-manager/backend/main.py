@@ -499,6 +499,22 @@ async def health_check():
     status_code = 200 if health_status["status"] == "healthy" else 503
     return JSONResponse(content=health_status, status_code=status_code)
 
+@app.get(
+    "/api/claude-mode",
+    summary="Get Claude Authentication Mode",
+    description="Get the current Claude authentication mode (max-plan or api-key).",
+    tags=["Configuration"]
+)
+async def get_claude_mode():
+    """Get the current Claude authentication mode."""
+    use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "true").lower() == "true"
+    
+    return {
+        "mode": "max-plan" if use_max_plan else "api-key",
+        "use_max_plan": use_max_plan,
+        "description": "Max Plan (authenticated via claude /login)" if use_max_plan else "API Key (using CLAUDE_API_KEY)"
+    }
+
 @app.post(
     "/api/workflows",
     response_model=IdResponse,
