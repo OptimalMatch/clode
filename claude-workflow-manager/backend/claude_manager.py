@@ -396,10 +396,19 @@ class ClaudeCodeManager:
                             # Complete this execution (don't retry automatically)
                             return True
                         
-                        # Check for permission requests and trigger retry with permission grant
-                        permission_keywords = ["permission", "grant", "allow", "authorize", "consent", "approve"]
-                        if any(keyword in line.lower() for keyword in permission_keywords):
-                            self._log_with_timestamp(f"🔑 PERMISSION REQUEST: Detected permission request, will retry with grant: {line}")
+                        # Check for actual permission requests (not JSON config fields)
+                        # Look for specific permission request patterns that require user approval
+                        permission_request_patterns = [
+                            "claude requested permissions", 
+                            "need permission to", 
+                            "grant permission",
+                            "authorize tool",
+                            "tool permissions required"
+                        ]
+                        is_permission_request = any(pattern in line.lower() for pattern in permission_request_patterns)
+                        
+                        if is_permission_request:
+                            self._log_with_timestamp(f"🔑 PERMISSION REQUEST: Detected actual permission request: {line}")
                             await self._send_websocket_update(instance_id, {
                                 "type": "partial_output",
                                 "content": "🔑 **Auto-granting permissions...**\n\nDetected permission request. Automatically granting tool access and retrying...\n"
