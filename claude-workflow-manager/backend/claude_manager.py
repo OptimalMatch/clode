@@ -389,14 +389,22 @@ class ClaudeCodeManager:
                             self._log_with_timestamp(f"🔄 FALLBACK: Marking execution as failed to trigger max plan retry")
                             return False  # This will trigger session recovery with max plan mode
                         
-                        # Check for permission requests and auto-grant them
-                        if "Claude requested permissions" in line or "need permission to" in line.lower():
-                            self._log_with_timestamp(f"🔑 PERMISSION REQUEST: Detected permission request in output")
+                        # Check for permission requests and trigger retry with permission grant
+                        permission_keywords = ["permission", "grant", "allow", "authorize", "consent", "approve"]
+                        if any(keyword in line.lower() for keyword in permission_keywords):
+                            self._log_with_timestamp(f"🔑 PERMISSION REQUEST: Detected permission request, will retry with grant: {line}")
+                            await self._send_websocket_update(instance_id, {
+                                "type": "partial_output",
+                                "content": "🔑 **Auto-granting permissions...**\n\nDetected permission request. Automatically granting tool access and retrying...\n"
+                            })
                             
-                            # Get instance info and auto-grant permission by sending a follow-up command
-                            current_instance_info = self.instances.get(instance_id, {})
-                            await self._handle_permission_request(instance_id, current_instance_info, input_text)
-                            continue
+                            # Mark for permission grant retry
+                            if not hasattr(self, '_pending_permission_grants'):
+                                self._pending_permission_grants = {}
+                            self._pending_permission_grants[instance_id] = True
+                            
+                            # Return False to trigger session recovery with permission grant
+                            return False
                         
                         # Process this line based on execution mode
                         if self.use_max_plan:
@@ -573,33 +581,7 @@ class ClaudeCodeManager:
             })
             return False
     
-    async def _handle_permission_request(self, instance_id: str, instance_info: dict, original_input: str):
-        """Handle Claude CLI permission requests by auto-granting permissions"""
-        self._log_with_timestamp(f"🔑 AUTO-GRANT: Handling permission request for instance {instance_id}")
-        
-        try:
-            session_id = instance_info.get("session_id")
-            if not session_id:
-                self._log_with_timestamp(f"❌ AUTO-GRANT: No session ID found for instance {instance_id}")
-                return
-            
-            # Send permission grant message
-            permission_grant = "Yes, I grant permission to use the requested tools. Please proceed with the task."
-            
-            # Build resume command
-            cmd, env = self._build_claude_command(session_id, permission_grant, is_resume=True)
-            
-            self._log_with_timestamp(f"🔑 AUTO-GRANT: Sending permission grant to session {session_id}")
-            
-            # Execute the permission grant (this will continue in the same streaming loop)
-            await self._execute_claude_streaming(cmd, instance_id, env, permission_grant)
-            
-        except Exception as e:
-            self._log_with_timestamp(f"❌ AUTO-GRANT: Error handling permission request: {e}")
-            await self._send_websocket_update(instance_id, {
-                "type": "partial_output",
-                "content": f"⚠️ **Permission grant failed:** {str(e)}"
-            })
+
 
     async def _handle_session_recovery(self, instance_id: str, session_id: str, input_text: str):
         """Handle session recovery when Claude CLI session is invalid"""
@@ -613,21 +595,28 @@ class ClaudeCodeManager:
         await self.db.update_instance_session_id(instance_id, "")
         instance_info["session_created"] = False
         
-        # Generate new session ID
-        new_session_id = str(uuid.uuid4())
-        instance_info["session_id"] = new_session_id
-        self._log_with_timestamp(f"🆕 Creating new session {new_session_id} (retry)")
-        
-        # Create retry command using command builder
-        # If we just switched to max plan mode, run /login first
-        if self.use_max_plan and not hasattr(self, '_max_plan_login_done'):
-            self._log_with_timestamp(f"🔑 First time using max plan mode - running /login")
-            retry_input = "/login"
-            self._max_plan_login_done = True  # Mark as done to avoid infinite loops
+        # Check if this is a permission grant retry (use existing session)
+        if hasattr(self, '_pending_permission_grants') and self._pending_permission_grants.get(instance_id):
+            self._log_with_timestamp(f"🔑 Permission grant retry - resuming existing session {session_id}")
+            retry_input = "Yes, I grant permission to use the requested tools. Please proceed with the task."
+            retry_cmd, retry_env = self._build_claude_command(session_id, retry_input, is_resume=True)
+            # Clear the permission grant flag
+            del self._pending_permission_grants[instance_id]
         else:
-            retry_input = input_text
+            # Generate new session ID for other retries
+            new_session_id = str(uuid.uuid4())
+            instance_info["session_id"] = new_session_id
+            self._log_with_timestamp(f"🆕 Creating new session {new_session_id} (retry)")
             
-        retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, is_resume=False)
+            # If we just switched to max plan mode, run /login first
+            if self.use_max_plan and not hasattr(self, '_max_plan_login_done'):
+                self._log_with_timestamp(f"🔑 First time using max plan mode - running /login")
+                retry_input = "/login"
+                self._max_plan_login_done = True  # Mark as done to avoid infinite loops
+            else:
+                retry_input = input_text
+                
+            retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, is_resume=False)
         
         # Try streaming execution again with new session
         success = await self._execute_claude_streaming(retry_cmd, instance_id, retry_env, input_text)
