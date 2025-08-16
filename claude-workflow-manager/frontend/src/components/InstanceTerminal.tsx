@@ -54,6 +54,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const ws = useRef<WebSocket | null>(null);
   const isInitializingRef = useRef(false);
   const stopwatchIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -478,9 +479,34 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         
         // Load last todos if they exist
         loadLastTodos();
+        
+        // Start automatic ping interval to keep connection alive
+        pingIntervalRef.current = setInterval(() => {
+          if (ws.current?.readyState === WebSocket.OPEN) {
+            try {
+              // Check if we've received any messages recently
+              const now = Date.now();
+              const lastActivity = lastPingTime?.getTime() || 0;
+              const timeSinceActivity = now - lastActivity;
+              
+              // Only send ping if we haven't received anything in the last 20 seconds
+              // This prevents unnecessary pings during active streaming
+              if (timeSinceActivity > 20000) {
+                ws.current.send(JSON.stringify({ type: 'ping', timestamp: now }));
+                console.log(`🏓 Keepalive ping sent (${(timeSinceActivity/1000).toFixed(1)}s since activity)`);
+              } else {
+                console.log(`⚡ Skipping ping - recent activity (${(timeSinceActivity/1000).toFixed(1)}s ago)`);
+              }
+            } catch (error) {
+              console.error('❌ Error sending keepalive ping:', error);
+            }
+          }
+        }, 25000); // Check every 25 seconds
+        
+        console.log('⚡ Smart keepalive interval started (25s checks, ping only if >20s idle)');
       };
           
-      // Send a ping to test the connection
+      // Send an initial ping to test the connection
       setTimeout(() => {
         if (ws.current?.readyState === WebSocket.OPEN) {
           ws.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
@@ -627,6 +653,13 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             timestamp: new Date().toLocaleTimeString()
           });
           
+          // Clean up ping interval
+          if (pingIntervalRef.current) {
+            clearInterval(pingIntervalRef.current);
+            pingIntervalRef.current = null;
+            console.log('🧹 Ping interval cleared due to WebSocket close');
+          }
+          
           setIsConnected(false);
           setConnectionStatus('disconnected');
           setIsCancelling(false); // Reset cancelling state on disconnect
@@ -661,6 +694,12 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       if (stopwatchIntervalRef.current) {
         clearInterval(stopwatchIntervalRef.current);
         stopwatchIntervalRef.current = null;
+      }
+      
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+        pingIntervalRef.current = null;
+        console.log('🧹 Ping interval cleared on component cleanup');
       }
       
       // Note: Individual timeout cleanup is handled by each useEffect cleanup
