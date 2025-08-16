@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, Box } from '@mui/material';
-import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices } from '@mui/icons-material';
+import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import clodeBlueLogo from '../assets/clode-blue.png';
 import clodeLogo from '../assets/clode.png';
@@ -87,6 +87,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Design', icon: <DesignServices />, path: '/design' },
     { text: 'Prompts', icon: <Description />, path: '/prompts' },
     { text: 'Subagents', icon: <SmartToy />, path: '/subagents' },
+    { text: 'Claude Auth', icon: <AccountCircle />, path: '/claude-auth' },
     { text: 'SSH Keys', icon: <VpnKey />, path: '/ssh-keys' },
   ];
 
