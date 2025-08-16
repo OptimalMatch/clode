@@ -197,7 +197,7 @@ class ClaudeCodeManager:
             finished_str = f"Finished: {finished_pids}" if finished_pids else ""
             self._log_with_timestamp(f"📊   Instance {instance_id}: {active_str} {finished_str}")
     
-    async def _execute_claude_streaming(self, cmd: List[str], instance_id: str, env: dict = None):
+    async def _execute_claude_streaming(self, cmd: List[str], instance_id: str, env: dict = None, input_text: str = None):
         """Execute Claude CLI with real-time streaming output"""
         self._log_with_timestamp(f"📡 Starting streaming execution...")
         start_time = time.time()
@@ -373,6 +373,83 @@ class ClaudeCodeManager:
                     if line:
                         stdout_lines.append(line)
                         self._log_with_timestamp(f"📤 Stream line: {line}")
+                        
+                        # Check for invalid API key message and auto-fallback to max plan
+                        if not self.use_max_plan and "Invalid API key" in line and "Please run /login" in line:
+                            self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, switching to max plan mode")
+                            await self._send_websocket_update(instance_id, {
+                                "type": "partial_output",
+                                "content": "🔄 **API Key Invalid - Switching to Max Plan Mode**\n\nDetected invalid API key. Automatically retrying with Claude Code max plan account..."
+                            })
+                            
+                            # Set max plan mode for this session
+                            self.use_max_plan = True
+                            
+                            # Terminate current process and restart with max plan
+                            try:
+                                process.terminate()
+                                await asyncio.wait_for(
+                                    asyncio.create_task(asyncio.to_thread(process.wait)), 
+                                    timeout=2
+                                )
+                            except:
+                                process.kill()
+                            
+                            # Get the original input text from instance info
+                            # We'll need to re-execute with max plan command
+                            await self._send_websocket_update(instance_id, {
+                                "type": "status",
+                                "status": "running", 
+                                "message": "Retrying with max plan mode...",
+                                "process_running": True
+                            })
+                            
+                            # Build new command for max plan mode
+                            session_id = instance_info.get("session_id")
+                            # Use the original input text if available, or a default
+                            retry_input = input_text if input_text else "hello"
+                            cmd, env = self._build_claude_command(session_id, retry_input, is_resume=False)
+                            
+                            # Start new process with max plan (avoid recursion by calling directly)
+                            self._log_with_timestamp(f"🚀 Starting max plan retry command: {' '.join(cmd)}")
+                            
+                            # Remove current process from tracking since we're replacing it
+                            if instance_id in self.running_processes:
+                                self.running_processes[instance_id] = [p for p in self.running_processes[instance_id] if p != process]
+                                if not self.running_processes[instance_id]:
+                                    del self.running_processes[instance_id]
+                            
+                            # Start new process directly with max plan
+                            new_process = subprocess.Popen(
+                                cmd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                                env=env,
+                                bufsize=1,
+                                universal_newlines=True,
+                                preexec_fn=os.setsid if hasattr(os, 'setsid') else None
+                            )
+                            
+                            # Replace the current process with the new one
+                            process = new_process
+                            process._start_time = time.time()
+                            
+                            # Add new process to tracking
+                            if instance_id not in self.running_processes:
+                                self.running_processes[instance_id] = []
+                            self.running_processes[instance_id].append(process)
+                            
+                            self._log_with_timestamp(f"🚀 Max plan process started (PID: {process.pid})")
+                            
+                            # Send status update
+                            await self._send_websocket_update(instance_id, {
+                                "type": "status",
+                                "status": "process_started", 
+                                "message": f"Max plan Claude process started (PID: {process.pid})"
+                            })
+                            
+                            # Continue with the new process (don't return, let the loop continue)
                         
                         # Process this line based on execution mode
                         if self.use_max_plan:
@@ -570,7 +647,7 @@ class ClaudeCodeManager:
         retry_cmd, retry_env = self._build_claude_command(new_session_id, input_text, is_resume=False)
         
         # Try streaming execution again with new session
-        success = await self._execute_claude_streaming(retry_cmd, instance_id, retry_env)
+        success = await self._execute_claude_streaming(retry_cmd, instance_id, retry_env, input_text)
         
         if success:
             # Save the new session ID and mark as created
@@ -1573,7 +1650,7 @@ class ClaudeCodeManager:
                 self._log_with_timestamp(f"🔍 Command length: {len(cmd)} arguments")
                 
                 # Use Popen for real-time streaming instead of run()
-                success = await self._execute_claude_streaming(cmd, instance_id, env)
+                success = await self._execute_claude_streaming(cmd, instance_id, env, input_text)
                 
                 if not success:
                     # Check if instance was explicitly cancelled - if so, don't attempt session recovery
