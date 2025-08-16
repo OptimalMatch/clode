@@ -1723,9 +1723,9 @@ class ClaudeCodeManager:
                     # Save session ID to database for future use
                     await self.db.update_instance_session_id(instance_id, session_id)
                 elif self.use_max_plan:
-                    # Max plan mode - use same session but don't resume (fresh command each time)
-                    self._log_with_timestamp(f"🎯 Max plan mode - using session {session_id} (fresh JSON command)")
-                    cmd, env = self._build_claude_command(session_id, input_text, is_resume=False)
+                    # Max plan mode - resume existing session for context preservation
+                    self._log_with_timestamp(f"🎯 Max plan mode - resuming session {session_id} (preserving context)")
+                    cmd, env = self._build_claude_command(session_id, input_text, is_resume=True)
                 else:
                     # API key mode - resume existing session
                     self._log_with_timestamp(f"🔄 Resuming session {session_id}")
