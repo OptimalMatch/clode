@@ -375,11 +375,11 @@ class ClaudeCodeManager:
                         self._log_with_timestamp(f"📤 Stream line: {line}")
                         
                         # Check for invalid API key message and auto-fallback to max plan
-                        if not self.use_max_plan and "Invalid API key" in line and "Please run /login" in line:
+                        if "Invalid API key" in line and "Please run /login" in line:
                             self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, switching to max plan mode")
                             await self._send_websocket_update(instance_id, {
                                 "type": "partial_output",
-                                "content": "🔄 **API Key Invalid - Switching to Max Plan Mode**\n\nDetected invalid API key. Automatically retrying with Claude Code max plan account..."
+                                "content": "🔄 **Authentication Required - Running /login**\n\nDetected authentication needed. Automatically running /login for Claude Code max plan account..."
                             })
                             
                             # Set max plan mode for this session
@@ -400,14 +400,14 @@ class ClaudeCodeManager:
                             await self._send_websocket_update(instance_id, {
                                 "type": "status",
                                 "status": "running", 
-                                "message": "Retrying with max plan mode...",
+                                "message": "Running /login for authentication...",
                                 "process_running": True
                             })
                             
-                            # Build new command for max plan mode
+                            # Build new command for max plan mode - run /login first
                             session_id = instance_info.get("session_id")
-                            # Use the original input text if available, or a default
-                            retry_input = input_text if input_text else "hello"
+                            # Run /login to authenticate with max plan account
+                            retry_input = "/login"
                             cmd, env = self._build_claude_command(session_id, retry_input, is_resume=False)
                             
                             # Start new process with max plan (avoid recursion by calling directly)
@@ -446,10 +446,18 @@ class ClaudeCodeManager:
                             await self._send_websocket_update(instance_id, {
                                 "type": "status",
                                 "status": "process_started", 
-                                "message": f"Max plan Claude process started (PID: {process.pid})"
+                                "message": f"Running /login command (PID: {process.pid})"
                             })
                             
                             # Continue with the new process (don't return, let the loop continue)
+                        
+                        # Check for permission requests and auto-grant them
+                        if "Claude requested permissions" in line or "need permission to" in line.lower():
+                            self._log_with_timestamp(f"🔑 PERMISSION REQUEST: Detected permission request in output")
+                            
+                            # Auto-grant permission by sending a follow-up command
+                            await self._handle_permission_request(instance_id, instance_info, input_text)
+                            continue
                         
                         # Process this line based on execution mode
                         if self.use_max_plan:
@@ -626,6 +634,34 @@ class ClaudeCodeManager:
             })
             return False
     
+    async def _handle_permission_request(self, instance_id: str, instance_info: dict, original_input: str):
+        """Handle Claude CLI permission requests by auto-granting permissions"""
+        self._log_with_timestamp(f"🔑 AUTO-GRANT: Handling permission request for instance {instance_id}")
+        
+        try:
+            session_id = instance_info.get("session_id")
+            if not session_id:
+                self._log_with_timestamp(f"❌ AUTO-GRANT: No session ID found for instance {instance_id}")
+                return
+            
+            # Send permission grant message
+            permission_grant = "Yes, I grant permission to use the requested tools. Please proceed with the task."
+            
+            # Build resume command
+            cmd, env = self._build_claude_command(session_id, permission_grant, is_resume=True)
+            
+            self._log_with_timestamp(f"🔑 AUTO-GRANT: Sending permission grant to session {session_id}")
+            
+            # Execute the permission grant (this will continue in the same streaming loop)
+            await self._execute_claude_streaming(cmd, instance_id, env, permission_grant)
+            
+        except Exception as e:
+            self._log_with_timestamp(f"❌ AUTO-GRANT: Error handling permission request: {e}")
+            await self._send_websocket_update(instance_id, {
+                "type": "partial_output",
+                "content": f"⚠️ **Permission grant failed:** {str(e)}"
+            })
+
     async def _handle_session_recovery(self, instance_id: str, session_id: str, input_text: str):
         """Handle session recovery when Claude CLI session is invalid"""
         self._log_with_timestamp(f"⚠️ Session {session_id} is invalid, creating new session...")
