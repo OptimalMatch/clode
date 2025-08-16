@@ -195,3 +195,43 @@ export interface SSHConnectionTestResponse {
   key_name?: string;
   timestamp: string;
 }
+
+// Claude Authentication Types
+export interface ClaudeAuthProfile {
+  id: string;
+  profile_name: string;
+  user_email?: string;
+  credentials_json: string;
+  project_files: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+  last_used_at?: string;
+  is_active: boolean;
+  claude_version?: string;
+  auth_method: string;
+}
+
+export interface ClaudeLoginSessionRequest {
+  profile_name: string;
+  user_email?: string;
+}
+
+export interface ClaudeLoginSessionResponse {
+  session_id: string;
+  profile_name: string;
+  message: string;
+}
+
+export interface ClaudeAuthTokenRequest {
+  session_id: string;
+  auth_token: string;
+}
+
+export interface SpawnInstanceRequest {
+  workflow_id: string;
+  prompt_id?: string;
+  git_repo?: string;
+  claude_profile_id?: string;  // Optional Claude auth profile to use
+  start_sequence?: number;
+  end_sequence?: number;
+}

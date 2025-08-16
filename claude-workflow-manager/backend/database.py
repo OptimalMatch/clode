@@ -769,3 +769,75 @@ class Database:
                 todos.append(todo)
         
         return todos
+    
+    # Claude Authentication Profile Methods
+    async def create_claude_auth_profile(self, profile: 'ClaudeAuthProfile') -> str:
+        """Create a new Claude authentication profile"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        profile_dict = profile.dict()
+        profile_dict["created_at"] = profile_dict.get("created_at", datetime.utcnow())
+        profile_dict["updated_at"] = datetime.utcnow()
+        
+        result = await self.db.claude_auth_profiles.insert_one(profile_dict)
+        return str(result.inserted_id)
+    
+    async def get_claude_auth_profiles(self) -> List['ClaudeAuthProfile']:
+        """Get all active Claude authentication profiles"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        profiles = []
+        cursor = self.db.claude_auth_profiles.find({"is_active": True}).sort("last_used_at", -1)
+        async for profile in cursor:
+            del profile["_id"]
+            from models import ClaudeAuthProfile
+            profiles.append(ClaudeAuthProfile(**profile))
+        return profiles
+    
+    async def get_claude_auth_profile(self, profile_id: str) -> Optional['ClaudeAuthProfile']:
+        """Get a specific Claude authentication profile"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        profile = await self.db.claude_auth_profiles.find_one({"id": profile_id, "is_active": True})
+        if profile:
+            del profile["_id"]
+            from models import ClaudeAuthProfile
+            return ClaudeAuthProfile(**profile)
+        return None
+    
+    async def update_claude_auth_profile(self, profile_id: str, updates: dict) -> bool:
+        """Update a Claude authentication profile"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        updates["updated_at"] = datetime.utcnow()
+        result = await self.db.claude_auth_profiles.update_one(
+            {"id": profile_id}, 
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+    
+    async def delete_claude_auth_profile(self, profile_id: str) -> bool:
+        """Soft delete a Claude authentication profile"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        result = await self.db.claude_auth_profiles.update_one(
+            {"id": profile_id}, 
+            {"$set": {"is_active": False, "updated_at": datetime.utcnow()}}
+        )
+        return result.modified_count > 0
+    
+    async def set_profile_last_used(self, profile_id: str) -> bool:
+        """Update the last used timestamp for a profile"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        result = await self.db.claude_auth_profiles.update_one(
+            {"id": profile_id}, 
+            {"$set": {"last_used_at": datetime.utcnow()}}
+        )
+        return result.modified_count > 0

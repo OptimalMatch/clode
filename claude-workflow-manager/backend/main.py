@@ -26,7 +26,9 @@ from models import (
     AgentFormatExamplesResponse, ErrorResponse, LogAnalytics,
     GitValidationRequest, GitValidationResponse, GitBranchesResponse,
     SSHKeyGenerationRequest, SSHKeyResponse, SSHKeyListResponse, 
-    GitConnectionTestRequest, SSHKeyInfo
+    GitConnectionTestRequest, SSHKeyInfo, ClaudeAuthProfile,
+    ClaudeAuthProfileListResponse, ClaudeLoginSessionRequest, 
+    ClaudeLoginSessionResponse, ClaudeAuthTokenRequest
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -514,6 +516,130 @@ async def get_claude_mode():
         "use_max_plan": use_max_plan,
         "description": "Max Plan (authenticated via claude /login)" if use_max_plan else "API Key (using CLAUDE_API_KEY)"
     }
+
+# Claude Authentication Profile Management Endpoints
+@app.get(
+    "/api/claude-auth/profiles",
+    response_model=ClaudeAuthProfileListResponse,
+    summary="List Claude Auth Profiles",
+    description="Get all available Claude authentication profiles.",
+    tags=["Claude Authentication"]
+)
+async def get_claude_auth_profiles():
+    """Get all Claude authentication profiles."""
+    try:
+        profiles = await db.get_claude_auth_profiles()
+        # Don't return sensitive credentials in the list
+        safe_profiles = []
+        for profile in profiles:
+            safe_profile = profile.dict()
+            safe_profile["credentials_json"] = "[REDACTED]"  # Hide credentials
+            safe_profile["project_files"] = {}  # Hide project files
+            safe_profiles.append(safe_profile)
+        return {"profiles": safe_profiles}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve profiles: {str(e)}")
+
+@app.post(
+    "/api/claude-auth/login-session",
+    response_model=ClaudeLoginSessionResponse,
+    summary="Start Claude Login Session",
+    description="Start an interactive Claude login session.",
+    tags=["Claude Authentication"]
+)
+async def start_claude_login_session(request: ClaudeLoginSessionRequest):
+    """Start an interactive Claude login session."""
+    try:
+        session_id = str(uuid.uuid4())
+        
+        # Store session info in memory (you might want to use Redis for production)
+        if not hasattr(app.state, 'claude_login_sessions'):
+            app.state.claude_login_sessions = {}
+        
+        app.state.claude_login_sessions[session_id] = {
+            "profile_name": request.profile_name,
+            "user_email": request.user_email,
+            "created_at": datetime.utcnow(),
+            "status": "started"
+        }
+        
+        return ClaudeLoginSessionResponse(
+            session_id=session_id,
+            profile_name=request.profile_name,
+            message="Login session started. Use the returned session_id to continue the authentication flow."
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start login session: {str(e)}")
+
+@app.post(
+    "/api/claude-auth/submit-token",
+    summary="Submit Claude Auth Token",
+    description="Submit the authentication token from Claude login flow.",
+    tags=["Claude Authentication"]
+)
+async def submit_claude_auth_token(request: ClaudeAuthTokenRequest):
+    """Submit Claude authentication token and save profile."""
+    try:
+        # Verify session exists
+        if not hasattr(app.state, 'claude_login_sessions') or request.session_id not in app.state.claude_login_sessions:
+            raise HTTPException(status_code=404, detail="Login session not found")
+        
+        session = app.state.claude_login_sessions[request.session_id]
+        
+        # Here you would process the token and create the auth profile
+        # For now, we'll create a placeholder profile
+        profile_id = str(uuid.uuid4())
+        
+        profile = ClaudeAuthProfile(
+            id=profile_id,
+            profile_name=session["profile_name"],
+            user_email=session.get("user_email"),
+            credentials_json=request.auth_token,  # In real implementation, this would be the processed credentials
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            auth_method="max-plan"
+        )
+        
+        await db.create_claude_auth_profile(profile)
+        
+        # Clean up session
+        del app.state.claude_login_sessions[request.session_id]
+        
+        return {"success": True, "profile_id": profile_id, "message": "Authentication profile created successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process auth token: {str(e)}")
+
+@app.delete(
+    "/api/claude-auth/profiles/{profile_id}",
+    summary="Delete Claude Auth Profile",
+    description="Delete (deactivate) a Claude authentication profile.",
+    tags=["Claude Authentication"]
+)
+async def delete_claude_auth_profile(profile_id: str):
+    """Delete a Claude authentication profile."""
+    try:
+        success = await db.delete_claude_auth_profile(profile_id)
+        if success:
+            return {"success": True, "message": "Profile deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Profile not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete profile: {str(e)}")
+
+@app.get(
+    "/api/claude-auth/profiles/{profile_id}/files",
+    summary="List Profile Files",
+    description="List the files stored in a Claude authentication profile.",
+    tags=["Claude Authentication"]
+)
+async def list_profile_files(profile_id: str):
+    """List files stored in a Claude auth profile."""
+    try:
+        files = await claude_manager.claude_file_manager.list_profile_files(profile_id)
+        return files
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list profile files: {str(e)}")
 
 @app.post(
     "/api/workflows",

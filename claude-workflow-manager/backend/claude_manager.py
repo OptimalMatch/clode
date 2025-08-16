@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from models import ClaudeInstance, InstanceStatus, PromptStep, Subagent, InstanceLog, LogType
 from database import Database
+from claude_file_manager import ClaudeFileManager
 import re
 import time
 import uuid
@@ -23,6 +24,7 @@ class ClaudeCodeManager:
         self.interrupt_timers: Dict[str, asyncio.Task] = {}  # Track 30-second fallback interrupt timers
         self.interrupt_listeners: Dict[str, asyncio.Task] = {}  # Track background interrupt listeners
         self.db = db
+        self.claude_file_manager = ClaudeFileManager(db)
         # Configuration for Claude CLI execution mode
         self.use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "false").lower() == "true"
     

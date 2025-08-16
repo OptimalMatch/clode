@@ -133,6 +133,20 @@ class InstanceLog(BaseModel):
     step_id: Optional[str] = None
     claude_mode: Optional[str] = None  # "max-plan" or "api-key"
 
+class ClaudeAuthProfile(BaseModel):
+    id: Optional[str] = None
+    profile_name: str  # User-friendly name like "John's Account", "Team Account"
+    user_email: Optional[str] = None  # Associated email for identification
+    credentials_json: str  # Encrypted/encoded ~/.claude/credentials.json content
+    project_files: Dict[str, str] = {}  # Map of filename -> base64 content for ~/.claude/projects/*
+    created_at: datetime
+    updated_at: datetime
+    last_used_at: Optional[datetime] = None
+    is_active: bool = True
+    # Metadata
+    claude_version: Optional[str] = None
+    auth_method: str = "max-plan"  # "max-plan" or "api-key"
+
 class LogAnalytics(BaseModel):
     instance_id: str
     total_interactions: int
@@ -188,6 +202,7 @@ class SpawnInstanceRequest(BaseModel):
     workflow_id: str
     prompt_id: Optional[str] = None
     git_repo: Optional[str] = None
+    claude_profile_id: Optional[str] = None  # Optional Claude auth profile to use
     start_sequence: Optional[int] = None  # Which sequence to start from (None = start from beginning)
     end_sequence: Optional[int] = None    # Which sequence to end at (None = run to end)
 
@@ -273,3 +288,24 @@ class GitConnectionTestRequest(BaseModel):
     git_repo: str
     use_ssh_agent: bool = True
     key_name: Optional[str] = None  # Specific key to test, if None tests all keys
+
+# Claude Auth API Models
+class ClaudeAuthProfileListResponse(BaseModel):
+    """Response model for Claude auth profile list"""
+    profiles: List[ClaudeAuthProfile]
+
+class ClaudeLoginSessionRequest(BaseModel):
+    """Request model for starting a Claude login session"""
+    profile_name: str
+    user_email: Optional[str] = None
+
+class ClaudeLoginSessionResponse(BaseModel):
+    """Response model for Claude login session"""
+    session_id: str
+    profile_name: str
+    message: str
+
+class ClaudeAuthTokenRequest(BaseModel):
+    """Request model for submitting Claude auth token"""
+    session_id: str
+    auth_token: str
