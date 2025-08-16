@@ -405,6 +405,7 @@ class ClaudeCodeManager:
                             })
                             
                             # Build new command for max plan mode - run /login first
+                            instance_info = self.instances.get(instance_id, {})
                             session_id = instance_info.get("session_id")
                             # Run /login to authenticate with max plan account
                             retry_input = "/login"
@@ -455,8 +456,9 @@ class ClaudeCodeManager:
                         if "Claude requested permissions" in line or "need permission to" in line.lower():
                             self._log_with_timestamp(f"🔑 PERMISSION REQUEST: Detected permission request in output")
                             
-                            # Auto-grant permission by sending a follow-up command
-                            await self._handle_permission_request(instance_id, instance_info, input_text)
+                            # Get instance info and auto-grant permission by sending a follow-up command
+                            current_instance_info = self.instances.get(instance_id, {})
+                            await self._handle_permission_request(instance_id, current_instance_info, input_text)
                             continue
                         
                         # Process this line based on execution mode
