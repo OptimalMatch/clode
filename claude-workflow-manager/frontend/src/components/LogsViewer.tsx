@@ -91,7 +91,24 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ instanceId, open, onClose }) =>
   const formatDuration = (ms?: number) => {
     if (!ms) return '-';
     if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
+    
+    const totalSeconds = ms / 1000;
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    
+    let humanReadable = '';
+    if (hours > 0) {
+      humanReadable += `${hours}h `;
+    }
+    if (minutes > 0) {
+      humanReadable += `${minutes}m `;
+    }
+    if (seconds > 0 || (hours === 0 && minutes === 0)) {
+      humanReadable += `${seconds}s`;
+    }
+    
+    return `${totalSeconds.toFixed(2)}s (${humanReadable.trim()})`;
   };
 
   const formatCost = (usd?: number) => {
