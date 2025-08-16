@@ -15,7 +15,7 @@ import {
 import { Pause, PlayArrow, Close, Stop } from '@mui/icons-material';
 // Removed xterm dependencies - now using LexicalEditor for rich terminal experience
 
-import { WebSocketMessage, TerminalHistoryEntry } from '../types';
+import { WebSocketMessage, TerminalHistoryEntry, ClaudeInstance } from '../types';
 import { instanceApi } from '../services/api';
 import ReactMarkdown from 'react-markdown';
 import RunnerSprite from './RunnerSprite';
@@ -77,7 +77,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [claudeMode, setClaudeMode] = useState<{mode: string, description: string} | null>(null);
 
   // Set Claude mode from instance data
-  const setClaudeModeFromInstance = (instance: any) => {
+  const setClaudeModeFromInstance = (instance: ClaudeInstance) => {
     if (instance?.claude_mode) {
       const description = instance.claude_mode === 'max-plan' 
         ? 'Max Plan (authenticated via claude /login)'

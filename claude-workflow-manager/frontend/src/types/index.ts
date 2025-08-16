@@ -73,6 +73,7 @@ export interface ClaudeInstance {
   error?: string;
   archived?: boolean;
   archived_at?: string;
+  claude_mode?: string;  // "max-plan" or "api-key"
   // Aggregated metrics
   total_tokens?: number;
   total_cost_usd?: number;
@@ -133,6 +134,7 @@ export interface InstanceLog {
   execution_time_ms?: number;
   subagent_name?: string;
   step_id?: string;
+  claude_mode?: string;  // "max-plan" or "api-key"
 }
 
 export interface LogAnalytics {
