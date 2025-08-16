@@ -693,8 +693,15 @@ class ClaudeCodeManager:
                     "content": "✅ **Authentication Complete**\n\nLogin successful! Now executing your original command...\n\n"
                 })
                 
-                # Execute the original command with the authenticated session
-                original_cmd, original_env = self._build_claude_command(current_session_id, input_text, is_resume=False)
+                # Execute the original command with a NEW session ID (max plan mode needs fresh sessions)
+                original_session_id = str(uuid.uuid4())
+                instance_info["session_id"] = original_session_id
+                self._log_with_timestamp(f"🆔 Generated new session ID for original command: {original_session_id}")
+                
+                # Update database with new session ID
+                await self.db.update_instance_session_id(instance_id, original_session_id)
+                
+                original_cmd, original_env = self._build_claude_command(original_session_id, input_text, is_resume=False)
                 original_success = await self._execute_claude_streaming(original_cmd, instance_id, original_env, input_text)
                 return original_success
         else:
