@@ -1627,15 +1627,22 @@ class ClaudeCodeManager:
                 session_id = instance_info.get("session_id")
                 session_created = instance_info.get("session_created", False)
                 
-                if not session_created:
-                    # First command - create session with specific ID
-                    self._log_with_timestamp(f"🆕 Creating new session {session_id}")
+                if not session_created or self.use_max_plan:
+                    # First command OR max plan mode - create/use session with specific ID (no resume in max plan)
+                    if self.use_max_plan:
+                        # In max plan mode, always use fresh sessions for each command
+                        session_id = str(uuid.uuid4())
+                        instance_info["session_id"] = session_id
+                        self._log_with_timestamp(f"🎯 Max plan mode - new session {session_id} (no resume support)")
+                    else:
+                        self._log_with_timestamp(f"🆕 Creating new session {session_id}")
+                    
                     cmd, env = self._build_claude_command(session_id, input_text, is_resume=False)
                     instance_info["session_created"] = True
                     # Save session ID to database for future use
                     await self.db.update_instance_session_id(instance_id, session_id)
                 else:
-                    # Subsequent commands - resume existing session
+                    # Subsequent commands in API key mode - resume existing session
                     self._log_with_timestamp(f"🔄 Resuming session {session_id}")
                     cmd, env = self._build_claude_command(session_id, input_text, is_resume=True)
                 
