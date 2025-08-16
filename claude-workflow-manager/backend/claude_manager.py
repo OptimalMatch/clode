@@ -384,17 +384,20 @@ class ClaudeCodeManager:
                         
                         # Check for invalid API key message and auto-fallback to max plan
                         if "Invalid API key" in line and "Please run /login" in line:
-                            self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, need to authenticate")
+                            self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, auto-running /login")
                             await self._send_websocket_update(instance_id, {
                                 "type": "partial_output",
-                                "content": "🔄 **Authentication Required**\n\nDetected invalid API key. Please run `/login` to authenticate with Claude Code max plan account first."
+                                "content": "🔄 **Authentication Required - Running /login**\n\nDetected invalid API key. Automatically running /login for Claude Code max plan account..."
                             })
                             
-                            # Don't automatically switch to max plan - let user decide
-                            self._log_with_timestamp(f"🔄 FALLBACK: User needs to run /login command manually")
+                            # Set max plan mode and mark for login retry
+                            self.use_max_plan = True
+                            if not hasattr(self, '_pending_login_requests'):
+                                self._pending_login_requests = {}
+                            self._pending_login_requests[instance_id] = True
                             
-                            # Complete this execution (don't retry automatically)
-                            return True
+                            # Return False to trigger session recovery with /login
+                            return False
                         
                         # Check for actual permission requests (not JSON config fields)
                         # Look for specific permission request patterns that require user approval
@@ -617,8 +620,18 @@ class ClaudeCodeManager:
         await self.db.update_instance_session_id(instance_id, "")
         instance_info["session_created"] = False
         
+        # Check if this is a login request retry
+        if hasattr(self, '_pending_login_requests') and self._pending_login_requests.get(instance_id):
+            self._log_with_timestamp(f"🔑 Login retry - running /login command")
+            retry_input = "/login"
+            # Generate new session for login
+            new_session_id = str(uuid.uuid4())
+            instance_info["session_id"] = new_session_id
+            retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, is_resume=False)
+            # Clear the login request flag
+            del self._pending_login_requests[instance_id]
         # Check if this is a permission grant retry (use existing session)
-        if hasattr(self, '_pending_permission_grants') and self._pending_permission_grants.get(instance_id):
+        elif hasattr(self, '_pending_permission_grants') and self._pending_permission_grants.get(instance_id):
             self._log_with_timestamp(f"🔑 Permission grant retry - resuming existing session {session_id}")
             retry_input = "Yes, I grant permission to use the requested tools. Please proceed with the task."
             retry_cmd, retry_env = self._build_claude_command(session_id, retry_input, is_resume=True)
