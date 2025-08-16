@@ -376,90 +376,18 @@ class ClaudeCodeManager:
                         
                         # Check for invalid API key message and auto-fallback to max plan
                         if "Invalid API key" in line and "Please run /login" in line:
-                            self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, switching to max plan mode")
+                            self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, will switch to max plan mode")
                             await self._send_websocket_update(instance_id, {
                                 "type": "partial_output",
-                                "content": "🔄 **Authentication Required - Running /login**\n\nDetected authentication needed. Automatically running /login for Claude Code max plan account..."
+                                "content": "🔄 **Authentication Required - Switching to Max Plan Mode**\n\nDetected invalid API key. Switching to Claude Code max plan account..."
                             })
                             
-                            # Set max plan mode for this session
+                            # Set max plan mode for future requests
                             self.use_max_plan = True
                             
-                            # Terminate current process and restart with max plan
-                            try:
-                                process.terminate()
-                                await asyncio.wait_for(
-                                    asyncio.create_task(asyncio.to_thread(process.wait)), 
-                                    timeout=2
-                                )
-                            except:
-                                process.kill()
-                            
-                            # Get the original input text from instance info
-                            # We'll need to re-execute with max plan command
-                            await self._send_websocket_update(instance_id, {
-                                "type": "status",
-                                "status": "running", 
-                                "message": "Running /login for authentication...",
-                                "process_running": True
-                            })
-                            
-                            # Build new command for max plan mode - run /login first
-                            instance_info = self.instances.get(instance_id, {})
-                            # Generate a new session ID for max plan mode to avoid conflicts
-                            import uuid
-                            new_session_id = str(uuid.uuid4())
-                            instance_info["session_id"] = new_session_id
-                            instance_info["session_created"] = False  # Mark as needs to be created
-                            self._log_with_timestamp(f"🆔 Generated new session ID for max plan: {new_session_id}")
-                            
-                            # Update database with new session ID
-                            await self.db.update_instance_session_id(instance_id, new_session_id)
-                            
-                            # Run /login to authenticate with max plan account
-                            retry_input = "/login"
-                            cmd, env = self._build_claude_command(new_session_id, retry_input, is_resume=False)
-                            
-                            # Start new process with max plan (avoid recursion by calling directly)
-                            self._log_with_timestamp(f"🚀 Starting max plan retry command: {' '.join(cmd)}")
-                            
-                            # Remove current process from tracking since we're replacing it
-                            if instance_id in self.running_processes:
-                                self.running_processes[instance_id] = [p for p in self.running_processes[instance_id] if p != process]
-                                if not self.running_processes[instance_id]:
-                                    del self.running_processes[instance_id]
-                            
-                            # Start new process directly with max plan
-                            new_process = subprocess.Popen(
-                                cmd,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                text=True,
-                                env=env,
-                                bufsize=1,
-                                universal_newlines=True,
-                                preexec_fn=os.setsid if hasattr(os, 'setsid') else None
-                            )
-                            
-                            # Replace the current process with the new one
-                            process = new_process
-                            process._start_time = time.time()
-                            
-                            # Add new process to tracking
-                            if instance_id not in self.running_processes:
-                                self.running_processes[instance_id] = []
-                            self.running_processes[instance_id].append(process)
-                            
-                            self._log_with_timestamp(f"🚀 Max plan process started (PID: {process.pid})")
-                            
-                            # Send status update
-                            await self._send_websocket_update(instance_id, {
-                                "type": "status",
-                                "status": "process_started", 
-                                "message": f"Running /login command (PID: {process.pid})"
-                            })
-                            
-                            # Continue with the new process (don't return, let the loop continue)
+                            # Mark this execution as failed so session recovery will handle the retry
+                            self._log_with_timestamp(f"🔄 FALLBACK: Marking execution as failed to trigger max plan retry")
+                            return False  # This will trigger session recovery with max plan mode
                         
                         # Check for permission requests and auto-grant them
                         if "Claude requested permissions" in line or "need permission to" in line.lower():
@@ -691,7 +619,15 @@ class ClaudeCodeManager:
         self._log_with_timestamp(f"🆕 Creating new session {new_session_id} (retry)")
         
         # Create retry command using command builder
-        retry_cmd, retry_env = self._build_claude_command(new_session_id, input_text, is_resume=False)
+        # If we just switched to max plan mode, run /login first
+        if self.use_max_plan and not hasattr(self, '_max_plan_login_done'):
+            self._log_with_timestamp(f"🔑 First time using max plan mode - running /login")
+            retry_input = "/login"
+            self._max_plan_login_done = True  # Mark as done to avoid infinite loops
+        else:
+            retry_input = input_text
+            
+        retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, is_resume=False)
         
         # Try streaming execution again with new session
         success = await self._execute_claude_streaming(retry_cmd, instance_id, retry_env, input_text)
