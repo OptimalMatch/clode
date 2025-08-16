@@ -1361,8 +1361,11 @@ class ClaudeCodeManager:
                     "instance": instance.dict()
                 })
                 print(f"📤 Sending connection data for instance: {instance_id}")
-                await websocket.send_json(connection_data)
-                print(f"✅ Connection data sent successfully for instance: {instance_id}")
+                if await self._safe_websocket_send(instance_id, websocket, connection_data):
+                    print(f"✅ Connection data sent successfully for instance: {instance_id}")
+                else:
+                    print(f"❌ Failed to send connection data for instance: {instance_id}")
+                    return
                 
                 # Check if there are ongoing Claude CLI processes for this instance
                 if instance_id in self.running_processes and self.running_processes[instance_id]:
@@ -1370,7 +1373,7 @@ class ClaudeCodeManager:
                     if active_processes:
                         latest_process = active_processes[-1]  # Use the most recent process
                         self._log_with_timestamp(f"🔄 Found {len(active_processes)} ongoing Claude CLI processes for instance {instance_id}, latest PID: {latest_process.pid}")
-                        await websocket.send_json({
+                        await self._safe_websocket_send(instance_id, websocket, {
                             "type": "status",
                             "status": "running",
                             "message": f"Connected to ongoing Claude CLI execution ({len(active_processes)} processes, latest PID: {latest_process.pid})"
@@ -1384,7 +1387,7 @@ class ClaudeCodeManager:
                         
             else:
                 print(f"⚠️ Instance not found in database: {instance_id}")
-                await websocket.send_json({
+                await self._safe_websocket_send(instance_id, websocket, {
                     "type": "error",
                     "error": f"Instance {instance_id} not found"
                 })
@@ -2190,15 +2193,34 @@ class ClaudeCodeManager:
         else:
             return obj
     
+    async def _safe_websocket_send(self, instance_id: str, websocket: WebSocket, data: dict) -> bool:
+        """Safely send data to a WebSocket connection with automatic cleanup on failure"""
+        try:
+            # Check if WebSocket is still in our registry (might have been removed by another thread)
+            if instance_id not in self.websockets:
+                return False
+                
+            serializable_data = self._make_json_serializable(data)
+            await websocket.send_json(serializable_data)
+            return True
+        except Exception as e:
+            # WebSocket is likely disconnected - remove it from registry to prevent future attempts
+            error_msg = str(e)
+            if "websocket.close" in error_msg or "response already completed" in error_msg:
+                print(f"🔌 WebSocket already closed for instance {instance_id}")
+            else:
+                print(f"❌ WebSocket error for instance {instance_id}: {error_msg}")
+                
+            # Always clean up the WebSocket reference on any error
+            if instance_id in self.websockets:
+                print(f"🧹 Removing disconnected WebSocket for instance {instance_id}")
+                del self.websockets[instance_id]
+            return False
+
     async def _send_websocket_update(self, instance_id: str, data: dict):
         websocket = self.websockets.get(instance_id)
         if websocket:
-            try:
-                # Make data JSON serializable
-                serializable_data = self._make_json_serializable(data)
-                await websocket.send_json(serializable_data)
-            except Exception as e:
-                print(f"Error sending websocket update: {e}")
+            await self._safe_websocket_send(instance_id, websocket, data)
     
     def _parse_prompt_steps(self, prompt_content: str) -> list:
         # Try to parse as JSON first
