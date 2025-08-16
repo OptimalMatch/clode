@@ -2351,6 +2351,10 @@ Please leverage the above subagent capabilities and follow their system instruct
                 if instance_id in self.instances:
                     self.instances[instance_id]["active_subagent"] = subagent_name
         
+        # Determine current Claude mode
+        use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "true").lower() == "true"
+        claude_mode = "max-plan" if use_max_plan else "api-key"
+        
         log = InstanceLog(
             instance_id=instance_id,
             workflow_id=workflow_id or "",
@@ -2364,7 +2368,8 @@ Please leverage the above subagent capabilities and follow their system instruct
             total_cost_usd=total_cost_usd,
             execution_time_ms=execution_time_ms,
             subagent_name=subagent_name,
-            step_id=step_id
+            step_id=step_id,
+            claude_mode=claude_mode
         )
         
         if self.db.db is None:

@@ -346,6 +346,15 @@ const LogsViewer: React.FC<LogsViewerProps> = ({ instanceId, open, onClose }) =>
                           variant="outlined"
                         />
                       )}
+                      {log.claude_mode && (
+                        <Chip
+                          label={log.claude_mode === 'max-plan' ? '🤖 Max Plan' : '🔑 API Key'}
+                          size="small"
+                          color={log.claude_mode === 'max-plan' ? 'primary' : 'secondary'}
+                          variant="outlined"
+                          sx={{ fontSize: '0.7rem', height: '20px' }}
+                        />
+                      )}
                       {log.step_id && (
                         <Typography variant="caption" color="text.secondary">
                           Step: {log.step_id}

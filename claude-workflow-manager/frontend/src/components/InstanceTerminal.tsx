@@ -76,23 +76,18 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [lastContent, setLastContent] = useState<string | null>(null);
   const [claudeMode, setClaudeMode] = useState<{mode: string, description: string} | null>(null);
 
-  // Fetch Claude authentication mode
-  const fetchClaudeMode = async () => {
-    try {
-      const apiUrl = getApiUrl();
-      const response = await fetch(`${apiUrl}/api/claude-mode`);
-      if (response.ok) {
-        const data = await response.json();
-        setClaudeMode({
-          mode: data.mode,
-          description: data.description
-        });
-        console.log('🤖 Claude mode fetched:', data);
-      } else {
-        console.error('❌ Failed to fetch Claude mode:', response.status);
-      }
-    } catch (error) {
-      console.error('❌ Error fetching Claude mode:', error);
+  // Set Claude mode from instance data
+  const setClaudeModeFromInstance = (instance: any) => {
+    if (instance?.claude_mode) {
+      const description = instance.claude_mode === 'max-plan' 
+        ? 'Max Plan (authenticated via claude /login)'
+        : 'API Key (using CLAUDE_API_KEY)';
+      
+      setClaudeMode({
+        mode: instance.claude_mode,
+        description: description
+      });
+      console.log('🤖 Claude mode from instance:', instance.claude_mode);
     }
   };
 
@@ -422,10 +417,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     };
   }, [isProcessRunning, isCancelling, showCancelDialog, handleHttpCancel]);
 
-  // Fetch Claude mode on component mount
-  useEffect(() => {
-    fetchClaudeMode();
-  }, []);
+  // Claude mode will be set from WebSocket connection data
 
   useEffect(() => {
     console.log('🚀 Initializing LexicalEditor terminal with WebSocket connection...');
@@ -551,6 +543,12 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             case 'pong':
               console.log('🏓 Ping/Pong received - connection alive');
               appendToTerminal(`🏓 Connection alive (${new Date().toLocaleTimeString()})`);
+              break;
+            case 'connection':
+              console.log('🔗 Connection data received:', message);
+              if (message.instance) {
+                setClaudeModeFromInstance(message.instance);
+              }
               break;
             case 'output':
               if (message.content) {

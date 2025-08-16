@@ -668,6 +668,11 @@ async def spawn_instance(request: SpawnInstanceRequest):
             raise HTTPException(status_code=400, detail="No git repository specified in request or workflow")
             
         instance_id = str(uuid.uuid4())
+        
+        # Determine current Claude mode
+        use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "true").lower() == "true"
+        claude_mode = "max-plan" if use_max_plan else "api-key"
+        
         instance = ClaudeInstance(
             id=instance_id,
             workflow_id=workflow_id,
@@ -676,7 +681,8 @@ async def spawn_instance(request: SpawnInstanceRequest):
             status=InstanceStatus.INITIALIZING,
             created_at=datetime.utcnow(),
             start_sequence=start_sequence,
-            end_sequence=end_sequence
+            end_sequence=end_sequence,
+            claude_mode=claude_mode
         )
         
         await db.create_instance(instance)

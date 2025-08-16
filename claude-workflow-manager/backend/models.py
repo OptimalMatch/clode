@@ -97,6 +97,8 @@ class ClaudeInstance(BaseModel):
     end_sequence: Optional[int] = None    # Which sequence to end at
     archived: bool = False  # For soft delete functionality
     archived_at: Optional[datetime] = None
+    # Claude authentication mode
+    claude_mode: Optional[str] = None  # "max-plan" or "api-key"
     # Aggregated metrics
     total_tokens: Optional[int] = None
     total_cost_usd: Optional[float] = None
@@ -129,6 +131,7 @@ class InstanceLog(BaseModel):
     execution_time_ms: Optional[int] = None
     subagent_name: Optional[str] = None
     step_id: Optional[str] = None
+    claude_mode: Optional[str] = None  # "max-plan" or "api-key"
 
 class LogAnalytics(BaseModel):
     instance_id: str
