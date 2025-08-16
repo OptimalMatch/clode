@@ -425,7 +425,7 @@ class ClaudeCodeManager:
                             # Return False to trigger session recovery with permission grant
                             return False
                         
-                        # Process this line - both modes now use JSON streaming
+                        # Process this line - check if it's JSON mode or text mode
                         # Remove terminal control characters that might prefix JSON
                         clean_line = line
                         if '\x1b[' in line:
@@ -437,55 +437,67 @@ class ClaudeCodeManager:
                         if not clean_line.strip():
                             continue
                         
-                        try:
-                            event = json.loads(clean_line)
+                        # Check if this looks like JSON (starts with { or [)
+                        is_json = clean_line.strip().startswith(('{', '['))
+                        
+                        if is_json:
+                            try:
+                                event = json.loads(clean_line)
                             
-                            # Extract detailed token usage and cost from result events
-                            if event.get('type') == 'result':
-                                usage = event.get('usage', {})
-                                cost = event.get('total_cost_usd', 0.0)
+                                # Extract detailed token usage and cost from result events
+                                if event.get('type') == 'result':
+                                    usage = event.get('usage', {})
+                                    cost = event.get('total_cost_usd', 0.0)
+                                    
+                                    if usage:
+                                        # Track individual token categories
+                                        input_tokens = usage.get('input_tokens', 0)
+                                        output_tokens = usage.get('output_tokens', 0)
+                                        cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
+                                        cache_read_tokens = usage.get('cache_read_input_tokens', 0)
+                                        
+                                        # Accumulate totals
+                                        total_input_tokens += input_tokens
+                                        total_output_tokens += output_tokens
+                                        total_cache_creation_tokens += cache_creation_tokens
+                                        total_cache_read_tokens += cache_read_tokens
+                                        if cost > 0:
+                                            total_cost_usd += cost
+                                        
+                                        result_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
+                                        if result_tokens > 0:
+                                            total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
+                                            self._log_with_timestamp(f"🔢 Result tokens: {result_tokens} (in:{input_tokens}, out:{output_tokens}, cache_create:{cache_creation_tokens}, cache_read:{cache_read_tokens})")
+                                            self._log_with_timestamp(f"💰 Session totals: {total_tokens} tokens, ${total_cost_usd:.4f} USD")
                                 
-                                if usage:
-                                    # Track individual token categories
-                                    input_tokens = usage.get('input_tokens', 0)
-                                    output_tokens = usage.get('output_tokens', 0)
-                                    cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
-                                    cache_read_tokens = usage.get('cache_read_input_tokens', 0)
-                                    
-                                    # Accumulate totals
-                                    total_input_tokens += input_tokens
-                                    total_output_tokens += output_tokens
-                                    total_cache_creation_tokens += cache_creation_tokens
-                                    total_cache_read_tokens += cache_read_tokens
-                                    if cost > 0:
-                                        total_cost_usd += cost
-                                    
-                                    result_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
-                                    if result_tokens > 0:
-                                        total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
-                                        self._log_with_timestamp(f"🔢 Result tokens: {result_tokens} (in:{input_tokens}, out:{output_tokens}, cache_create:{cache_creation_tokens}, cache_read:{cache_read_tokens})")
-                                        self._log_with_timestamp(f"💰 Session totals: {total_tokens} tokens, ${total_cost_usd:.4f} USD")
-                            
-                            formatted_msg = self._format_streaming_event(event)
-                            if formatted_msg:
+                                formatted_msg = self._format_streaming_event(event)
+                                if formatted_msg:
+                                    await self._send_websocket_update(instance_id, {
+                                        "type": "partial_output",
+                                        "content": formatted_msg
+                                    })
+                                    # Store in terminal history
+                                    await self.db.append_terminal_history(instance_id, formatted_msg, "output")
+                                    # Also create instance logs for analytics
+                                    await self._create_event_logs(instance_id, event, formatted_msg)
+                            except json.JSONDecodeError:
+                                # JSON parsing failed - treat as raw text
+                                if clean_line.strip():
+                                    self._log_with_timestamp(f"⚠️ Invalid JSON: {clean_line}")
+                                    await self._send_websocket_update(instance_id, {
+                                        "type": "partial_output",
+                                        "content": clean_line
+                                    })
+                                    await self.db.append_terminal_history(instance_id, clean_line, "output")
+                        else:
+                            # Text-only mode output - send as-is
+                            if clean_line.strip():
                                 await self._send_websocket_update(instance_id, {
                                     "type": "partial_output",
-                                    "content": formatted_msg
+                                    "content": clean_line
                                 })
-                                # Store in terminal history
-                                await self.db.append_terminal_history(instance_id, formatted_msg, "output")
-                                # Also create instance logs for analytics
-                                await self._create_event_logs(instance_id, event, formatted_msg)
-                        except json.JSONDecodeError:
-                            # Not a JSON line in streaming mode, might be error or other output
-                            if line.strip():  # Only log non-empty lines
-                                self._log_with_timestamp(f"⚠️ Non-JSON line: {line}")
-                                # Send as raw text in case it's important output
-                                await self._send_websocket_update(instance_id, {
-                                    "type": "partial_output",
-                                    "content": line
-                                })
-                                await self.db.append_terminal_history(instance_id, line, "output")
+                                await self.db.append_terminal_history(instance_id, clean_line, "output")
+
                         
                         # CRITICAL: Check interrupt flag after processing each line during busy output
                         if self.interrupt_flags.get(instance_id, False):
@@ -693,13 +705,19 @@ class ClaudeCodeManager:
                     "content": "✅ **Authentication Complete**\n\nLogin successful! Now executing your original command...\n\n"
                 })
                 
-                # Execute the original command with a NEW session ID (max plan mode needs fresh sessions)
+                # Execute the original command - now user should be authenticated globally
+                # Use text-only mode like the test script does after login
                 original_session_id = str(uuid.uuid4())
                 instance_info["session_id"] = original_session_id
                 self._log_with_timestamp(f"🆔 Generated new session ID for original command: {original_session_id}")
                 
                 # Update database with new session ID
                 await self.db.update_instance_session_id(instance_id, original_session_id)
+                
+                # After successful login, the user should be authenticated globally
+                # Based on test script: authentication persists across sessions, so we can use either mode
+                # Let's try JSON stream mode first (like the working tests), then fallback to text mode
+                self._log_with_timestamp(f"🎯 User authenticated - trying original command with JSON stream mode")
                 
                 original_cmd, original_env = self._build_claude_command(original_session_id, input_text, is_resume=False)
                 original_success = await self._execute_claude_streaming(original_cmd, instance_id, original_env, input_text)
