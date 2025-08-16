@@ -158,10 +158,17 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
         
         setTimeout(() => {
           addTerminalOutput(`Please open this URL in your browser:`, 'info');
-          addTerminalOutput(mockAuthUrl, 'info');
           addTerminalOutput('', 'info');
-          addTerminalOutput('After completing authentication, copy the token and paste it below.', 'info');
-          setActiveStep(2);
+          addTerminalOutput(`🔗 ${mockAuthUrl}`, 'success');
+          addTerminalOutput('', 'info');
+          addTerminalOutput('📋 Steps to complete authentication:', 'info');
+          addTerminalOutput('1. Click "Open Claude Authentication" button below', 'info');
+          addTerminalOutput('2. Complete the OAuth flow in your browser', 'info');
+          addTerminalOutput('3. Copy the generated token', 'info');
+          addTerminalOutput('4. Click "Continue to Token Submission"', 'info');
+          addTerminalOutput('', 'info');
+          addTerminalOutput('⚠️  Keep this window open - you will need it for the next step!', 'success');
+          // Don't auto-advance to step 2 - let user click Continue button
         }, 1500);
       }, 2000);
     }, 1500);
@@ -332,16 +339,27 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
               {loginSession?.authUrl && (
                 <Box sx={{ mb: 2 }}>
                   <Alert severity="info" sx={{ mb: 2 }}>
-                    Click the button below to open the Claude authentication page in a new tab.
+                    <strong>Ready for Authentication:</strong> Click "Open Claude Authentication" to complete the OAuth flow in your browser. 
+                    After completing authentication, copy the token and click "Continue to Token Submission".
                   </Alert>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={openAuthUrl}
-                    startIcon={<AccountCircle />}
-                  >
-                    Open Claude Authentication
-                  </Button>
+                  <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={openAuthUrl}
+                      startIcon={<AccountCircle />}
+                    >
+                      Open Claude Authentication
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      onClick={() => setActiveStep(2)}
+                      disabled={!loginSession?.authUrl}
+                    >
+                      Continue to Token Submission
+                    </Button>
+                  </Box>
                 </Box>
               )}
             </StepContent>
@@ -366,7 +384,14 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
                   disabled={isLoading}
                 />
               </Box>
-              <Box sx={{ mt: 2 }}>
+              <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => setActiveStep(1)}
+                  disabled={isLoading}
+                >
+                  Back to Authentication
+                </Button>
                 <Button
                   variant="contained"
                   onClick={submitAuthToken}
