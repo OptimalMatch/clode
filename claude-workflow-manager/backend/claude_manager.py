@@ -376,18 +376,17 @@ class ClaudeCodeManager:
                         
                         # Check for invalid API key message and auto-fallback to max plan
                         if "Invalid API key" in line and "Please run /login" in line:
-                            self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, will switch to max plan mode")
+                            self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, need to authenticate")
                             await self._send_websocket_update(instance_id, {
                                 "type": "partial_output",
-                                "content": "🔄 **Authentication Required - Switching to Max Plan Mode**\n\nDetected invalid API key. Switching to Claude Code max plan account..."
+                                "content": "🔄 **Authentication Required**\n\nDetected invalid API key. Please run `/login` to authenticate with Claude Code max plan account first."
                             })
                             
-                            # Set max plan mode for future requests
-                            self.use_max_plan = True
+                            # Don't automatically switch to max plan - let user decide
+                            self._log_with_timestamp(f"🔄 FALLBACK: User needs to run /login command manually")
                             
-                            # Mark this execution as failed so session recovery will handle the retry
-                            self._log_with_timestamp(f"🔄 FALLBACK: Marking execution as failed to trigger max plan retry")
-                            return False  # This will trigger session recovery with max plan mode
+                            # Complete this execution (don't retry automatically)
+                            return True
                         
                         # Check for permission requests and trigger retry with permission grant
                         permission_keywords = ["permission", "grant", "allow", "authorize", "consent", "approve"]
@@ -591,6 +590,22 @@ class ClaudeCodeManager:
         if not instance_info:
             return
         
+        # Check recovery attempt count to prevent infinite loops
+        recovery_count = getattr(self, '_recovery_counts', {}).get(instance_id, 0)
+        if recovery_count >= 3:
+            self._log_with_timestamp(f"❌ Max recovery attempts (3) reached for instance {instance_id}")
+            await self._send_websocket_update(instance_id, {
+                "type": "error",
+                "error": "Maximum session recovery attempts reached. Please try again with a new instance."
+            })
+            return False
+        
+        # Increment recovery count
+        if not hasattr(self, '_recovery_counts'):
+            self._recovery_counts = {}
+        self._recovery_counts[instance_id] = recovery_count + 1
+        self._log_with_timestamp(f"🔄 Recovery attempt {self._recovery_counts[instance_id]}/3 for instance {instance_id}")
+        
         # Clear the invalid session from database
         await self.db.update_instance_session_id(instance_id, "")
         instance_info["session_created"] = False
@@ -608,11 +623,10 @@ class ClaudeCodeManager:
             instance_info["session_id"] = new_session_id
             self._log_with_timestamp(f"🆕 Creating new session {new_session_id} (retry)")
             
-            # If we just switched to max plan mode, run /login first
-            if self.use_max_plan and not hasattr(self, '_max_plan_login_done'):
-                self._log_with_timestamp(f"🔑 First time using max plan mode - running /login")
-                retry_input = "/login"
-                self._max_plan_login_done = True  # Mark as done to avoid infinite loops
+            # In max plan mode, don't try to recover sessions - start fresh
+            if self.use_max_plan:
+                self._log_with_timestamp(f"🎯 Max plan mode - running original command directly (no session recovery)")
+                retry_input = input_text  # Just run the original command
             else:
                 retry_input = input_text
                 
@@ -622,10 +636,15 @@ class ClaudeCodeManager:
         success = await self._execute_claude_streaming(retry_cmd, instance_id, retry_env, input_text)
         
         if success:
+            # Clear recovery count on success
+            if hasattr(self, '_recovery_counts') and instance_id in self._recovery_counts:
+                del self._recovery_counts[instance_id]
+            
             # Save the new session ID and mark as created
-            await self.db.update_instance_session_id(instance_id, new_session_id)
+            current_session_id = instance_info.get("session_id", "unknown")
+            await self.db.update_instance_session_id(instance_id, current_session_id)
             instance_info["session_created"] = True
-            self._log_with_timestamp(f"✅ Session recovery successful with session {new_session_id}")
+            self._log_with_timestamp(f"✅ Session recovery successful with session {current_session_id}")
         else:
             # Even retry failed
             self._log_with_timestamp(f"❌ Session recovery failed")
@@ -633,6 +652,8 @@ class ClaudeCodeManager:
                 "type": "error",
                 "error": "Session recovery failed"
             })
+            
+        return success
         
     async def spawn_instance(self, instance: ClaudeInstance):
         start_time = time.time()
