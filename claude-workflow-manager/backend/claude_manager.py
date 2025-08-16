@@ -31,6 +31,10 @@ class ClaudeCodeManager:
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Include milliseconds
         print(f"[{timestamp}] {message}")
     
+    def _select_model(self, input_text: str) -> str:
+        """Use Claude Sonnet 4 for all requests"""
+        return "claude-sonnet-4-20250514"
+    
     def _build_claude_command(self, session_id: str, input_text: str, is_resume: bool = False) -> tuple[list, dict]:
         """
         Build Claude CLI command with support for both API key and max plan modes
@@ -39,9 +43,12 @@ class ClaudeCodeManager:
         # Base environment
         env = os.environ.copy()
         
+        # Select appropriate model based on task complexity
+        selected_model = self._select_model(input_text)
+        
         if self.use_max_plan:
             # Max plan mode: unset API key and use JSON stream mode for proper authentication
-            self._log_with_timestamp(f"🎯 Using Claude Code max plan account (JSON stream mode)")
+            self._log_with_timestamp(f"🎯 Using Claude Code max plan account (JSON stream mode with Sonnet 4)")
             if "ANTHROPIC_API_KEY" in env:
                 del env["ANTHROPIC_API_KEY"]
             if "CLAUDE_API_KEY" in env:
@@ -56,6 +63,7 @@ class ClaudeCodeManager:
                     "--output-format", "stream-json",
                     "--permission-mode", "acceptEdits",
                     "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
+                    "--model", selected_model,
                     "--resume", session_id,
                     input_text
                 ]
@@ -67,12 +75,13 @@ class ClaudeCodeManager:
                     "--output-format", "stream-json",
                     "--permission-mode", "acceptEdits",
                     "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
+                    "--model", selected_model,
                     "--session-id", session_id,
                     input_text
                 ]
         else:
             # API key mode: standard streaming JSON mode
-            self._log_with_timestamp(f"🔑 Using ANTHROPIC_API_KEY (streaming JSON mode)")
+            self._log_with_timestamp(f"🔑 Using ANTHROPIC_API_KEY (streaming JSON mode with Sonnet 4)")
             
             # Ensure API key is available
             claude_api_key = os.getenv("CLAUDE_API_KEY")
@@ -88,6 +97,7 @@ class ClaudeCodeManager:
                     "--output-format", "stream-json",
                     "--permission-mode", "acceptEdits",
                     "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
+                    "--model", selected_model,
                     "--resume", session_id,
                     input_text
                 ]
@@ -99,6 +109,7 @@ class ClaudeCodeManager:
                     "--output-format", "stream-json",
                     "--permission-mode", "acceptEdits",
                     "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
+                    "--model", selected_model,
                     "--session-id", session_id,
                     input_text
                 ]
