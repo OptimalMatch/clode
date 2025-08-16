@@ -406,10 +406,19 @@ class ClaudeCodeManager:
                             
                             # Build new command for max plan mode - run /login first
                             instance_info = self.instances.get(instance_id, {})
-                            session_id = instance_info.get("session_id")
+                            # Generate a new session ID for max plan mode to avoid conflicts
+                            import uuid
+                            new_session_id = str(uuid.uuid4())
+                            instance_info["session_id"] = new_session_id
+                            instance_info["session_created"] = False  # Mark as needs to be created
+                            self._log_with_timestamp(f"🆔 Generated new session ID for max plan: {new_session_id}")
+                            
+                            # Update database with new session ID
+                            await self.db.update_instance_session_id(instance_id, new_session_id)
+                            
                             # Run /login to authenticate with max plan account
                             retry_input = "/login"
-                            cmd, env = self._build_claude_command(session_id, retry_input, is_resume=False)
+                            cmd, env = self._build_claude_command(new_session_id, retry_input, is_resume=False)
                             
                             # Start new process with max plan (avoid recursion by calling directly)
                             self._log_with_timestamp(f"🚀 Starting max plan retry command: {' '.join(cmd)}")
