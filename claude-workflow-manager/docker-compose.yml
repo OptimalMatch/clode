@@ -42,6 +42,7 @@ services:
       - redis
     volumes:
       - ./backend:/app/src
+      - ~/.claude:/root/.claude:ro  # Mount Claude authentication (read-only)
       - ${HOME}/.ssh:/root/.ssh:ro
       - ssh_known_hosts:/root/.ssh_known_hosts
       - ssh_generated_keys:/app/ssh_keys
