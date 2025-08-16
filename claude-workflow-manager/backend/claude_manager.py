@@ -426,8 +426,19 @@ class ClaudeCodeManager:
                             return False
                         
                         # Process this line - both modes now use JSON streaming
+                        # Remove terminal control characters that might prefix JSON
+                        clean_line = line
+                        if '\x1b[' in line:
+                            # Remove all terminal escape sequences and extract JSON part
+                            import re
+                            clean_line = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', line)
+                        
+                        # Skip if the cleaned line is empty or just whitespace
+                        if not clean_line.strip():
+                            continue
+                        
                         try:
-                            event = json.loads(line)
+                            event = json.loads(clean_line)
                             
                             # Extract detailed token usage and cost from result events
                             if event.get('type') == 'result':
@@ -628,8 +639,7 @@ class ClaudeCodeManager:
             new_session_id = str(uuid.uuid4())
             instance_info["session_id"] = new_session_id
             retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, is_resume=False)
-            # Clear the login request flag
-            del self._pending_login_requests[instance_id]
+            # Don't clear the login request flag yet - we need it for the success handler
         # Check if this is a permission grant retry (use existing session)
         elif hasattr(self, '_pending_permission_grants') and self._pending_permission_grants.get(instance_id):
             self._log_with_timestamp(f"🔑 Permission grant retry - resuming existing session {session_id}")
@@ -665,6 +675,28 @@ class ClaudeCodeManager:
             await self.db.update_instance_session_id(instance_id, current_session_id)
             instance_info["session_created"] = True
             self._log_with_timestamp(f"✅ Session recovery successful with session {current_session_id}")
+            
+            # Debug: Check pending login requests
+            has_login_attr = hasattr(self, '_pending_login_requests')
+            login_flag_value = self._pending_login_requests.get(instance_id) if has_login_attr else None
+            self._log_with_timestamp(f"🔍 Login check: has_attr={has_login_attr}, flag_value={login_flag_value}")
+            
+            # If this was a login request, now run the original command
+            if has_login_attr and login_flag_value:
+                self._log_with_timestamp(f"🚀 Login completed - now running original command: {input_text}")
+                # Clear the login flag
+                del self._pending_login_requests[instance_id]
+                
+                # Send update to user
+                await self._send_websocket_update(instance_id, {
+                    "type": "partial_output",
+                    "content": "✅ **Authentication Complete**\n\nLogin successful! Now executing your original command...\n\n"
+                })
+                
+                # Execute the original command with the authenticated session
+                original_cmd, original_env = self._build_claude_command(current_session_id, input_text, is_resume=False)
+                original_success = await self._execute_claude_streaming(original_cmd, instance_id, original_env, input_text)
+                return original_success
         else:
             # Even retry failed
             self._log_with_timestamp(f"❌ Session recovery failed")
