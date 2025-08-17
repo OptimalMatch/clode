@@ -25,6 +25,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { instanceApi, promptApi, workflowApi } from '../services/api';
 import { ClaudeInstance, Prompt } from '../types';
 import InstanceTerminal from './InstanceTerminal';
+import OpenCodeTerminalInstance from './OpenCodeTerminalInstance';
 import LogsViewer from './LogsViewer';
 
 const InstancesPage: React.FC = () => {
@@ -33,6 +34,7 @@ const InstancesPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selectedPromptId, setSelectedPromptId] = useState('');
+  const [selectedAgentType, setSelectedAgentType] = useState('claude-code');
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null);
   const [logsViewerOpen, setLogsViewerOpen] = useState(false);
   const [logsInstanceId, setLogsInstanceId] = useState<string | null>(null);
@@ -62,11 +64,12 @@ const InstancesPage: React.FC = () => {
 
   const spawnMutation = useMutation({
     mutationFn: () =>
-      instanceApi.spawn(workflowId!, selectedPromptId, workflow?.git_repo),
+      instanceApi.spawn(workflowId!, selectedPromptId, workflow?.git_repo, selectedAgentType),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['instances', workflowId] });
       setOpen(false);
       setSelectedPromptId('');
+      setSelectedAgentType('claude-code');
     },
   });
 
@@ -194,6 +197,12 @@ const InstancesPage: React.FC = () => {
                         color={getStatusColor(instance.status)}
                         size="small"
                       />
+                      <Chip
+                        label={instance.agent_type === 'opencode' ? '⚡ OpenCode' : '🤖 Claude Code'}
+                        color={instance.agent_type === 'opencode' ? 'primary' : 'secondary'}
+                        size="small"
+                        variant="outlined"
+                      />
                       {instance.archived && (
                         <Chip
                           label="Archived"
@@ -298,6 +307,20 @@ const InstancesPage: React.FC = () => {
         <DialogTitle>Spawn New Instance</DialogTitle>
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Agent Type</InputLabel>
+            <Select
+              value={selectedAgentType}
+              onChange={(e) => setSelectedAgentType(e.target.value)}
+            >
+              <MenuItem value="claude-code">
+                🤖 Claude Code - Complete AI coding assistant with file operations
+              </MenuItem>
+              <MenuItem value="opencode">
+                ⚡ OpenCode - Direct AI-powered terminal execution
+              </MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Select Prompt</InputLabel>
             <Select
               value={selectedPromptId}
@@ -372,12 +395,22 @@ const InstancesPage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {selectedInstance && (
-        <InstanceTerminal
-          instanceId={selectedInstance}
-          onClose={() => setSelectedInstance(null)}
-        />
-      )}
+      {selectedInstance && (() => {
+        const instance = instances.find((inst: ClaudeInstance) => inst.id === selectedInstance);
+        const isOpenCode = instance?.agent_type === 'opencode';
+        
+        return isOpenCode ? (
+          <OpenCodeTerminalInstance
+            instanceId={selectedInstance}
+            onClose={() => setSelectedInstance(null)}
+          />
+        ) : (
+          <InstanceTerminal
+            instanceId={selectedInstance}
+            onClose={() => setSelectedInstance(null)}
+          />
+        );
+      })()}
 
       {logsViewerOpen && logsInstanceId && (
         <LogsViewer

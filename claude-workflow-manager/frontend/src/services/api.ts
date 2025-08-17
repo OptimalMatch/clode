@@ -97,6 +97,7 @@ export const instanceApi = {
     workflowId: string, 
     promptId?: string, 
     gitRepo?: string, 
+    agentType?: string,
     startSequence?: number, 
     endSequence?: number
   ) => {
@@ -104,6 +105,7 @@ export const instanceApi = {
       workflow_id: workflowId,
       prompt_id: promptId,
       git_repo: gitRepo,
+      agent_type: agentType || 'claude-code',
       start_sequence: startSequence,
       end_sequence: endSequence,
     });

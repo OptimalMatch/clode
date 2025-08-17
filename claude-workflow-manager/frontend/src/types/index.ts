@@ -65,6 +65,7 @@ export interface ClaudeInstance {
   workflow_id: string;
   prompt_id?: string;
   git_repo: string;
+  agent_type?: string;  // "claude-code" or "opencode"
   status: 'initializing' | 'ready' | 'running' | 'paused' | 'completed' | 'failed';
   container_id?: string;
   output: any[];
