@@ -308,8 +308,10 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
         data,
         timestamp: new Date().toISOString()
       };
-      ws.current.send(JSON.stringify(message));
+      const jsonMessage = JSON.stringify(message);
+      ws.current.send(jsonMessage);
       console.log(`📤 Sent input to terminal: ${data.length > 50 ? data.substring(0, 50) + '...' : data}`);
+      console.log(`📋 JSON message sent:`, jsonMessage);
     } else {
       console.warn(`🔌 Cannot send input: WebSocket not connected (state: ${ws.current?.readyState})`);
       if (terminal.current) {

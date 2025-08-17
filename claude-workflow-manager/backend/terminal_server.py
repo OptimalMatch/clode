@@ -225,8 +225,8 @@ class TerminalServer:
             # Start terminal process
             await self._start_terminal_process(session)
             
-            # Handle WebSocket messages directly without blocking other endpoints
-            await self._handle_websocket_messages_non_blocking(session)
+            # Handle WebSocket messages using the original method for testing
+            await self._handle_websocket_messages(session)
             
         except WebSocketDisconnect:
             logger.info(f"🔌 WebSocket disconnected: {session_id}")
@@ -513,7 +513,11 @@ After installation, try: claude --version
                     if message['type'] == 'input':
                         # Send input to terminal process
                         if session.child_process and session.child_process.isalive():
-                            input_data = message['data']
+                            # Handle both 'data' and 'content' field names for compatibility
+                            input_data = message.get('data', message.get('content', ''))
+                            if not input_data:
+                                logger.warning(f"⚠️ Empty input data in message: {message}")
+                                continue
                             session.child_process.send(input_data)
                             logger.info(f"📤 Sent input to session {session.session_id}: '{input_data}' (len={len(input_data)})")
                         else:
