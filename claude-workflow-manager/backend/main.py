@@ -619,27 +619,22 @@ async def submit_claude_auth_token(request: ClaudeAuthTokenRequest):
 async def import_terminal_credentials():
     """Import Claude credentials from terminal container."""
     try:
-        import subprocess
+        import httpx
         import json
-        import base64
         
-        # Read the credentials file from the terminal container
-        result = subprocess.run([
-            "docker", "exec", "claude-workflow-terminal", 
-            "cat", "/home/claude/.claude/.credentials.json"
-        ], capture_output=True, text=True)
+        # Call the terminal server's export endpoint
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://claude-workflow-terminal:8006/export-credentials")
+            response.raise_for_status()
+            export_data = response.json()
         
-        if result.returncode != 0:
-            raise HTTPException(status_code=404, detail="No Claude credentials found in terminal container")
+        if not export_data.get("has_credentials", False):
+            error_msg = export_data.get("error", "No Claude credentials found")
+            raise HTTPException(status_code=404, detail=error_msg)
         
-        credentials_data = json.loads(result.stdout)
-        
-        # Extract user email from OAuth data if available
-        user_email = None
-        subscription_type = None
-        if "claudeAiOauth" in credentials_data:
-            oauth_data = credentials_data["claudeAiOauth"]
-            subscription_type = oauth_data.get("subscriptionType", "unknown")
+        credentials_data = export_data["credentials"]
+        subscription_type = export_data.get("subscription_type")
+        user_email = export_data.get("user_email")
         
         # Create a profile name based on subscription type
         profile_name = f"Terminal Login ({subscription_type.title()} Plan)" if subscription_type else "Terminal Login"
@@ -668,8 +663,10 @@ async def import_terminal_credentials():
             "message": "Terminal credentials imported successfully"
         }
         
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read terminal credentials: {str(e)}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to connect to terminal server: {str(e)}")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=500, detail=f"Terminal server error: {str(e)}")
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"Invalid credentials format: {str(e)}")
     except Exception as e:

@@ -186,6 +186,35 @@ class TerminalServer:
         @self.app.get("/profiles")
         async def list_profiles():
             return {"profiles": self.profile_manager.list_profiles()}
+
+        @self.app.get("/export-credentials")
+        async def export_claude_credentials():
+            """Export Claude credentials for backend integration"""
+            try:
+                credentials_path = Path("/home/claude/.claude/.credentials.json")
+                if not credentials_path.exists():
+                    return {"error": "No credentials found", "has_credentials": False}
+                
+                with open(credentials_path, 'r') as f:
+                    credentials_data = json.load(f)
+                
+                # Extract metadata
+                subscription_type = None
+                user_email = None
+                if "claudeAiOauth" in credentials_data:
+                    oauth_data = credentials_data["claudeAiOauth"]
+                    subscription_type = oauth_data.get("subscriptionType", "unknown")
+                
+                return {
+                    "has_credentials": True,
+                    "credentials": credentials_data,
+                    "subscription_type": subscription_type,
+                    "user_email": user_email,
+                    "created_at": credentials_path.stat().st_mtime
+                }
+            except Exception as e:
+                logger.error(f"❌ Failed to export credentials: {e}")
+                return {"error": str(e), "has_credentials": False}
     
     async def _handle_websocket_connection(self, websocket: WebSocket, session_type: str, session_id: str):
         """Handle new WebSocket connection for terminal session"""
