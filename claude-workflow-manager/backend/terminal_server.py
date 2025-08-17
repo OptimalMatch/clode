@@ -443,14 +443,21 @@ After installation, try: claude --version
         
         logger.info(f"🎧 Starting WebSocket message handler for session {session.session_id}")
         
+        # First, try to send a test message to confirm WebSocket works
+        try:
+            await session.websocket.send_json({"type": "test", "data": "server_ready"})
+            logger.info(f"✅ Sent test message to session {session.session_id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to send test message: {e}")
+        
         message_count = 0
         while True:
             try:
                 logger.info(f"🔄 Waiting for WebSocket message (attempt #{message_count + 1}) for session {session.session_id}")
-                # Add timeout to prevent blocking indefinitely
+                # Try receiving with a shorter timeout for testing
                 message = await asyncio.wait_for(
                     session.websocket.receive_json(),
-                    timeout=30.0  # 30 second timeout
+                    timeout=5.0  # Shorter timeout for testing
                 )
                 message_count += 1
                 logger.info(f"📨 Received WebSocket message for session {session.session_id}: {message}")
@@ -480,7 +487,7 @@ After installation, try: claude --version
                     logger.warning(f"⚠️ Unknown message type from session {session.session_id}: {message['type']}")
                     
             except asyncio.TimeoutError:
-                logger.info(f"⏰ WebSocket receive timeout (30s) for session {session.session_id}")
+                logger.info(f"⏰ WebSocket receive timeout (5s) for session {session.session_id}")
                 # Send ping to keep connection alive
                 try:
                     await session.websocket.send_json({"type": "ping", "data": "keepalive"})

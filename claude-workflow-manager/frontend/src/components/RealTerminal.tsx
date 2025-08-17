@@ -24,7 +24,7 @@ export interface RealTerminalRef {
 }
 
 interface TerminalMessage {
-  type: 'input' | 'output' | 'error' | 'status' | 'oauth_url' | 'auth_complete';
+  type: 'input' | 'output' | 'error' | 'status' | 'oauth_url' | 'auth_complete' | 'test' | 'ping' | 'pong';
   data: string;
   timestamp?: string;
 }
@@ -253,6 +253,18 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
             case 'auth_complete':
               const success = message.data === 'success';
               onAuthenticationComplete?.(success);
+              break;
+
+            case 'test':
+              console.log('🧪 Test message received from backend:', message.data);
+              break;
+
+            case 'ping':
+              console.log('🏓 Ping received from backend, sending pong...');
+              if (ws.current?.readyState === WebSocket.OPEN) {
+                ws.current.send(JSON.stringify({ type: 'pong', data: 'alive' }));
+                console.log('📤 Sent pong to backend');
+              }
               break;
 
             default:
