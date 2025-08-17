@@ -512,34 +512,48 @@ After installation, try: claude --version
                 break
     
     async def _simple_websocket_handler(self, session: TerminalSession):
-        """Simple WebSocket handler using basic FastAPI pattern"""
+        """Integrated WebSocket handler with output monitoring"""
         
-        logger.info(f"🧪 Starting simple WebSocket handler for session {session.session_id}")
+        logger.info(f"🧪 Starting integrated WebSocket handler for session {session.session_id}")
         
         try:
             while True:
-                # Use the most basic receive approach
-                logger.info(f"🔄 Simple handler waiting for message...")
-                data = await session.websocket.receive_text()
-                logger.info(f"📥 Simple handler received: {data}")
+                # Check for terminal output first (non-blocking)
+                if session.child_process and session.child_process.isalive():
+                    try:
+                        output = session.child_process.read_nonblocking(size=1024, timeout=0.01)
+                        if output:
+                            logger.info(f"📤 Terminal output: '{output}' (len={len(output)})")
+                            await self._send_output(session, output)
+                    except Exception:
+                        pass  # No output available, continue
                 
+                # Try to receive WebSocket message with short timeout
                 try:
-                    message = json.loads(data)
-                    logger.info(f"📨 Parsed message: {message}")
+                    data = await asyncio.wait_for(
+                        session.websocket.receive_text(),
+                        timeout=0.1  # Short timeout to allow output checking
+                    )
+                    logger.info(f"📥 Received input: {data}")
                     
-                    if message.get('type') == 'input':
-                        input_data = message.get('data', '')
-                        if session.child_process and session.child_process.isalive():
-                            session.child_process.send(input_data)
-                            logger.info(f"📤 Sent to terminal: '{input_data}'")
-                    
-                except json.JSONDecodeError as e:
-                    logger.error(f"❌ JSON decode error: {e}")
+                    try:
+                        message = json.loads(data)
+                        if message.get('type') == 'input':
+                            input_data = message.get('data', '')
+                            if session.child_process and session.child_process.isalive():
+                                session.child_process.send(input_data)
+                                logger.info(f"📤 Sent to terminal: '{input_data}'")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"❌ JSON decode error: {e}")
+                        
+                except asyncio.TimeoutError:
+                    # No input received, continue to check output
+                    continue
                 
         except WebSocketDisconnect:
-            logger.info(f"🔌 Simple handler: WebSocket disconnected")
+            logger.info(f"🔌 WebSocket disconnected")
         except Exception as e:
-            logger.error(f"❌ Simple handler error: {e}")
+            logger.error(f"❌ Integrated handler error: {e}")
     
     async def _handle_websocket_messages_non_blocking(self, session: TerminalSession):
         """Handle incoming WebSocket messages with non-blocking approach"""
