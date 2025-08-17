@@ -66,7 +66,7 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
     return `${protocol}//${currentHostname}:${wsPort}/ws/terminal/${sessionType}/${sessionId}`;
   }, [sessionId, sessionType]);
 
-  // OAuth URL detection regex patterns
+  // OAuth URL detection regex patterns (ES5 compatible)
   const oauthUrlPatterns = [
     /https:\/\/claude\.ai\/oauth\/authorize\?[^\s\n\r]+/g,
     /https:\/\/console\.anthropic\.com\/[^\s\n\r]+/g,
@@ -79,10 +79,14 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
     oauthUrlPatterns.forEach(pattern => {
       const matches = text.match(pattern);
       if (matches) {
-        urls.push(...matches);
+        for (let i = 0; i < matches.length; i++) {
+          urls.push(matches[i]);
+        }
       }
     });
-    return [...new Set(urls)]; // Remove duplicates
+    
+    // Remove duplicates using filter and indexOf (ES5 compatible)
+    return urls.filter((url, index) => urls.indexOf(url) === index);
   }, []);
 
   // Initialize terminal
