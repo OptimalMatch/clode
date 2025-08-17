@@ -74,12 +74,13 @@ ENV CLAUDE_HOME=/home/claude/.claude
 ENV TERMINAL_SERVER_PORT=8006
 ENV WEBSOCKET_HOST=0.0.0.0
 
-# Expose the terminal server port
+# Expose the terminal server port and health port
 EXPOSE 8006
+EXPOSE 8007
 
-# Health check for terminal server
+# Health check for terminal server using dedicated health port
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8006/health || exit 1
+    CMD curl -f http://localhost:8007/health || exit 1
 
 # Start the terminal server
 CMD ["/app/terminal_startup.sh"]

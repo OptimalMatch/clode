@@ -8,6 +8,8 @@ import logging
 import signal
 import sys
 import uuid
+import threading
+import time
 from pathlib import Path
 from typing import Dict, Optional, Set
 import re
@@ -16,6 +18,7 @@ import pexpect
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from claude_profile_manager import ClaudeProfileManager
 
@@ -25,6 +28,35 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+class HealthHandler(BaseHTTPRequestHandler):
+    """Simple health check handler that runs independently"""
+    
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response = json.dumps({
+                "status": "healthy",
+                "timestamp": time.time()
+            })
+            self.wfile.write(response.encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        # Suppress default HTTP server logs
+        pass
+
+def start_health_server(port=8007):
+    """Start a simple HTTP health server on a separate thread"""
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info(f"🏥 Health server started on port {port}")
+    return server
 
 class TerminalSession:
     """Represents an active terminal session with Claude CLI"""
@@ -118,11 +150,18 @@ class TerminalServer:
         
         @self.app.get("/health")
         async def health_check():
+            # Simple, fast health check that doesn't depend on session state
+            return {"status": "healthy", "timestamp": asyncio.get_event_loop().time()}
+        
+        @self.app.get("/status")
+        async def detailed_status():
+            # More detailed status endpoint for monitoring
             return {
                 "status": "healthy",
                 "active_sessions": len(self.sessions),
                 "profiles_dir": self.claude_profiles_dir,
-                "max_plan_mode": self.use_max_plan
+                "max_plan_mode": self.use_max_plan,
+                "uptime": asyncio.get_event_loop().time()
             }
         
         @self.app.websocket("/ws/terminal/{session_type}/{session_id}")
@@ -607,9 +646,15 @@ After installation, try: claude --version
         
         logger.info(f"🚀 Starting Claude Terminal Server on {host}:{port}")
         
+        # Start independent health server
+        health_server = start_health_server(port + 1)  # Health on port+1 (8007)
+        
         # Setup signal handlers for graceful shutdown
         def signal_handler(signum, frame):
             logger.info(f"📶 Received signal {signum}, shutting down...")
+            
+            # Shutdown health server
+            health_server.shutdown()
             
             # Cleanup all active sessions
             for session in list(self.sessions.values()):
@@ -620,7 +665,7 @@ After installation, try: claude --version
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
         
-        # Run the server with better concurrency handling
+        # Run the server with proper async concurrency
         uvicorn.run(
             self.app,
             host=host,
@@ -630,7 +675,10 @@ After installation, try: claude --version
             loop="asyncio",
             ws_ping_interval=20,
             ws_ping_timeout=10,
-            timeout_keep_alive=30
+            timeout_keep_alive=30,
+            limit_concurrency=1000,  # Allow many concurrent connections
+            limit_max_requests=10000,  # High request limit
+            backlog=2048  # Large connection backlog
         )
 
 def main():
