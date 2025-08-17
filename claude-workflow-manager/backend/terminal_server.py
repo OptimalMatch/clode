@@ -313,7 +313,7 @@ class TerminalServer:
 Try these commands to install Claude CLI:
 
 1. Using npm (recommended):
-   npm install -g @anthropic-ai/claude-cli
+   npm install -g @anthropic-ai/claude-code
 
 2. Using curl:
    curl -fsSL https://claude.ai/cli/install.sh | bash

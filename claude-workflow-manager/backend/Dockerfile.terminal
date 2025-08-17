@@ -27,7 +27,7 @@ ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
 
 # Install Claude CLI using npm (more reliable)
-RUN npm install -g @anthropic-ai/claude-cli || \
+RUN npm install -g @anthropic-ai/claude-code || \
     (curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null || \
      echo "⚠️ Claude CLI installation failed, will install at runtime")
 ENV PATH="/home/claude/.npm-global/bin:/root/.local/bin:/usr/local/bin:$PATH"
