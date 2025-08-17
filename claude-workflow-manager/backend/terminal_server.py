@@ -225,8 +225,8 @@ class TerminalServer:
             # Start terminal process
             await self._start_terminal_process(session)
             
-            # Handle WebSocket messages using the original method for testing
-            await self._handle_websocket_messages(session)
+            # Try a simpler WebSocket handling approach
+            await self._simple_websocket_handler(session)
             
         except WebSocketDisconnect:
             logger.info(f"🔌 WebSocket disconnected: {session_id}")
@@ -509,6 +509,36 @@ After installation, try: claude --version
                 import traceback
                 logger.error(f"❌ Traceback: {traceback.format_exc()}")
                 break
+    
+    async def _simple_websocket_handler(self, session: TerminalSession):
+        """Simple WebSocket handler using basic FastAPI pattern"""
+        
+        logger.info(f"🧪 Starting simple WebSocket handler for session {session.session_id}")
+        
+        try:
+            while True:
+                # Use the most basic receive approach
+                logger.info(f"🔄 Simple handler waiting for message...")
+                data = await session.websocket.receive_text()
+                logger.info(f"📥 Simple handler received: {data}")
+                
+                try:
+                    message = json.loads(data)
+                    logger.info(f"📨 Parsed message: {message}")
+                    
+                    if message.get('type') == 'input':
+                        input_data = message.get('data', '')
+                        if session.child_process and session.child_process.isalive():
+                            session.child_process.send(input_data)
+                            logger.info(f"📤 Sent to terminal: '{input_data}'")
+                    
+                except json.JSONDecodeError as e:
+                    logger.error(f"❌ JSON decode error: {e}")
+                
+        except WebSocketDisconnect:
+            logger.info(f"🔌 Simple handler: WebSocket disconnected")
+        except Exception as e:
+            logger.error(f"❌ Simple handler error: {e}")
     
     async def _handle_websocket_messages_non_blocking(self, session: TerminalSession):
         """Handle incoming WebSocket messages with non-blocking approach"""
