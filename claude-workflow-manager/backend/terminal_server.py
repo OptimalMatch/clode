@@ -454,11 +454,13 @@ After installation, try: claude --version
         while True:
             try:
                 logger.info(f"🔄 Waiting for WebSocket message (attempt #{message_count + 1}) for session {session.session_id}")
-                # Try receiving with a shorter timeout for testing
-                message = await asyncio.wait_for(
-                    session.websocket.receive_json(),
+                # Try receiving with raw receive_text and manual JSON parsing
+                raw_data = await asyncio.wait_for(
+                    session.websocket.receive_text(),
                     timeout=5.0  # Shorter timeout for testing
                 )
+                logger.info(f"📥 Received raw WebSocket data: {raw_data}")
+                message = json.loads(raw_data)
                 message_count += 1
                 logger.info(f"📨 Received WebSocket message for session {session.session_id}: {message}")
                 
