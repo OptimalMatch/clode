@@ -138,40 +138,71 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
 
   const simulateClaudeLoginFlow = () => {
     addTerminalOutput('claude /login', 'command');
-    addTerminalOutput('Starting Claude authentication...', 'info');
+    addTerminalOutput('', 'info');
     
     setTimeout(() => {
-      addTerminalOutput('Please select your authentication method:', 'info');
-      addTerminalOutput('1. Max Plan (Recommended)', 'info');
-      addTerminalOutput('2. API Key', 'info');
-      addTerminalOutput('>', 'command');
+      // Claude welcome banner
+      addTerminalOutput('╭──────────────────────────╮', 'info');
+      addTerminalOutput('│ ✻ Welcome to Claude Code │', 'info');
+      addTerminalOutput('╰──────────────────────────╯', 'info');
+      addTerminalOutput('', 'info');
+      addTerminalOutput('  ██████╗██╗      █████╗ ██╗   ██╗██████╗ ███████╗', 'info');
+      addTerminalOutput(' ██╔════╝██║     ██╔══██╗██║   ██║██╔══██╗██╔════╝', 'info');
+      addTerminalOutput(' ██║     ██║     ███████║██║   ██║██║  ██║█████╗', 'info');
+      addTerminalOutput(' ██║     ██║     ██╔══██║██║   ██║██║  ██║██╔══╝', 'info');
+      addTerminalOutput(' ╚██████╗███████╗██║  ██║╚██████╔╝██████╔╝███████╗', 'info');
+      addTerminalOutput('  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝', 'info');
+      addTerminalOutput('  ██████╗ ██████╗ ██████╗ ███████╗', 'info');
+      addTerminalOutput(' ██╔════╝██╔═══██╗██╔══██╗██╔════╝', 'info');
+      addTerminalOutput(' ██║     ██║   ██║██║  ██║█████╗', 'info');
+      addTerminalOutput(' ██║     ██║   ██║██║  ██║██╔══╝', 'info');
+      addTerminalOutput(' ╚██████╗╚██████╔╝██████╔╝███████╗', 'info');
+      addTerminalOutput('  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝', 'info');
+      addTerminalOutput('', 'info');
       
       setTimeout(() => {
-        addTerminalOutput('1', 'command');
-        addTerminalOutput('You selected: Max Plan', 'success');
+        addTerminalOutput('Claude Code can now be used with your Claude subscription or billed based on API usage through your Console account.', 'info');
         addTerminalOutput('', 'info');
-        addTerminalOutput('Opening authentication in your browser...', 'info');
-        
-        // Generate a mock auth URL
-        const mockAuthUrl = 'https://claude.ai/login?auth_flow=max_plan&session=' + loginSession?.sessionId;
-        setLoginSession(prev => prev ? { ...prev, status: 'waiting_for_url', authUrl: mockAuthUrl } : null);
+        addTerminalOutput('Select login method:', 'info');
+        addTerminalOutput('', 'info');
+        addTerminalOutput('❯ 1. Claude account with subscription', 'success');
+        addTerminalOutput('   Starting at $20/mo for Pro, $100/mo for Max - Best value, predictable pricing', 'info');
+        addTerminalOutput('', 'info');
+        addTerminalOutput('  2. Anthropic Console account', 'info');
+        addTerminalOutput('   API usage billing', 'info');
+        addTerminalOutput('', 'info');
         
         setTimeout(() => {
-          addTerminalOutput(`Please open this URL in your browser:`, 'info');
+          addTerminalOutput('1', 'command');
           addTerminalOutput('', 'info');
-          addTerminalOutput(`🔗 ${mockAuthUrl}`, 'success');
-          addTerminalOutput('', 'info');
-          addTerminalOutput('📋 Steps to complete authentication:', 'info');
-          addTerminalOutput('1. Click "Open Claude Authentication" button below', 'info');
-          addTerminalOutput('2. Complete the OAuth flow in your browser', 'info');
-          addTerminalOutput('3. Copy the generated token', 'info');
-          addTerminalOutput('4. Click "Continue to Token Submission"', 'info');
-          addTerminalOutput('', 'info');
-          addTerminalOutput('⚠️  Keep this window open - you will need it for the next step!', 'success');
-          // Don't auto-advance to step 2 - let user click Continue button
-        }, 1500);
-      }, 2000);
-    }, 1500);
+          
+          setTimeout(() => {
+            // Generate a realistic OAuth URL
+            const clientId = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
+            const codeChallenge = 'FocxJ-yNv4HEOOHtuDU872YVUJDGleGhTgQY-D4Je8k';
+            const state = 'RNOOwDy3GIs06Z9y5OTywmaVRqCZzC7siTfFu_kJw4k';
+            const mockAuthUrl = `https://claude.ai/oauth/authorize?code=true&client_id=${clientId}&response_type=code&redirect_uri=https%3A%2F%2Fconsole.anthropic.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference&code_challenge=${codeChallenge}&code_challenge_method=S256&state=${state}`;
+            
+            setLoginSession(prev => prev ? { ...prev, status: 'waiting_for_url', authUrl: mockAuthUrl } : null);
+            
+            addTerminalOutput('Browser didn\'t open? Use the url below to sign in:', 'info');
+            addTerminalOutput('', 'info');
+            addTerminalOutput(mockAuthUrl, 'success');
+            addTerminalOutput('', 'info');
+            addTerminalOutput('Paste code here if prompted >', 'info');
+            addTerminalOutput('', 'info');
+            addTerminalOutput('📋 Instructions:', 'info');
+            addTerminalOutput('1. Click "Open Claude Authentication" button below', 'info');
+            addTerminalOutput('2. Complete the OAuth flow in the opened browser tab', 'info');
+            addTerminalOutput('3. Copy the authorization code/token from the browser', 'info');
+            addTerminalOutput('4. Click "Continue to Token Submission" to paste it', 'info');
+            addTerminalOutput('', 'info');
+            addTerminalOutput('⚠️  Keep this window open - you will need the URL for authentication!', 'success');
+            
+          }, 1000);
+        }, 2000);
+      }, 1000);
+    }, 500);
   };
 
   const submitAuthToken = async () => {
@@ -202,9 +233,14 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
       }
 
       const data = await response.json();
-      addTerminalOutput('Authentication token processed successfully!', 'success');
-      addTerminalOutput(`Profile created: ${data.profile_id}`, 'success');
-      addTerminalOutput('Claude authentication files saved to database.', 'success');
+      addTerminalOutput('', 'info');
+      addTerminalOutput('Logged in as ' + (userEmail || 'user@example.com'), 'success');
+      addTerminalOutput('', 'info');
+      addTerminalOutput('Login successful. Press Enter to continue…', 'success');
+      addTerminalOutput('', 'info');
+      addTerminalOutput(`✅ Profile "${profileName}" created successfully!`, 'success');
+      addTerminalOutput(`📁 Profile ID: ${data.profile_id}`, 'info');
+      addTerminalOutput('🔒 Authentication credentials saved securely to database.', 'success');
       
       setLoginSession(prev => prev ? { ...prev, status: 'completed' } : null);
       setActiveStep(3);
@@ -339,8 +375,8 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
               {loginSession?.authUrl && (
                 <Box sx={{ mb: 2 }}>
                   <Alert severity="info" sx={{ mb: 2 }}>
-                    <strong>Ready for Authentication:</strong> Click "Open Claude Authentication" to complete the OAuth flow in your browser. 
-                    After completing authentication, copy the token and click "Continue to Token Submission".
+                    <strong>Ready for Authentication:</strong> Click "Open Claude Authentication" to open the OAuth URL in your browser. 
+                    Complete the login flow, copy the authorization code, then click "Continue to Token Submission".
                   </Alert>
                   <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                     <Button
@@ -371,17 +407,19 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
             <StepContent>
               <Box sx={{ mb: 2 }}>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  After completing authentication in the browser, copy the generated token and paste it below.
+                  After completing the OAuth flow in your browser, copy the authorization code from the final page and paste it below. 
+                  This is typically a long string of characters that Claude will use to authenticate your session.
                 </Alert>
                 <TextField
                   fullWidth
-                  label="Authentication Token"
+                  label="Authorization Code"
                   value={authToken}
                   onChange={(e) => setAuthToken(e.target.value)}
-                  placeholder="Paste the authentication token here..."
+                  placeholder="Paste the authorization code here..."
                   multiline
                   rows={3}
                   disabled={isLoading}
+                  helperText="This code is provided by Claude after successful OAuth authentication"
                 />
               </Box>
               <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
