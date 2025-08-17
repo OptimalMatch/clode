@@ -100,6 +100,10 @@ services:
       - ~/.claude:/root/.claude  # Fallback to host Claude auth
     networks:
       - claude-network
+      - default  # Add default network for internet access
+    dns:
+      - 8.8.8.8  # Google DNS
+      - 1.1.1.1  # Cloudflare DNS
     depends_on:
       - mongodb
 
