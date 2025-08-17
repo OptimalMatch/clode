@@ -30,7 +30,7 @@ ENV LC_ALL en_US.UTF-8
 RUN npm install -g @anthropic-ai/claude-cli || \
     (curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null || \
      echo "⚠️ Claude CLI installation failed, will install at runtime")
-ENV PATH="/root/.local/bin:/usr/local/bin:$PATH"
+ENV PATH="/home/claude/.npm-global/bin:/root/.local/bin:/usr/local/bin:$PATH"
 
 # Create app directory
 WORKDIR /app
@@ -58,10 +58,13 @@ RUN useradd -m -s /bin/bash claude && \
     usermod -aG sudo claude && \
     echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# Set up Claude CLI for the claude user
+# Set up npm global directory for claude user
 USER claude
 WORKDIR /home/claude
-RUN mkdir -p /home/claude/.claude
+RUN mkdir -p /home/claude/.npm-global && \
+    mkdir -p /home/claude/.claude && \
+    npm config set prefix '/home/claude/.npm-global' && \
+    echo 'export PATH=/home/claude/.npm-global/bin:$PATH' >> /home/claude/.bashrc
 
 # Copy startup script
 USER root
