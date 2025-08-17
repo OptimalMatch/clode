@@ -108,7 +108,6 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
         background: '#1e1e1e',
         foreground: '#ffffff',
         cursor: '#ffffff',
-        selection: '#3e3e3e',
         black: '#000000',
         red: '#e74c3c',
         green: '#2ecc71',
@@ -452,6 +451,9 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
           },
           '& .xterm-screen': {
             cursor: 'text',
+          },
+          '& .xterm-selection': {
+            backgroundColor: 'rgba(255, 255, 255, 0.3)',
           }
         }}
       />
