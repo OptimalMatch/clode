@@ -610,6 +610,71 @@ async def submit_claude_auth_token(request: ClaudeAuthTokenRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process auth token: {str(e)}")
 
+@app.post(
+    "/api/claude-auth/import-terminal-credentials",
+    summary="Import Terminal Claude Credentials",
+    description="Import Claude credentials from the terminal container into the backend profile system.",
+    tags=["Claude Authentication"]
+)
+async def import_terminal_credentials():
+    """Import Claude credentials from terminal container."""
+    try:
+        import subprocess
+        import json
+        import base64
+        
+        # Read the credentials file from the terminal container
+        result = subprocess.run([
+            "docker", "exec", "claude-workflow-terminal", 
+            "cat", "/home/claude/.claude/.credentials.json"
+        ], capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            raise HTTPException(status_code=404, detail="No Claude credentials found in terminal container")
+        
+        credentials_data = json.loads(result.stdout)
+        
+        # Extract user email from OAuth data if available
+        user_email = None
+        subscription_type = None
+        if "claudeAiOauth" in credentials_data:
+            oauth_data = credentials_data["claudeAiOauth"]
+            subscription_type = oauth_data.get("subscriptionType", "unknown")
+        
+        # Create a profile name based on subscription type
+        profile_name = f"Terminal Login ({subscription_type.title()} Plan)" if subscription_type else "Terminal Login"
+        
+        # Create the profile
+        profile_id = str(uuid.uuid4())
+        
+        profile = ClaudeAuthProfile(
+            id=profile_id,
+            profile_name=profile_name,
+            user_email=user_email,
+            credentials_json=json.dumps(credentials_data),  # Store the full credentials
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            last_used_at=datetime.utcnow(),
+            auth_method="terminal-oauth"
+        )
+        
+        await db.create_claude_auth_profile(profile)
+        
+        return {
+            "success": True, 
+            "profile_id": profile_id, 
+            "profile_name": profile_name,
+            "subscription_type": subscription_type,
+            "message": "Terminal credentials imported successfully"
+        }
+        
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read terminal credentials: {str(e)}")
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Invalid credentials format: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to import credentials: {str(e)}")
+
 @app.delete(
     "/api/claude-auth/profiles/{profile_id}",
     summary="Delete Claude Auth Profile",
