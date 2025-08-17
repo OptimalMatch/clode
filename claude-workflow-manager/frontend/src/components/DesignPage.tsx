@@ -569,6 +569,7 @@ const DesignPage: React.FC = () => {
             selectedWorkflowId,
             undefined,
             undefined,
+            'claude-code',
             executionContext.sequenceNumber,
             executionContext.sequenceNumber
           );
@@ -584,6 +585,7 @@ const DesignPage: React.FC = () => {
             selectedWorkflowId,
             undefined,
             undefined,
+            'claude-code',
             executionContext.sequenceNumber,
             undefined
           );

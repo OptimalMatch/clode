@@ -153,7 +153,7 @@ const PromptFileManager: React.FC<PromptFileManagerProps> = ({
       
       // Step 1: Spawn the instance
       console.log('🚀 Spawning instance for prompt:', repoPrompt.filename);
-      const spawnResult = await instanceApi.spawn(workflowId, promptId, workflow.git_repo);
+          const spawnResult = await instanceApi.spawn(workflowId, promptId, workflow.git_repo, 'claude-code');
       const instanceId = spawnResult.instance_id;
       
       // Step 2: Wait briefly for instance to be ready, then send execution prompt
@@ -186,7 +186,7 @@ const PromptFileManager: React.FC<PromptFileManagerProps> = ({
           }
           
           // Spawn instance
-          const spawnResult = await instanceApi.spawn(workflowId, promptId, workflow.git_repo);
+      const spawnResult = await instanceApi.spawn(workflowId, promptId, workflow.git_repo, 'claude-code');
           const instanceId = spawnResult.instance_id;
           
           // Wait briefly for instance to be ready, then send execution prompt
