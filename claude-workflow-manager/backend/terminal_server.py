@@ -354,8 +354,9 @@ After installation, try: claude --version
                 # For bash sessions, send a welcome prompt
                 await self._send_output(session, "Terminal ready. Type 'claude --version' to check if Claude CLI is available.\n")
             
-            # Start monitoring process output
-            asyncio.create_task(self._monitor_process_output(session))
+            # Temporarily disable output monitoring to test WebSocket receive
+            # asyncio.create_task(self._monitor_process_output(session))
+            logger.info("⚠️ Output monitoring disabled for testing")
             
         except Exception as e:
             logger.error(f"❌ Failed to start terminal process for {session.session_id}: {e}")
