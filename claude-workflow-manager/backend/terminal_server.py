@@ -401,9 +401,12 @@ After installation, try: claude --version
     async def _handle_websocket_messages(self, session: TerminalSession):
         """Handle incoming WebSocket messages from frontend"""
         
+        logger.info(f"🎧 Starting WebSocket message handler for session {session.session_id}")
+        
         while True:
             try:
                 message = await session.websocket.receive_json()
+                logger.info(f"📨 Received WebSocket message for session {session.session_id}: {message}")
                 
                 if message['type'] == 'input':
                     # Send input to terminal process
@@ -445,7 +448,7 @@ After installation, try: claude --version
                     "timestamp": str(asyncio.get_event_loop().time())
                 }
                 await session.websocket.send_json(message)
-                logger.debug(f"📤 Sent output to session {session.session_id}: {data[:50]}...")
+                logger.info(f"📤 Sent output to WebSocket for session {session.session_id}: '{data[:50]}...' (len={len(data)})")
             except Exception as e:
                 logger.error(f"❌ Failed to send output for session {session.session_id}: {e}")
         else:
