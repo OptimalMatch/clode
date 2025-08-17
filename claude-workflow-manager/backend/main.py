@@ -31,10 +31,15 @@ from models import (
     ClaudeLoginSessionResponse, ClaudeAuthTokenRequest
 )
 from claude_manager import ClaudeCodeManager
-# OpenCode integration temporarily disabled due to pydantic compatibility issues
-# TODO: Re-enable when opencode-ai package is updated for Pydantic 2.x compatibility
-OPENCODE_AVAILABLE = False
-print("⚠️ OpenCode integration temporarily disabled")
+# OpenCode HTTP integration - using direct REST API calls
+try:
+    from opencode_http_manager import OpenCodeHTTPManager
+    OPENCODE_AVAILABLE = True
+    print("✅ OpenCode HTTP integration available")
+except ImportError as e:
+    print(f"⚠️ OpenCode HTTP integration not available: {e}")
+    OpenCodeHTTPManager = None
+    OPENCODE_AVAILABLE = False
 from database import Database
 from prompt_file_manager import PromptFileManager
 from agent_discovery import AgentDiscovery
@@ -355,7 +360,7 @@ db = Database()
 
 # Initialize both managers - users can choose which one to use
 claude_manager = ClaudeCodeManager(db)
-opencode_manager = None  # Temporarily disabled
+opencode_manager = OpenCodeHTTPManager(db) if OPENCODE_AVAILABLE else None
 
 # Configuration for which manager to use (can be set via environment variable)
 USE_OPENCODE = os.getenv("USE_OPENCODE", "false").lower() == "true"
