@@ -40,6 +40,7 @@ class TerminalSession:
         self.oauth_urls: Set[str] = set()
         self.is_authenticated = False
         self.last_output_buffer = ""
+        self.message_task: Optional[asyncio.Task] = None
         
         # OAuth URL detection patterns
         self.oauth_patterns = [
@@ -185,22 +186,31 @@ class TerminalServer:
             # Start terminal process
             await self._start_terminal_process(session)
             
-            # Create tasks for concurrent WebSocket message handling and output monitoring
+            # Start WebSocket message handling as a background task (non-blocking)
             message_task = asyncio.create_task(self._handle_websocket_messages(session))
             
-            # Wait for the message task to complete (disconnection or error)
+            # Store the task for cleanup but don't await it here
+            session.message_task = message_task
+            
+            # Set up a callback to handle task completion
+            def task_completed(task):
+                try:
+                    task.result()  # This will raise any exception that occurred
+                except asyncio.CancelledError:
+                    logger.info(f"🚫 WebSocket message task cancelled for session {session_id}")
+                except Exception as e:
+                    logger.error(f"❌ WebSocket message task failed for session {session_id}: {e}")
+            
+            message_task.add_done_callback(task_completed)
+            
+            # Return immediately - the WebSocket connection is now handled in the background
+            logger.info(f"🚀 WebSocket connection handler completed for session {session_id} (background task running)")
+            
+            # Keep the connection alive by waiting for disconnection
             try:
-                await message_task
-            except asyncio.CancelledError:
-                logger.info(f"🚫 WebSocket message task cancelled for session {session_id}")
-            finally:
-                # Ensure the task is cancelled if still running
-                if not message_task.done():
-                    message_task.cancel()
-                    try:
-                        await message_task
-                    except asyncio.CancelledError:
-                        pass
+                await session.websocket.wait_for_close()
+            except Exception:
+                pass  # Connection closed
             
         except WebSocketDisconnect:
             logger.info(f"🔌 WebSocket disconnected: {session_id}")
@@ -534,6 +544,15 @@ After installation, try: claude --version
         """Clean up terminal session resources"""
         
         logger.info(f"🧹 Cleaning up session {session.session_id}")
+        
+        # Cancel message handling task
+        if hasattr(session, 'message_task') and session.message_task and not session.message_task.done():
+            try:
+                session.message_task.cancel()
+                await asyncio.sleep(0.1)  # Give it a moment to cancel
+                logger.info(f"🚫 Cancelled message task for session {session.session_id}")
+            except Exception as e:
+                logger.error(f"❌ Failed to cancel message task for session {session.session_id}: {e}")
         
         # Terminate child process
         if session.child_process and session.child_process.isalive():
