@@ -185,8 +185,22 @@ class TerminalServer:
             # Start terminal process
             await self._start_terminal_process(session)
             
-            # Handle WebSocket messages
-            await self._handle_websocket_messages(session)
+            # Create tasks for concurrent WebSocket message handling and output monitoring
+            message_task = asyncio.create_task(self._handle_websocket_messages(session))
+            
+            # Wait for the message task to complete (disconnection or error)
+            try:
+                await message_task
+            except asyncio.CancelledError:
+                logger.info(f"🚫 WebSocket message task cancelled for session {session_id}")
+            finally:
+                # Ensure the task is cancelled if still running
+                if not message_task.done():
+                    message_task.cancel()
+                    try:
+                        await message_task
+                    except asyncio.CancelledError:
+                        pass
             
         except WebSocketDisconnect:
             logger.info(f"🔌 WebSocket disconnected: {session_id}")
@@ -405,7 +419,11 @@ After installation, try: claude --version
         
         while True:
             try:
-                message = await session.websocket.receive_json()
+                # Add timeout to prevent blocking indefinitely
+                message = await asyncio.wait_for(
+                    session.websocket.receive_json(),
+                    timeout=30.0  # 30 second timeout
+                )
                 logger.info(f"📨 Received WebSocket message for session {session.session_id}: {message}")
                 
                 if message['type'] == 'input':
@@ -432,7 +450,17 @@ After installation, try: claude --version
                 else:
                     logger.warning(f"⚠️ Unknown message type from session {session.session_id}: {message['type']}")
                     
+            except asyncio.TimeoutError:
+                # Send ping to keep connection alive
+                try:
+                    await session.websocket.send_json({"type": "ping", "data": "keepalive"})
+                except Exception:
+                    logger.warning(f"⚠️ Failed to send keepalive ping to session {session.session_id}")
+                    break
             except WebSocketDisconnect:
+                break
+            except asyncio.CancelledError:
+                logger.info(f"🚫 WebSocket message handling cancelled for session {session.session_id}")
                 break
             except Exception as e:
                 logger.error(f"❌ Message handling error for session {session.session_id}: {e}")
@@ -541,13 +569,17 @@ After installation, try: claude --version
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
         
-        # Run the server
+        # Run the server with better concurrency handling
         uvicorn.run(
             self.app,
             host=host,
             port=port,
             log_level="info",
-            access_log=True
+            access_log=True,
+            loop="asyncio",
+            ws_ping_interval=20,
+            ws_ping_timeout=10,
+            timeout_keep_alive=30
         )
 
 def main():
