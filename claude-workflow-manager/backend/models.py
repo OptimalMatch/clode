@@ -203,6 +203,7 @@ class SpawnInstanceRequest(BaseModel):
     prompt_id: Optional[str] = None
     git_repo: Optional[str] = None
     claude_profile_id: Optional[str] = None  # Optional Claude auth profile to use
+    agent_type: Optional[str] = "claude-code"  # Type of agent to spawn (claude-code or opencode)
     start_sequence: Optional[int] = None  # Which sequence to start from (None = start from beginning)
     end_sequence: Optional[int] = None    # Which sequence to end at (None = run to end)
 

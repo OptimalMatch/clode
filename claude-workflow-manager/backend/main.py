@@ -859,6 +859,7 @@ async def spawn_instance(request: SpawnInstanceRequest):
         workflow_id = request.workflow_id
         prompt_id = request.prompt_id
         git_repo = request.git_repo
+        agent_type = request.agent_type or "claude-code"
         start_sequence = request.start_sequence
         end_sequence = request.end_sequence
         
@@ -874,6 +875,16 @@ async def spawn_instance(request: SpawnInstanceRequest):
         # Ensure we have a valid git_repo
         if not git_repo:
             raise HTTPException(status_code=400, detail="No git repository specified in request or workflow")
+            
+        # Select the appropriate manager based on agent_type
+        if agent_type == "opencode":
+            if not opencode_manager:
+                raise HTTPException(status_code=400, detail="OpenCode manager is not available")
+            selected_manager = opencode_manager
+            print(f"🤖 SPAWN: Using OpenCode manager for instance")
+        else:
+            selected_manager = claude_manager
+            print(f"🤖 SPAWN: Using Claude Code manager for instance")
             
         instance_id = str(uuid.uuid4())
         
@@ -894,7 +905,7 @@ async def spawn_instance(request: SpawnInstanceRequest):
         )
         
         await db.create_instance(instance)
-        await current_manager.spawn_instance(instance)
+        await selected_manager.spawn_instance(instance)
         
         return {"instance_id": instance_id}
         
