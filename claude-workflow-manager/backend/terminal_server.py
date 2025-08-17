@@ -443,13 +443,16 @@ After installation, try: claude --version
         
         logger.info(f"🎧 Starting WebSocket message handler for session {session.session_id}")
         
+        message_count = 0
         while True:
             try:
+                logger.info(f"🔄 Waiting for WebSocket message (attempt #{message_count + 1}) for session {session.session_id}")
                 # Add timeout to prevent blocking indefinitely
                 message = await asyncio.wait_for(
                     session.websocket.receive_json(),
                     timeout=30.0  # 30 second timeout
                 )
+                message_count += 1
                 logger.info(f"📨 Received WebSocket message for session {session.session_id}: {message}")
                 
                 if message['type'] == 'input':
@@ -477,19 +480,25 @@ After installation, try: claude --version
                     logger.warning(f"⚠️ Unknown message type from session {session.session_id}: {message['type']}")
                     
             except asyncio.TimeoutError:
+                logger.info(f"⏰ WebSocket receive timeout (30s) for session {session.session_id}")
                 # Send ping to keep connection alive
                 try:
                     await session.websocket.send_json({"type": "ping", "data": "keepalive"})
-                except Exception:
-                    logger.warning(f"⚠️ Failed to send keepalive ping to session {session.session_id}")
+                    logger.info(f"📡 Sent keepalive ping to session {session.session_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to send keepalive ping to session {session.session_id}: {e}")
                     break
             except WebSocketDisconnect:
+                logger.info(f"🔌 WebSocket disconnected during message handling for session {session.session_id}")
                 break
             except asyncio.CancelledError:
                 logger.info(f"🚫 WebSocket message handling cancelled for session {session.session_id}")
                 break
             except Exception as e:
                 logger.error(f"❌ Message handling error for session {session.session_id}: {e}")
+                logger.error(f"❌ Exception type: {type(e)}")
+                import traceback
+                logger.error(f"❌ Traceback: {traceback.format_exc()}")
                 break
     
     async def _handle_websocket_messages_non_blocking(self, session: TerminalSession):
