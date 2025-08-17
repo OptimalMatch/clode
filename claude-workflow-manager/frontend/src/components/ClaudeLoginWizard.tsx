@@ -199,6 +199,12 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
     setError(null);
     setRealOAuthUrl(null);
     setTerminalConnected(false);
+    
+    // Close terminal if it exists
+    if (terminalRef.current) {
+      console.log('🧹 Cleaning up terminal on wizard close');
+    }
+    
     onClose();
   };
 

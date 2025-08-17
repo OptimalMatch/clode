@@ -182,7 +182,8 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
-        console.log('✅ WebSocket connected');
+        console.log('✅ WebSocket connected successfully');
+        console.log(`🔗 WebSocket readyState: ${ws.current?.readyState} (1=OPEN)`);
         setIsConnected(true);
         setConnectionError(null);
         onConnectionChange?.(true);
@@ -193,17 +194,9 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
           terminal.current.writeln('');
         }
 
-        // Auto-start login command for login sessions
-        if (sessionType === 'login') {
-          setTimeout(() => {
-            const loginMessage: TerminalMessage = {
-              type: 'input',
-              data: '/login\r',
-              timestamp: new Date().toISOString()
-            };
-            ws.current?.send(JSON.stringify(loginMessage));
-          }, 1000);
-        }
+        // For login sessions, the backend will handle the /login command automatically
+        // No need to send it from frontend
+        console.log(`🎯 ${sessionType} session connected, waiting for server response...`);
       };
 
       ws.current.onmessage = (event) => {
@@ -307,6 +300,8 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
 
   // Handle terminal input
   const handleTerminalInput = useCallback((data: string) => {
+    console.log(`🎹 Terminal input received: "${data}" (WebSocket state: ${ws.current?.readyState})`);
+    
     if (ws.current?.readyState === WebSocket.OPEN) {
       const message: TerminalMessage = {
         type: 'input',
@@ -314,8 +309,9 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
         timestamp: new Date().toISOString()
       };
       ws.current.send(JSON.stringify(message));
+      console.log(`📤 Sent input to terminal: ${data.length > 50 ? data.substring(0, 50) + '...' : data}`);
     } else {
-      console.warn('🔌 Cannot send input: WebSocket not connected');
+      console.warn(`🔌 Cannot send input: WebSocket not connected (state: ${ws.current?.readyState})`);
       if (terminal.current) {
         terminal.current.writeln('\x1b[31m❌ Not connected to server\x1b[0m');
       }
@@ -349,13 +345,19 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
     };
   }, [initializeTerminal, connectWebSocket, handleResize]);
 
-  // Setup terminal input handler
+  // Setup terminal input handler (only after WebSocket is connected)
   useEffect(() => {
-    if (terminal.current) {
+    if (terminal.current && isConnected) {
+      console.log('🎹 Setting up terminal input handler (WebSocket connected)');
       const disposable = terminal.current.onData(handleTerminalInput);
-      return () => disposable.dispose();
+      return () => {
+        console.log('🎹 Disposing terminal input handler');
+        disposable.dispose();
+      };
+    } else if (terminal.current && !isConnected) {
+      console.log('⏳ Waiting for WebSocket connection before setting up input handler');
     }
-  }, [handleTerminalInput]);
+  }, [handleTerminalInput, isConnected]);
 
   // Cleanup on unmount
   useEffect(() => {
