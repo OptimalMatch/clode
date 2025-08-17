@@ -315,8 +315,8 @@ const InstancesPage: React.FC = () => {
               <MenuItem value="claude-code">
                 🤖 Claude Code - Complete AI coding assistant with file operations
               </MenuItem>
-              <MenuItem value="opencode">
-                ⚡ OpenCode - Direct AI-powered terminal execution
+              <MenuItem value="opencode" disabled>
+                ⚡ OpenCode - Temporarily unavailable (Pydantic compatibility issue)
               </MenuItem>
             </Select>
           </FormControl>
