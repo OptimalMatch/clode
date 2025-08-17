@@ -159,9 +159,21 @@ class TerminalServer:
         
         # Create or get existing session
         if session_id in self.sessions:
+            logger.info(f"🔄 Reusing existing session: {session_id}")
             session = self.sessions[session_id]
+            
+            # Close old WebSocket if it exists
+            if session.websocket:
+                try:
+                    await session.websocket.close()
+                    logger.info(f"🔌 Closed previous WebSocket for session {session_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error closing previous WebSocket: {e}")
+            
+            # Update with new WebSocket
             session.websocket = websocket
         else:
+            logger.info(f"🆕 Creating new session: {session_id}")
             session = TerminalSession(session_id, session_type, profile_id)
             session.websocket = websocket
             self.sessions[session_id] = session
@@ -298,6 +310,9 @@ After installation, try: claude --version
             if initial_input:
                 session.child_process.send(initial_input)
                 await self._send_status(session, "Executing /login command...")
+            else:
+                # For bash sessions, send a welcome prompt
+                await self._send_output(session, "Terminal ready. Type 'claude --version' to check if Claude CLI is available.\n")
             
             # Start monitoring process output
             asyncio.create_task(self._monitor_process_output(session))
@@ -416,13 +431,17 @@ After installation, try: claude --version
         """Send terminal output to WebSocket"""
         if session.websocket:
             try:
-                await session.websocket.send_json({
+                message = {
                     "type": "output",
                     "data": data,
                     "timestamp": str(asyncio.get_event_loop().time())
-                })
+                }
+                await session.websocket.send_json(message)
+                logger.debug(f"📤 Sent output to session {session.session_id}: {data[:50]}...")
             except Exception as e:
                 logger.error(f"❌ Failed to send output for session {session.session_id}: {e}")
+        else:
+            logger.warning(f"⚠️ No WebSocket connection for session {session.session_id}")
     
     async def _send_error(self, session: TerminalSession, error: str):
         """Send error message to WebSocket"""

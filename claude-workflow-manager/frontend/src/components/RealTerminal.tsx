@@ -45,6 +45,7 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [oAuthUrl, setOAuthUrl] = useState<string | null>(null);
+  const [shouldReconnect, setShouldReconnect] = useState(true);
 
   // Get WebSocket URL based on environment
   const getWebSocketUrl = useCallback(() => {
@@ -166,6 +167,13 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
       console.log('🔗 WebSocket already connected');
       return;
     }
+    
+    // Close existing connection if any
+    if (ws.current) {
+      console.log('🔌 Closing existing WebSocket connection');
+      ws.current.close();
+      ws.current = null;
+    }
 
     const wsUrl = getWebSocketUrl();
     console.log('🔗 Connecting to WebSocket:', wsUrl);
@@ -273,9 +281,10 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
         if (terminal.current && !event.wasClean) {
           terminal.current.writeln('\x1b[31m❌ Connection lost. Attempting to reconnect...\x1b[0m');
           
-          // Auto-reconnect after 3 seconds
+          // Auto-reconnect after 3 seconds if we should reconnect
           setTimeout(() => {
-            if (!isConnected) {
+            if (!isConnected && shouldReconnect) {
+              console.log('🔄 Attempting auto-reconnect...');
               connectWebSocket();
             }
           }, 3000);
@@ -351,11 +360,16 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      console.log('🧹 Cleaning up RealTerminal component');
+      setShouldReconnect(false); // Prevent reconnects during cleanup
+      
       if (ws.current) {
         ws.current.close();
+        ws.current = null;
       }
       if (terminal.current) {
         terminal.current.dispose();
+        terminal.current = null;
       }
     };
   }, []);
