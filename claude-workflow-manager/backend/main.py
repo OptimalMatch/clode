@@ -31,6 +31,7 @@ from models import (
     ClaudeLoginSessionResponse, ClaudeAuthTokenRequest
 )
 from claude_manager import ClaudeCodeManager
+from opencode_manager import OpenCodeManager
 from database import Database
 from prompt_file_manager import PromptFileManager
 from agent_discovery import AgentDiscovery
@@ -348,7 +349,17 @@ async def lifespan(app: FastAPI):
     print("✅ APPLICATION: Database disconnected")
 
 db = Database()
+
+# Initialize both managers - users can choose which one to use
 claude_manager = ClaudeCodeManager(db)
+opencode_manager = OpenCodeManager(db)
+
+# Configuration for which manager to use (can be set via environment variable)
+USE_OPENCODE = os.getenv("USE_OPENCODE", "false").lower() == "true"
+current_manager = opencode_manager if USE_OPENCODE else claude_manager
+
+print(f"🤖 Using {'OpenCode' if USE_OPENCODE else 'Claude Code'} as the AI manager")
+
 agent_discovery = AgentDiscovery(db)
 
 app = FastAPI(
@@ -484,7 +495,7 @@ async def health_check():
     try:
         if claude_manager is not None:
             health_status["services"]["claude_manager"] = "healthy"
-            health_status["active_instances"] = len(claude_manager.instances)
+            health_status["active_instances"] = len(current_manager.instances)
         else:
             health_status["services"]["claude_manager"] = "not_initialized"
             # Don't mark as degraded - Claude manager is optional for basic health
@@ -698,7 +709,7 @@ async def delete_claude_auth_profile(profile_id: str):
 async def list_profile_files(profile_id: str):
     """List files stored in a Claude auth profile."""
     try:
-        files = await claude_manager.claude_file_manager.list_profile_files(profile_id)
+        files = await current_manager.claude_file_manager.list_profile_files(profile_id)
         return files
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list profile files: {str(e)}")
@@ -874,7 +885,7 @@ async def spawn_instance(request: SpawnInstanceRequest):
         )
         
         await db.create_instance(instance)
-        await claude_manager.spawn_instance(instance)
+        await current_manager.spawn_instance(instance)
         
         return {"instance_id": instance_id}
         
@@ -903,7 +914,7 @@ async def interrupt_instance(instance_id: str, data: dict):
     feedback = data.get("feedback", "")
     force = data.get("force", False)
     graceful = data.get("graceful", False)
-    success = await claude_manager.interrupt_instance(instance_id, feedback, force, graceful)
+    success = await current_manager.interrupt_instance(instance_id, feedback, force, graceful)
     if not success:
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
@@ -911,7 +922,7 @@ async def interrupt_instance(instance_id: str, data: dict):
 @app.post("/api/instances/{instance_id}/session_interrupt")
 async def session_interrupt_instance(instance_id: str, data: dict):
     feedback = data.get("feedback", "")
-    success = await claude_manager.session_interrupt_instance(instance_id, feedback)
+    success = await current_manager.session_interrupt_instance(instance_id, feedback)
     if not success:
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
@@ -920,7 +931,7 @@ async def session_interrupt_instance(instance_id: str, data: dict):
 @app.post("/api/instances/{instance_id}/graceful_interrupt")
 async def graceful_interrupt_instance(instance_id: str, data: dict):
     feedback = data.get("feedback", "")
-    success = await claude_manager.session_interrupt_instance(instance_id, feedback)
+    success = await current_manager.session_interrupt_instance(instance_id, feedback)
     if not success:
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
@@ -929,7 +940,7 @@ async def graceful_interrupt_instance(instance_id: str, data: dict):
 async def debug_pids():
     """Debug endpoint to show all tracked PIDs"""
     result = {}
-    for instance_id, processes in claude_manager.running_processes.items():
+    for instance_id, processes in current_manager.running_processes.items():
         active_pids = []
         finished_pids = []
         for p in processes:
@@ -945,11 +956,11 @@ async def debug_pids():
         }
     
     # Also log to console for debugging
-    claude_manager._log_all_tracked_pids()
+    current_manager._log_all_tracked_pids()
     
     return {
         "tracked_processes": result,
-        "total_instances": len(claude_manager.running_processes)
+        "total_instances": len(current_manager.running_processes)
     }
 
 @app.post("/api/instances/{instance_id}/archive")
@@ -978,7 +989,7 @@ async def delete_instance(instance_id: str):
         raise HTTPException(status_code=404, detail="Instance not found")
     
     # Also clean up any active instance in the claude manager
-    await claude_manager.cleanup_instance(instance_id)
+    await current_manager.cleanup_instance(instance_id)
     
     return {"success": True, "message": f"Instance {instance_id} permanently deleted"}
 
@@ -1016,7 +1027,7 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
     print(f"✅ WebSocket accepted for instance: {instance_id}")
     
     try:
-        await claude_manager.connect_websocket(instance_id, websocket)
+        await current_manager.connect_websocket(instance_id, websocket)
         print(f"🔗 ClaudeManager connected for instance: {instance_id}")
         
         message_queue = []
@@ -1068,7 +1079,7 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
                     print(f"🔍 MAIN: About to call send_input for instance {instance_id}")
                     print(f"🔍 MAIN: Input content length: {len(message['content'])} characters")
                     try:
-                        await claude_manager.send_input(instance_id, message["content"])
+                        await current_manager.send_input(instance_id, message["content"])
                         print(f"✅ MAIN: send_input completed successfully")
                     except Exception as e:
                         print(f"❌ MAIN: send_input failed with exception: {str(e)}")
@@ -1078,16 +1089,16 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
                 elif message_type == "interrupt":
                     force = message.get("force", False)
                     graceful = message.get("graceful", False)
-                    await claude_manager.interrupt_instance(instance_id, message.get("feedback", ""), force, graceful)
+                    await current_manager.interrupt_instance(instance_id, message.get("feedback", ""), force, graceful)
                 elif message_type == "graceful_interrupt":
                     feedback = message.get("feedback", "")
-                    await claude_manager.session_interrupt_instance(instance_id, feedback)
+                    await current_manager.session_interrupt_instance(instance_id, feedback)
                 elif message_type == "session_interrupt":
                     feedback = message.get("feedback", "")
                     print(f"🌐 WEBSOCKET: Received session_interrupt for instance {instance_id}")
-                    await claude_manager.session_interrupt_instance(instance_id, feedback)
+                    await current_manager.session_interrupt_instance(instance_id, feedback)
                 elif message_type == "resume":
-                    await claude_manager.resume_instance(instance_id)
+                    await current_manager.resume_instance(instance_id)
                 elif message_type == "ping":
                     # Respond to ping with pong
                     pong_data = {
@@ -1116,7 +1127,7 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
     except WebSocketDisconnect:
         print(f"🔌 WebSocket disconnected for instance: {instance_id}")
         try:
-            await claude_manager.disconnect_websocket(instance_id)
+            await current_manager.disconnect_websocket(instance_id)
         except Exception as cleanup_error:
             print(f"❌ Error during WebSocket cleanup for {instance_id}: {cleanup_error}")
     except Exception as e:
@@ -1124,14 +1135,14 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
         import traceback
         print(f"📍 WebSocket error traceback: {traceback.format_exc()}")
         try:
-            await claude_manager.disconnect_websocket(instance_id)
+            await current_manager.disconnect_websocket(instance_id)
         except Exception as cleanup_error:
             print(f"❌ Error during WebSocket cleanup for {instance_id}: {cleanup_error}")
 
 @app.post("/api/instances/{instance_id}/execute")
 async def execute_prompt(instance_id: str, data: dict):
     prompt_content = data.get("prompt")
-    success = await claude_manager.execute_prompt(instance_id, prompt_content)
+    success = await current_manager.execute_prompt(instance_id, prompt_content)
     if not success:
         raise HTTPException(status_code=404, detail="Instance not found")
     return {"success": True}
