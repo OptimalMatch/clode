@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, Box } from '@mui/material';
-import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle } from '@mui/icons-material';
+import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, Box, IconButton, Tooltip } from '@mui/material';
+import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle, Menu, ChevronLeft } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import clodeBlueLogo from '../assets/clode-blue.png';
 import clodeLogo from '../assets/clode.png';
@@ -11,6 +11,7 @@ import clodeSpriteSheetGreen from '../assets/clode-sprite-sheet-green.png';
 import clodeSpriteSheetOrange from '../assets/clode-sprite-sheet-orange.png';
 
 const drawerWidth = 240;
+const drawerCollapsedWidth = 64;
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -19,6 +20,9 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Navigation collapse state
+  const [isNavCollapsed, setIsNavCollapsed] = useState(false);
 
   // Logo cycling animation with disappearing intervals (skip white logo to prevent invisibility)
   const logoSequence = [clodeBlueLogo, clodeLogo, clodeYellowLogo]; // Removed clodeWhiteLogo
@@ -95,6 +99,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <Box sx={{ display: 'flex' }}>
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
+          <IconButton
+            color="inherit"
+            aria-label="toggle navigation"
+            onClick={() => setIsNavCollapsed(!isNavCollapsed)}
+            edge="start"
+            sx={{ mr: 2 }}
+          >
+            {isNavCollapsed ? <Menu /> : <ChevronLeft />}
+          </IconButton>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {/* Character animation - either static logo or running sprite */}
             <Box sx={{ 
@@ -148,11 +161,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <Drawer
         variant="permanent"
         sx={{
-          width: drawerWidth,
+          width: isNavCollapsed ? drawerCollapsedWidth : drawerWidth,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
-            width: drawerWidth,
+            width: isNavCollapsed ? drawerCollapsedWidth : drawerWidth,
             boxSizing: 'border-box',
+            transition: 'width 0.3s ease-in-out',
+            overflowX: 'hidden',
           },
         }}
       >
@@ -160,20 +175,47 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <Box sx={{ overflow: 'auto' }}>
           <List>
             {menuItems.map((item) => (
-              <ListItem
-                button
+              <Tooltip
                 key={item.text}
-                onClick={() => navigate(item.path)}
-                selected={location.pathname === item.path}
+                title={isNavCollapsed ? item.text : ''}
+                placement="right"
+                arrow
               >
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
-              </ListItem>
+                <ListItem
+                  button
+                  onClick={() => navigate(item.path)}
+                  selected={location.pathname === item.path}
+                  sx={{
+                    minHeight: 48,
+                    justifyContent: isNavCollapsed ? 'center' : 'initial',
+                    px: 2.5,
+                  }}
+                >
+                  <ListItemIcon
+                    sx={{
+                      minWidth: 0,
+                      mr: isNavCollapsed ? 0 : 3,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {item.icon}
+                  </ListItemIcon>
+                  {!isNavCollapsed && <ListItemText primary={item.text} />}
+                </ListItem>
+              </Tooltip>
             ))}
           </List>
         </Box>
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box 
+        component="main" 
+        sx={{ 
+          flexGrow: 1, 
+          p: 3,
+          marginLeft: `${isNavCollapsed ? drawerCollapsedWidth : drawerWidth}px`,
+          transition: 'margin-left 0.3s ease-in-out',
+        }}
+      >
         <Toolbar />
         {children}
       </Box>
