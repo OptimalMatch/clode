@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
@@ -16,13 +16,20 @@ interface RealTerminalProps {
   className?: string;
 }
 
+export interface RealTerminalRef {
+  sendCommand: (command: string) => void;
+  clearTerminal: () => void;
+  isConnected: boolean;
+  terminal: Terminal | null;
+}
+
 interface TerminalMessage {
   type: 'input' | 'output' | 'error' | 'status' | 'oauth_url' | 'auth_complete';
   data: string;
   timestamp?: string;
 }
 
-const RealTerminal: React.FC<RealTerminalProps> = ({
+const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
   sessionId,
   sessionType,
   onConnectionChange,
@@ -30,7 +37,7 @@ const RealTerminal: React.FC<RealTerminalProps> = ({
   onAuthenticationComplete,
   height = '400px',
   className = ''
-}) => {
+}, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const fitAddon = useRef<FitAddon | null>(null);
@@ -362,12 +369,12 @@ const RealTerminal: React.FC<RealTerminalProps> = ({
   }, []);
 
   // Expose methods to parent via ref
-  React.useImperativeHandle((ref: any) => ({
+  useImperativeHandle(ref, () => ({
     sendCommand,
     clearTerminal,
     isConnected,
     terminal: terminal.current
-  }));
+  }), [sendCommand, clearTerminal, isConnected]);
 
   return (
     <Box className={className}>
@@ -446,6 +453,9 @@ const RealTerminal: React.FC<RealTerminalProps> = ({
       />
     </Box>
   );
-};
+});
+
+// Add display name for debugging
+RealTerminal.displayName = 'RealTerminal';
 
 export default RealTerminal;

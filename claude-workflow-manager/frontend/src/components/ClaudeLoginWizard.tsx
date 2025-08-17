@@ -19,7 +19,7 @@ import {
   Link,
 } from '@mui/material';
 import { Terminal, Login, AccountCircle, CheckCircle } from '@mui/icons-material';
-import RealTerminal from './RealTerminal';
+import RealTerminal, { RealTerminalRef } from './RealTerminal';
 
 interface ClaudeLoginWizardProps {
   open: boolean;
@@ -47,7 +47,7 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
   const [realOAuthUrl, setRealOAuthUrl] = useState<string | null>(null);
   const [terminalConnected, setTerminalConnected] = useState(false);
   
-  const terminalRef = useRef<any>(null);
+  const terminalRef = useRef<RealTerminalRef>(null);
 
   const getApiUrl = () => {
     const currentHostname = window.location.hostname;
