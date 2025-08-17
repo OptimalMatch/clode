@@ -186,31 +186,8 @@ class TerminalServer:
             # Start terminal process
             await self._start_terminal_process(session)
             
-            # Start WebSocket message handling as a background task (non-blocking)
-            message_task = asyncio.create_task(self._handle_websocket_messages(session))
-            
-            # Store the task for cleanup but don't await it here
-            session.message_task = message_task
-            
-            # Set up a callback to handle task completion
-            def task_completed(task):
-                try:
-                    task.result()  # This will raise any exception that occurred
-                except asyncio.CancelledError:
-                    logger.info(f"🚫 WebSocket message task cancelled for session {session_id}")
-                except Exception as e:
-                    logger.error(f"❌ WebSocket message task failed for session {session_id}: {e}")
-            
-            message_task.add_done_callback(task_completed)
-            
-            # Return immediately - the WebSocket connection is now handled in the background
-            logger.info(f"🚀 WebSocket connection handler completed for session {session_id} (background task running)")
-            
-            # Keep the connection alive by waiting for disconnection
-            try:
-                await session.websocket.wait_for_close()
-            except Exception:
-                pass  # Connection closed
+            # Handle WebSocket messages directly without blocking other endpoints
+            await self._handle_websocket_messages_non_blocking(session)
             
         except WebSocketDisconnect:
             logger.info(f"🔌 WebSocket disconnected: {session_id}")
@@ -467,6 +444,61 @@ After installation, try: claude --version
                 except Exception:
                     logger.warning(f"⚠️ Failed to send keepalive ping to session {session.session_id}")
                     break
+            except WebSocketDisconnect:
+                break
+            except asyncio.CancelledError:
+                logger.info(f"🚫 WebSocket message handling cancelled for session {session.session_id}")
+                break
+            except Exception as e:
+                logger.error(f"❌ Message handling error for session {session.session_id}: {e}")
+                break
+    
+    async def _handle_websocket_messages_non_blocking(self, session: TerminalSession):
+        """Handle incoming WebSocket messages with non-blocking approach"""
+        
+        logger.info(f"🎧 Starting non-blocking WebSocket message handler for session {session.session_id}")
+        
+        while True:
+            try:
+                # Use a very short timeout and yield control frequently
+                try:
+                    message = await asyncio.wait_for(
+                        session.websocket.receive_json(),
+                        timeout=0.1  # Very short timeout to yield control frequently
+                    )
+                    
+                    logger.info(f"📨 Received WebSocket message for session {session.session_id}: {message}")
+                    
+                    if message['type'] == 'input':
+                        # Send input to terminal process
+                        if session.child_process and session.child_process.isalive():
+                            input_data = message['data']
+                            session.child_process.send(input_data)
+                            logger.info(f"📤 Sent input to session {session.session_id}: '{input_data}' (len={len(input_data)})")
+                        else:
+                            await self._send_error(session, "Terminal process not available")
+                    
+                    elif message['type'] == 'resize':
+                        # Handle terminal resize
+                        if session.child_process and session.child_process.isalive():
+                            rows = message.get('rows', 24)
+                            cols = message.get('cols', 80)
+                            session.child_process.setwinsize(rows, cols)
+                            logger.debug(f"📐 Resized terminal for session {session.session_id}: {rows}x{cols}")
+                    
+                    elif message['type'] == 'ping':
+                        # Handle ping for connection health
+                        await session.websocket.send_json({"type": "pong", "data": "alive"})
+                    
+                    else:
+                        logger.warning(f"⚠️ Unknown message type from session {session.session_id}: {message['type']}")
+                        
+                except asyncio.TimeoutError:
+                    # Timeout is expected - this allows other coroutines to run
+                    # Send periodic ping to keep connection alive
+                    await asyncio.sleep(0)  # Yield control to event loop
+                    continue
+                    
             except WebSocketDisconnect:
                 break
             except asyncio.CancelledError:
