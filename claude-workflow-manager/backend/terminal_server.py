@@ -325,7 +325,10 @@ After installation, try: claude --version
         """Monitor and relay process output to WebSocket"""
         
         if not session.child_process:
+            logger.error(f"❌ No child process for session {session.session_id}")
             return
+        
+        logger.info(f"🔍 Starting output monitoring for session {session.session_id}")
         
         try:
             while session.child_process.isalive():
@@ -335,6 +338,7 @@ After installation, try: claude --version
                     
                     if output:
                         session.last_output_buffer += output
+                        logger.info(f"📤 Process output for session {session.session_id}: '{output}' (len={len(output)})")
                         
                         # Send output to WebSocket
                         await self._send_output(session, output)
@@ -350,6 +354,9 @@ After installation, try: claude --version
                     continue
                 except pexpect.EOF:
                     logger.info(f"📤 Process ended for session {session.session_id}")
+                    break
+                except Exception as e:
+                    logger.error(f"❌ Error reading process output for session {session.session_id}: {e}")
                     break
                 
                 # Small delay to prevent excessive CPU usage
@@ -401,8 +408,9 @@ After installation, try: claude --version
                 if message['type'] == 'input':
                     # Send input to terminal process
                     if session.child_process and session.child_process.isalive():
-                        session.child_process.send(message['data'])
-                        logger.debug(f"📤 Sent input to session {session.session_id}: {message['data'][:50]}...")
+                        input_data = message['data']
+                        session.child_process.send(input_data)
+                        logger.info(f"📤 Sent input to session {session.session_id}: '{input_data}' (len={len(input_data)})")
                     else:
                         await self._send_error(session, "Terminal process not available")
                 
