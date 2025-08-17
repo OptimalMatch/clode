@@ -497,16 +497,18 @@ After installation, try: claude --version
         
         logger.info(f"🎧 Starting non-blocking WebSocket message handler for session {session.session_id}")
         
+        message_count = 0
         while True:
             try:
-                # Use a very short timeout and yield control frequently
+                # Use a moderate timeout to balance responsiveness and message reception
                 try:
                     message = await asyncio.wait_for(
                         session.websocket.receive_json(),
-                        timeout=0.1  # Very short timeout to yield control frequently
+                        timeout=1.0  # 1 second timeout - better for message reception
                     )
                     
-                    logger.info(f"📨 Received WebSocket message for session {session.session_id}: {message}")
+                    message_count += 1
+                    logger.info(f"📨 Received WebSocket message #{message_count} for session {session.session_id}: {message}")
                     
                     if message['type'] == 'input':
                         # Send input to terminal process
@@ -534,8 +536,8 @@ After installation, try: claude --version
                         
                 except asyncio.TimeoutError:
                     # Timeout is expected - this allows other coroutines to run
-                    # Send periodic ping to keep connection alive
-                    await asyncio.sleep(0)  # Yield control to event loop
+                    # Yield control and continue listening
+                    await asyncio.sleep(0.01)  # Small yield to event loop
                     continue
                     
             except WebSocketDisconnect:
