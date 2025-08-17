@@ -1,0 +1,81 @@
+# Claude Terminal Server Dockerfile
+# Specialized container for running Claude CLI with terminal interface
+
+FROM python:3.11-slim
+
+# Install system dependencies for terminal and Claude CLI
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    nodejs \
+    npm \
+    sudo \
+    locales \
+    tmux \
+    screen \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up locale for proper terminal display
+RUN locale-gen en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
+
+# Install Claude CLI
+RUN curl -fsSL https://claude.ai/cli/install.sh | bash
+ENV PATH="/root/.local/bin:$PATH"
+
+# Create app directory
+WORKDIR /app
+
+# Create directories for profiles and sessions
+RUN mkdir -p /app/claude_profiles /app/terminal_sessions
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional dependencies for terminal server
+RUN pip install --no-cache-dir \
+    pexpect \
+    ptyprocess \
+    asyncio-mqtt \
+    python-multipart
+
+# Copy terminal server code
+COPY terminal_server.py .
+COPY claude_profile_manager.py .
+
+# Create non-root user for better security
+RUN useradd -m -s /bin/bash claude && \
+    usermod -aG sudo claude && \
+    echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Set up Claude CLI for the claude user
+USER claude
+WORKDIR /home/claude
+RUN mkdir -p /home/claude/.claude
+
+# Copy startup script
+USER root
+COPY terminal_startup.sh /app/terminal_startup.sh
+RUN chmod +x /app/terminal_startup.sh
+
+# Environment variables
+ENV PYTHONPATH=/app
+ENV CLAUDE_HOME=/home/claude/.claude
+ENV TERMINAL_SERVER_PORT=8006
+ENV WEBSOCKET_HOST=0.0.0.0
+
+# Expose the terminal server port
+EXPOSE 8006
+
+# Health check for terminal server
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8006/health || exit 1
+
+# Start the terminal server
+CMD ["/app/terminal_startup.sh"]
