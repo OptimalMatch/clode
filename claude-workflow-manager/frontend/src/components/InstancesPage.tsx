@@ -302,6 +302,14 @@ const InstancesPage: React.FC = () => {
             <Select
               value={selectedPromptId}
               onChange={(e) => setSelectedPromptId(e.target.value)}
+              displayEmpty
+              renderValue={(selected) => {
+                if (selected === '') {
+                  return <em>No prompt (interactive mode)</em>;
+                }
+                const prompt = prompts.find((p: Prompt) => p.id === selected);
+                return prompt ? prompt.name : selected;
+              }}
             >
               <MenuItem value="">
                 <em>No prompt (interactive mode)</em>
