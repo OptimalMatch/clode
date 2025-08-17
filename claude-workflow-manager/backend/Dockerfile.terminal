@@ -19,14 +19,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up locale for proper terminal display
-RUN locale-gen en_US.UTF-8
+RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
+    locale-gen && \
+    update-locale LANG=en_US.UTF-8
 ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
 
-# Install Claude CLI
-RUN curl -fsSL https://claude.ai/cli/install.sh | bash
-ENV PATH="/root/.local/bin:$PATH"
+# Install Claude CLI using npm (more reliable)
+RUN npm install -g @anthropic-ai/claude-cli || \
+    (curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null || \
+     echo "⚠️ Claude CLI installation failed, will install at runtime")
+ENV PATH="/root/.local/bin:/usr/local/bin:$PATH"
 
 # Create app directory
 WORKDIR /app

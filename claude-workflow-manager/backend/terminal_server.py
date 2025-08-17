@@ -89,6 +89,19 @@ class TerminalServer:
         logger.info(f"📁 Sessions directory: {self.terminal_sessions_dir}")
         logger.info(f"🎯 Max plan mode: {self.use_max_plan}")
     
+    def _check_claude_cli_available(self) -> bool:
+        """Check if Claude CLI is available in the system"""
+        try:
+            import subprocess
+            result = subprocess.run(['which', 'claude'], 
+                                  capture_output=True, 
+                                  text=True, 
+                                  timeout=5)
+            return result.returncode == 0
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to check Claude CLI availability: {e}")
+            return False
+    
     def _setup_middleware(self):
         """Setup CORS and other middleware"""
         self.app.add_middleware(
@@ -222,10 +235,44 @@ class TerminalServer:
         """Start Claude CLI process for the session"""
         
         try:
-            # For login sessions, start with /login command
+            # Check if Claude CLI is available
+            claude_available = self._check_claude_cli_available()
+            
+            # For login sessions, try to start Claude CLI
             if session.session_type == 'login':
-                command = 'claude'
-                initial_input = '/login\n'
+                if claude_available:
+                    command = 'claude'
+                    initial_input = '/login\n'
+                else:
+                    # Fallback to bash with helpful message
+                    command = 'bash'
+                    initial_input = None
+                    await self._send_error(session, 
+                        "Claude CLI not available in container. Please check installation.")
+                    await self._send_status(session, 
+                        "Starting bash session instead. You can try installing Claude CLI manually.")
+                    
+                    # Send installation instructions
+                    install_help = """
+╭─────────────────────────────────────────────────────────╮
+│ 🔧 Claude CLI Installation Instructions                 │
+╰─────────────────────────────────────────────────────────╯
+
+Try these commands to install Claude CLI:
+
+1. Using npm (recommended):
+   npm install -g @anthropic-ai/claude-cli
+
+2. Using curl:
+   curl -fsSL https://claude.ai/cli/install.sh | bash
+   export PATH="$HOME/.local/bin:$PATH"
+
+3. Manual download:
+   Visit: https://github.com/anthropics/claude-cli
+
+After installation, try: claude --version
+"""
+                    await self._send_output(session, install_help)
             else:
                 command = 'bash'  # Start with bash for general sessions
                 initial_input = None

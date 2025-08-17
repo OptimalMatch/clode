@@ -26,15 +26,30 @@ else
     echo "❌ Claude CLI not found in PATH"
     echo "📦 Attempting to install Claude CLI..."
     
-    # Try to install Claude CLI if not found
-    curl -fsSL https://claude.ai/cli/install.sh | bash
-    export PATH="/root/.local/bin:$PATH"
+    # Try multiple installation methods
+    CLAUDE_INSTALLED=false
     
-    if command -v claude &> /dev/null; then
-        echo "✅ Claude CLI installed successfully"
+    # Method 1: Try npm installation
+    if npm install -g @anthropic-ai/claude-cli 2>/dev/null; then
+        echo "✅ Claude CLI installed via npm"
+        CLAUDE_INSTALLED=true
     else
-        echo "❌ Failed to install Claude CLI"
-        exit 1
+        echo "⚠️ npm installation failed, trying curl method..."
+        
+        # Method 2: Try curl installation  
+        if curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null; then
+            export PATH="/root/.local/bin:$PATH"
+            if command -v claude &> /dev/null; then
+                echo "✅ Claude CLI installed via curl"
+                CLAUDE_INSTALLED=true
+            fi
+        fi
+    fi
+    
+    if [ "$CLAUDE_INSTALLED" = false ]; then
+        echo "⚠️ Claude CLI installation failed - server will start anyway"
+        echo "💡 Terminal sessions will show installation instructions to users"
+        # Don't exit - let the server start so users can see error messages
     fi
 fi
 
