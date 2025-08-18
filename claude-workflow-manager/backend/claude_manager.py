@@ -33,6 +33,33 @@ class ClaudeCodeManager:
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Include milliseconds
         print(f"[{timestamp}] {message}")
     
+    async def _restore_claude_profile_for_instance(self, working_dir: str):
+        """Restore the selected Claude profile credentials for an instance"""
+        try:
+            # Get the selected profile from the database
+            selected_profile = await self.db.get_selected_claude_profile()
+            if not selected_profile:
+                self._log_with_timestamp("📝 No selected Claude profile found, using default authentication")
+                return
+            
+            # Use the file manager to restore the profile to the working directory
+            claude_dir = os.path.join(working_dir, ".claude")
+            os.makedirs(claude_dir, exist_ok=True)
+            
+            success = await self.claude_file_manager.restore_claude_files(
+                selected_profile.id, 
+                claude_dir
+            )
+            
+            if success:
+                self._log_with_timestamp(f"✅ Restored Claude profile '{selected_profile.profile_name}' to {claude_dir}")
+            else:
+                raise Exception(f"Failed to restore profile '{selected_profile.profile_name}'")
+                
+        except Exception as e:
+            self._log_with_timestamp(f"❌ Error restoring Claude profile: {e}")
+            raise
+    
     def _select_model(self, input_text: str) -> str:
         """Use Claude Sonnet 4 for all requests"""
         return "claude-sonnet-4-20250514"
@@ -791,6 +818,15 @@ class ClaudeCodeManager:
             stdout, stderr = await process.communicate()
             if process.returncode != 0:
                 raise subprocess.CalledProcessError(process.returncode, ["git", "clone"], output=stdout, stderr=stderr)
+            
+            # Restore selected Claude profile for this instance
+            try:
+                self._log_with_timestamp(f"🔐 Restoring Claude profile for instance {instance.id}...")
+                await self._restore_claude_profile_for_instance(temp_dir)
+                self._log_with_timestamp(f"✅ Claude profile restored successfully for instance {instance.id}")
+            except Exception as e:
+                self._log_with_timestamp(f"⚠️ Failed to restore Claude profile (will use default): {e}")
+                # Don't fail the instance spawn - continue with default auth
             
             # Auto-discover agents from the repository before proceeding
             try:
