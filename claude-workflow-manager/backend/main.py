@@ -28,7 +28,9 @@ from models import (
     SSHKeyGenerationRequest, SSHKeyResponse, SSHKeyListResponse, 
     GitConnectionTestRequest, SSHKeyInfo, ClaudeAuthProfile,
     ClaudeAuthProfileListResponse, ClaudeLoginSessionRequest, 
-    ClaudeLoginSessionResponse, ClaudeAuthTokenRequest
+    ClaudeLoginSessionResponse, ClaudeAuthTokenRequest,
+    ClaudeProfileSelection, ClaudeProfileSelectionRequest,
+    ClaudeProfileSelectionResponse
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -702,6 +704,59 @@ async def list_profile_files(profile_id: str):
         return files
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list profile files: {str(e)}")
+
+@app.post(
+    "/api/claude-auth/selected-profile",
+    summary="Set Selected Claude Profile",
+    description="Set the default/selected Claude authentication profile for use in terminals and instances.",
+    tags=["Claude Authentication"]
+)
+async def set_selected_claude_profile(request: ClaudeProfileSelectionRequest):
+    """Set the selected Claude profile."""
+    try:
+        success = await db.set_selected_claude_profile(request.profile_id)
+        if success:
+            return {"success": True, "message": "Selected profile updated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Profile not found or inactive")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to set selected profile: {str(e)}")
+
+@app.get(
+    "/api/claude-auth/selected-profile",
+    response_model=ClaudeProfileSelectionResponse,
+    summary="Get Selected Claude Profile",
+    description="Get the currently selected/default Claude authentication profile.",
+    tags=["Claude Authentication"]
+)
+async def get_selected_claude_profile():
+    """Get the selected Claude profile."""
+    try:
+        selection = await db.get_selected_profile_with_details()
+        if selection:
+            return ClaudeProfileSelectionResponse(
+                selected_profile_id=selection["selected_profile_id"],
+                profile_name=selection["profile_name"],
+                selected_at=selection["selected_at"]
+            )
+        else:
+            return ClaudeProfileSelectionResponse()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get selected profile: {str(e)}")
+
+@app.delete(
+    "/api/claude-auth/selected-profile",
+    summary="Clear Selected Claude Profile",
+    description="Clear the currently selected/default Claude authentication profile.",
+    tags=["Claude Authentication"]
+)
+async def clear_selected_claude_profile():
+    """Clear the selected Claude profile."""
+    try:
+        success = await db.clear_selected_claude_profile()
+        return {"success": success, "message": "Selected profile cleared" if success else "No profile was selected"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear selected profile: {str(e)}")
 
 @app.post(
     "/api/workflows",

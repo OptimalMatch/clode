@@ -841,3 +841,80 @@ class Database:
             {"$set": {"last_used_at": datetime.utcnow()}}
         )
         return result.modified_count > 0
+
+    async def set_selected_claude_profile(self, profile_id: str, selected_by: Optional[str] = None) -> bool:
+        """Set the selected/default Claude profile"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        # Verify the profile exists and is active
+        profile = await self.get_claude_auth_profile(profile_id)
+        if not profile or not profile.is_active:
+            return False
+        
+        # Use upsert to ensure only one selected profile per user (or globally if selected_by is None)
+        filter_query = {"selected_by": selected_by} if selected_by else {"selected_by": {"$exists": False}}
+        
+        selection_doc = {
+            "selected_profile_id": profile_id,
+            "selected_by": selected_by,
+            "selected_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+        
+        result = await self.db.claude_profile_selections.update_one(
+            filter_query,
+            {"$set": selection_doc},
+            upsert=True
+        )
+        
+        return result.upserted_id is not None or result.modified_count > 0
+
+    async def get_selected_claude_profile(self, selected_by: Optional[str] = None) -> Optional['ClaudeProfileSelection']:
+        """Get the selected/default Claude profile"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        filter_query = {"selected_by": selected_by} if selected_by else {"selected_by": {"$exists": False}}
+        
+        selection = await self.db.claude_profile_selections.find_one(filter_query)
+        if not selection:
+            return None
+        
+        # Remove MongoDB _id field
+        if "_id" in selection:
+            del selection["_id"]
+        
+        from models import ClaudeProfileSelection
+        return ClaudeProfileSelection(**selection)
+
+    async def get_selected_profile_with_details(self, selected_by: Optional[str] = None) -> Optional[Dict[str, any]]:
+        """Get the selected profile with full profile details"""
+        selection = await self.get_selected_claude_profile(selected_by)
+        if not selection:
+            return None
+        
+        profile = await self.get_claude_auth_profile(selection.selected_profile_id)
+        if not profile or not profile.is_active:
+            # Selected profile no longer exists or is inactive, clear the selection
+            await self.clear_selected_claude_profile(selected_by)
+            return None
+        
+        return {
+            "selected_profile_id": selection.selected_profile_id,
+            "profile_name": profile.profile_name,
+            "user_email": profile.user_email,
+            "auth_method": profile.auth_method,
+            "selected_at": selection.selected_at,
+            "profile": profile
+        }
+
+    async def clear_selected_claude_profile(self, selected_by: Optional[str] = None) -> bool:
+        """Clear the selected/default Claude profile"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        filter_query = {"selected_by": selected_by} if selected_by else {"selected_by": {"$exists": False}}
+        
+        result = await self.db.claude_profile_selections.delete_one(filter_query)
+        return result.deleted_count > 0

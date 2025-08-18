@@ -59,6 +59,7 @@ const ClaudeAuthManager: React.FC<ClaudeAuthManagerProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showLoginWizard, setShowLoginWizard] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const getApiUrl = () => {
     const currentHostname = window.location.hostname;
@@ -105,9 +106,51 @@ const ClaudeAuthManager: React.FC<ClaudeAuthManagerProps> = ({
     }
   };
 
+  const fetchSelectedProfile = async () => {
+    try {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/claude-auth/selected-profile`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.selected_profile_id) {
+          setSelectedProfile(data.selected_profile_id);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch selected profile:', err);
+    }
+  };
+
+  const saveSelectedProfile = async (profileId: string) => {
+    setIsSaving(true);
+    try {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/claude-auth/selected-profile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ profile_id: profileId }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save selected profile: ${response.status}`);
+      }
+
+      console.log(`✅ Profile ${profileId} set as default`);
+    } catch (err) {
+      console.error('Failed to save selected profile:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save selection');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (open) {
       fetchProfiles();
+      fetchSelectedProfile();
     }
   }, [open]);
 
@@ -121,8 +164,9 @@ const ClaudeAuthManager: React.FC<ClaudeAuthManagerProps> = ({
     setSelectedProfile(profileId);
   };
 
-  const handleSelectProfile = (profileId: string) => {
+  const handleSelectProfile = async (profileId: string) => {
     setSelectedProfile(profileId);
+    await saveSelectedProfile(profileId);
     if (onProfileSelected) {
       onProfileSelected(profileId);
     }
@@ -281,8 +325,9 @@ const ClaudeAuthManager: React.FC<ClaudeAuthManagerProps> = ({
                           size="small"
                           variant={selectedProfile === profile.id ? "contained" : "outlined"}
                           onClick={() => handleSelectProfile(profile.id)}
+                          disabled={isSaving}
                         >
-                          {selectedProfile === profile.id ? "Selected" : "Select"}
+                          {isSaving ? "Saving..." : selectedProfile === profile.id ? "Selected" : "Select"}
                         </Button>
                         <Tooltip title="Delete Profile">
                           <IconButton edge="end" size="small" color="error">

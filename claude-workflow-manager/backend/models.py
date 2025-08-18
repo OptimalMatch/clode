@@ -309,3 +309,21 @@ class ClaudeAuthTokenRequest(BaseModel):
     """Request model for submitting Claude auth token"""
     session_id: str
     auth_token: str
+
+class ClaudeProfileSelection(BaseModel):
+    """Model for storing the selected/default Claude profile"""
+    id: Optional[str] = None
+    selected_profile_id: str  # ID of the selected Claude auth profile
+    selected_by: Optional[str] = None  # User identifier (optional for multi-user support)
+    selected_at: datetime
+    updated_at: datetime
+
+class ClaudeProfileSelectionRequest(BaseModel):
+    """Request model for setting selected profile"""
+    profile_id: str
+
+class ClaudeProfileSelectionResponse(BaseModel):
+    """Response model for selected profile"""
+    selected_profile_id: Optional[str] = None
+    profile_name: Optional[str] = None
+    selected_at: Optional[datetime] = None
