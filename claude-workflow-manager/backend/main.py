@@ -53,17 +53,10 @@ def get_git_env():
     # Build SSH command that checks both directories for keys
     ssh_command_parts = [
         'ssh',
-        '-o', 'UserKnownHostsFile=/root/.ssh/known_hosts',
-        '-o', 'StrictHostKeyChecking=yes',
+        '-o', 'UserKnownHostsFile=/dev/null',
+        '-o', 'StrictHostKeyChecking=no',
         '-o', f'IdentitiesOnly=yes'
     ]
-    
-    # Add keys from both directories
-    mounted_ssh_dir = Path('/root/.ssh')
-    if mounted_ssh_dir.exists():
-        for key_file in mounted_ssh_dir.glob('id_*'):
-            if key_file.is_file() and not key_file.name.endswith('.pub'):
-                ssh_command_parts.extend(['-i', str(key_file)])
     
     # Add generated keys from writable directory
     for key_file in ssh_key_dir.glob('*'):
@@ -212,44 +205,7 @@ def list_ssh_keys():
                 print(f"Error reading generated SSH key {key_name}: {e}")
                 continue
     
-    # Also list keys from mounted SSH directory (read-only)
-    mounted_ssh_dir = Path('/root/.ssh')
-    if mounted_ssh_dir.exists():
-        for pub_key_file in mounted_ssh_dir.glob("*.pub"):
-            key_name = pub_key_file.stem
-            private_key_file = mounted_ssh_dir / key_name
-            
-            if private_key_file.exists():
-                try:
-                    public_key = pub_key_file.read_text().strip()
-                    
-                    # Get fingerprint
-                    fingerprint_cmd = ['ssh-keygen', '-lf', str(pub_key_file)]
-                    fingerprint_result = subprocess.run(
-                        fingerprint_cmd, capture_output=True, text=True, timeout=10
-                    )
-                    
-                    if fingerprint_result.returncode == 0:
-                        fingerprint_line = fingerprint_result.stdout.strip()
-                        fingerprint = fingerprint_line.split(' ')[1] if ' ' in fingerprint_line else "unknown"
-                    else:
-                        fingerprint = "unknown"
-                    
-                    # Get file creation time
-                    created_at = datetime.fromtimestamp(private_key_file.stat().st_ctime).isoformat()
-                    
-                    keys.append({
-                        'fingerprint': fingerprint,
-                        'key_name': f"{key_name} (mounted)",
-                        'public_key': public_key,
-                        'created_at': created_at,
-                        'last_used': None,
-                        'source': 'mounted'
-                    })
-                    
-                except Exception as e:
-                    print(f"Error reading mounted SSH key {key_name}: {e}")
-                    continue
+
     
     return keys
 
@@ -280,14 +236,7 @@ def test_ssh_connection(git_repo: str, key_name: str = None):
             if generated_key_path.exists() and generated_key_path.is_file():
                 cmd.extend(['-i', str(generated_key_path)])
                 key_found = True
-            else:
-                # Check in mounted SSH directory
-                mounted_ssh_dir = Path('/root/.ssh')
-                if mounted_ssh_dir.exists():
-                    mounted_key_path = mounted_ssh_dir / clean_key_name
-                    if mounted_key_path.exists() and mounted_key_path.is_file():
-                        cmd.extend(['-i', str(mounted_key_path)])
-                        key_found = True
+
             
             if not key_found:
                 return False, f"SSH key '{clean_key_name}' not found"
@@ -298,13 +247,6 @@ def test_ssh_connection(git_repo: str, key_name: str = None):
         else:
             # Test with all available keys (original behavior)
             ssh_key_dir = get_ssh_key_directory()
-            mounted_ssh_dir = Path('/root/.ssh')
-            
-            # Add mounted SSH keys
-            if mounted_ssh_dir.exists():
-                for key_file in mounted_ssh_dir.glob('id_*'):
-                    if key_file.is_file() and not key_file.name.endswith('.pub'):
-                        cmd.extend(['-i', str(key_file)])
             
             # Add generated SSH keys
             for key_file in ssh_key_dir.glob('*'):

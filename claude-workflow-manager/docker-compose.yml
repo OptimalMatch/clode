@@ -45,8 +45,6 @@ services:
       - ~/.claude:/root/.claude  # Mount Claude authentication (read-write for projects)
       - claude_profiles:/app/claude_profiles  # Isolated Claude profiles for multi-user
       - terminal_sessions:/app/terminal_sessions  # Isolated terminal sessions
-      - ${HOME}/.ssh:/root/.ssh:ro
-      - ssh_known_hosts:/root/.ssh_known_hosts
       - ssh_generated_keys:/app/ssh_keys
     networks:
       - claude-network
