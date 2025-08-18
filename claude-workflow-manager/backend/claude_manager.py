@@ -36,25 +36,28 @@ class ClaudeCodeManager:
     async def _restore_claude_profile_for_instance(self, working_dir: str):
         """Restore the selected Claude profile credentials for an instance"""
         try:
-            # Get the selected profile from the database
-            selected_profile = await self.db.get_selected_claude_profile()
-            if not selected_profile:
+            # Get the selected profile with full details from the database
+            selected_profile_details = await self.db.get_selected_profile_with_details()
+            if not selected_profile_details:
                 self._log_with_timestamp("📝 No selected Claude profile found, using default authentication")
                 return
+            
+            profile_id = selected_profile_details["selected_profile_id"]
+            profile_name = selected_profile_details["profile_name"]
             
             # Use the file manager to restore the profile to the working directory
             claude_dir = os.path.join(working_dir, ".claude")
             os.makedirs(claude_dir, exist_ok=True)
             
             success = await self.claude_file_manager.restore_claude_files(
-                selected_profile.id, 
+                profile_id, 
                 claude_dir
             )
             
             if success:
-                self._log_with_timestamp(f"✅ Restored Claude profile '{selected_profile.profile_name}' to {claude_dir}")
+                self._log_with_timestamp(f"✅ Restored Claude profile '{profile_name}' to {claude_dir}")
             else:
-                raise Exception(f"Failed to restore profile '{selected_profile.profile_name}'")
+                raise Exception(f"Failed to restore profile '{profile_name}'")
                 
         except Exception as e:
             self._log_with_timestamp(f"❌ Error restoring Claude profile: {e}")
