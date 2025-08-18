@@ -395,8 +395,8 @@ class ClaudeCodeManager:
                         stdout_lines.append(line)
                         self._log_with_timestamp(f"📤 Stream line: {line}")
                         
-                        # Check for invalid API key message and auto-fallback to max plan
-                        if "Invalid API key" in line and "Please run /login" in line:
+                        # Check for invalid API key message and auto-fallback to max plan (only when in API key mode)
+                        if not self.use_max_plan and "Invalid API key" in line and "Please run /login" in line:
                             self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, auto-running /login")
                             await self._send_websocket_update(instance_id, {
                                 "type": "partial_output",
@@ -405,6 +405,22 @@ class ClaudeCodeManager:
                             
                             # Set max plan mode and mark for login retry
                             self.use_max_plan = True
+                            if not hasattr(self, '_pending_login_requests'):
+                                self._pending_login_requests = {}
+                            self._pending_login_requests[instance_id] = True
+                            
+                            # Return False to trigger session recovery with /login
+                            return False
+                        
+                        # Handle max-plan mode authentication requests
+                        elif self.use_max_plan and "Invalid API key" in line and "Please run /login" in line:
+                            self._log_with_timestamp(f"🔐 MAX-PLAN: Authentication required, running /login")
+                            await self._send_websocket_update(instance_id, {
+                                "type": "partial_output",
+                                "content": "🔐 **Max-Plan Authentication Required**\n\nRunning /login to authenticate Claude Code account..."
+                            })
+                            
+                            # Mark for login retry (already in max-plan mode)
                             if not hasattr(self, '_pending_login_requests'):
                                 self._pending_login_requests = {}
                             self._pending_login_requests[instance_id] = True
