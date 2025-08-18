@@ -579,7 +579,8 @@ After installation, try: claude --version
                     try:
                         message = json.loads(data)
                         if message.get('type') == 'input':
-                            input_data = message.get('data', '')
+                            # Handle both 'data' and 'content' field names for compatibility
+                            input_data = message.get('data', message.get('content', ''))
                             if session.child_process and session.child_process.isalive():
                                 session.child_process.send(input_data)
                                 logger.info(f"📤 Sent to terminal: '{input_data}'")
