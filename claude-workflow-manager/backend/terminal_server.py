@@ -189,15 +189,45 @@ class TerminalServer:
             return {"profiles": self.profile_manager.list_profiles()}
 
         @self.app.get("/export-credentials")
-        async def export_claude_credentials():
+        async def export_claude_credentials(session_id: str = None):
             """Export Claude credentials for backend integration"""
             try:
-                credentials_path = Path("/home/claude/.claude/.credentials.json")
-                if not credentials_path.exists():
+                # Check multiple possible locations for credentials
+                credential_locations = []
+                
+                # If specific session ID provided, check that first
+                if session_id:
+                    specific_session_creds = Path(self.terminal_sessions_dir) / session_id / ".claude" / ".credentials.json"
+                    credential_locations.append(specific_session_creds)
+                
+                # Add default location
+                credential_locations.append(Path("/home/claude/.claude/.credentials.json"))
+                
+                # Add all other session directories
+                sessions_dir = Path(self.terminal_sessions_dir)
+                if sessions_dir.exists():
+                    for session_dir in sessions_dir.iterdir():
+                        if session_dir.is_dir() and (not session_id or session_dir.name != session_id):
+                            session_creds = session_dir / ".claude" / ".credentials.json"
+                            credential_locations.append(session_creds)
+                
+                # Find the most recent credentials file
+                valid_credentials = []
+                for cred_path in credential_locations:
+                    if cred_path.exists():
+                        try:
+                            with open(cred_path, 'r') as f:
+                                credentials_data = json.load(f)
+                            valid_credentials.append((cred_path, credentials_data))
+                        except Exception as e:
+                            logger.warning(f"⚠️ Failed to read credentials from {cred_path}: {e}")
+                
+                if not valid_credentials:
                     return {"error": "No credentials found", "has_credentials": False}
                 
-                with open(credentials_path, 'r') as f:
-                    credentials_data = json.load(f)
+                # Use the most recently modified credentials
+                credentials_path, credentials_data = max(valid_credentials, key=lambda x: x[0].stat().st_mtime)
+                logger.info(f"📁 Using credentials from: {credentials_path}")
                 
                 # Extract metadata
                 subscription_type = None
@@ -211,7 +241,8 @@ class TerminalServer:
                     "credentials": credentials_data,
                     "subscription_type": subscription_type,
                     "user_email": user_email,
-                    "created_at": credentials_path.stat().st_mtime
+                    "created_at": credentials_path.stat().st_mtime,
+                    "source_path": str(credentials_path)
                 }
             except Exception as e:
                 logger.error(f"❌ Failed to export credentials: {e}")
