@@ -86,10 +86,38 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
   };
 
   // Handle authentication completion from terminal
-  const handleAuthenticationComplete = (success: boolean) => {
+  const handleAuthenticationComplete = async (success: boolean) => {
     if (success) {
       setActiveStep(3);
       setLoginSession(prev => prev ? { ...prev, status: 'completed' } : null);
+      
+      // Automatically import credentials from terminal
+      try {
+        setIsLoading(true);
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/claude-auth/import-terminal-credentials`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Import failed: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('✅ Successfully imported terminal credentials:', result);
+        
+        // Call success callback with the imported profile ID
+        if (onSuccess && result.profile_id) {
+          onSuccess(result.profile_id);
+        }
+        
+      } catch (err) {
+        console.error('❌ Failed to import terminal credentials:', err);
+        setError(`Authentication completed but failed to import profile: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      } finally {
+        setIsLoading(false);
+      }
     } else {
       setError('Authentication failed. Please try again.');
     }
