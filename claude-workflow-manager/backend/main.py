@@ -759,6 +759,28 @@ async def clear_selected_claude_profile():
         raise HTTPException(status_code=500, detail=f"Failed to clear selected profile: {str(e)}")
 
 @app.post(
+    "/api/claude-auth/profiles/{profile_id}/restore",
+    summary="Restore Claude Profile Files",
+    description="Restore Claude authentication files from a profile to a specified directory.",
+    tags=["Claude Authentication"]
+)
+async def restore_claude_profile_files(profile_id: str, target_directory: str = None):
+    """Restore Claude files from a profile to a target directory."""
+    try:
+        # Use the claude file manager to restore files
+        success = await claude_manager.claude_file_manager.restore_claude_files(
+            profile_id, 
+            target_directory
+        )
+        
+        if success:
+            return {"success": True, "message": f"Profile {profile_id} files restored successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Profile not found or restoration failed")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to restore profile files: {str(e)}")
+
+@app.post(
     "/api/workflows",
     response_model=IdResponse,
     status_code=201,

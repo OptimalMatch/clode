@@ -65,6 +65,7 @@ class TerminalSession:
         self.session_id = session_id
         self.session_type = session_type  # 'login' or 'general'
         self.profile_id = profile_id
+        self.profile_name: Optional[str] = None
         self.child_process: Optional[pexpect.spawn] = None
         self.websocket: Optional[WebSocket] = None
         self.environment: Dict[str, str] = {}
@@ -268,35 +269,43 @@ class TerminalServer:
     async def _initialize_terminal_session(self, session: TerminalSession):
         """Initialize environment and working directory for terminal session"""
         
-        # Setup profile-specific environment if profile_id provided
-        if session.profile_id:
+        # Create session working directory first
+        session.working_directory = Path(self.terminal_sessions_dir) / session.session_id
+        session.working_directory.mkdir(exist_ok=True, parents=True)
+        logger.info(f"📁 Session working directory: {session.working_directory}")
+        
+        # Get profile_id - either provided or get selected profile from backend
+        profile_id_to_use = session.profile_id
+        
+        if not profile_id_to_use and session.session_type != 'login':
+            # For non-login sessions, try to get the selected profile from backend
             try:
-                # Ensure profile exists
-                claude_home = self.profile_manager.get_profile_claude_home(session.profile_id)
-                if not claude_home:
-                    claude_home = self.profile_manager.create_profile(
-                        session.profile_id, 
-                        f"Profile {session.profile_id}"
-                    )
-                
-                # Setup environment for this profile
-                session.environment = self.profile_manager.setup_profile_environment(session.profile_id)
-                
-                await self._send_status(session, f"Using Claude profile: {session.profile_id}")
-                
+                profile_id_to_use = await self._get_selected_profile_from_backend()
+                if profile_id_to_use:
+                    logger.info(f"🎯 Using selected profile from backend: {profile_id_to_use}")
+                    session.profile_id = profile_id_to_use
+                else:
+                    logger.info("📝 No selected profile found, using default environment")
             except Exception as e:
-                logger.error(f"❌ Failed to setup profile {session.profile_id}: {e}")
+                logger.warning(f"⚠️ Failed to get selected profile from backend: {e}")
+        
+        # Setup profile-specific environment if we have a profile_id
+        if profile_id_to_use:
+            try:
+                await self._setup_claude_profile_for_session(session, profile_id_to_use)
+            except Exception as e:
+                logger.error(f"❌ Failed to setup profile {profile_id_to_use}: {e}")
                 await self._send_error(session, f"Profile setup failed: {str(e)}")
                 return
         else:
             # Use default environment
             session.environment = os.environ.copy()
-        
-        # Create session working directory
-        session.working_directory = Path(self.terminal_sessions_dir) / session.session_id
-        session.working_directory.mkdir(exist_ok=True, parents=True)
-        
-        logger.info(f"📁 Session working directory: {session.working_directory}")
+            session.environment['HOME'] = str(session.working_directory)
+            
+            if session.session_type == 'login':
+                await self._send_status(session, "Starting Claude authentication session...")
+            else:
+                await self._send_status(session, "Starting terminal session with default environment...")
         
         # Configure Claude CLI environment
         if self.use_max_plan:
@@ -672,6 +681,76 @@ After installation, try: claude --version
                 })
             except Exception as e:
                 logger.error(f"❌ Failed to send error for session {session.session_id}: {e}")
+
+    async def _get_selected_profile_from_backend(self) -> Optional[str]:
+        """Get the selected Claude profile from the backend API"""
+        try:
+            import httpx
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://claude-workflow-backend:8000/api/claude-auth/selected-profile")
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get("selected_profile_id")
+                else:
+                    logger.warning(f"⚠️ Backend returned {response.status_code} when getting selected profile")
+                    return None
+        except Exception as e:
+            logger.error(f"❌ Failed to get selected profile from backend: {e}")
+            return None
+
+    async def _setup_claude_profile_for_session(self, session: TerminalSession, profile_id: str):
+        """Setup Claude profile for a terminal session using backend's file manager"""
+        try:
+            import httpx
+            
+            # Get profile details from backend
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"http://claude-workflow-backend:8000/api/claude-auth/profiles")
+                if response.status_code != 200:
+                    raise Exception(f"Failed to get profiles from backend: {response.status_code}")
+                
+                profiles_data = response.json()
+                profile = None
+                for p in profiles_data.get("profiles", []):
+                    if p["id"] == profile_id:
+                        profile = p
+                        break
+                
+                if not profile:
+                    raise Exception(f"Profile {profile_id} not found in backend")
+            
+            # Create isolated Claude environment for this session
+            claude_dir = session.working_directory / ".claude"
+            claude_dir.mkdir(exist_ok=True, parents=True)
+            
+            # Use backend's file manager to restore profile files
+            async with httpx.AsyncClient() as client:
+                restore_response = await client.post(
+                    f"http://claude-workflow-backend:8000/api/claude-auth/profiles/{profile_id}/restore",
+                    params={"target_directory": str(claude_dir)}
+                )
+                
+                if restore_response.status_code == 200:
+                    logger.info(f"✅ Successfully restored Claude files for profile: {profile['profile_name']}")
+                else:
+                    logger.warning(f"⚠️ Failed to restore Claude files: {restore_response.status_code}")
+                    # Continue anyway - the profile metadata is still useful
+            
+            # Setup environment
+            session.environment = os.environ.copy()
+            session.environment['HOME'] = str(session.working_directory)
+            session.environment['CLAUDE_HOME'] = str(claude_dir)
+            
+            # Update session metadata
+            session.profile_name = profile["profile_name"]
+            
+            await self._send_status(session, f"✅ Loaded Claude profile: {profile['profile_name']} ({profile['auth_method']})")
+            logger.info(f"🎯 Setup Claude profile for session {session.session_id}: {profile['profile_name']}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to setup Claude profile {profile_id}: {e}")
+            raise
     
     async def _send_status(self, session: TerminalSession, status: str):
         """Send status message to WebSocket"""
