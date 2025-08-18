@@ -551,8 +551,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               }
               break;
             case 'output':
-              if (message.content) {
-                writeContentToTerminal(message.content);
+              if (message.data) {
+                writeContentToTerminal(message.data);
               }
               break;
             case 'partial_output':
@@ -586,9 +586,9 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               appendToTerminal(`❌ **Error:** ${message.error}`);
               break;
             case 'status':
-              if (message.status === 'running' && message.message) {
+              if (message.data === 'running' || (message.data && message.data.includes('running'))) {
                 console.log('🔄 Status update: Process is now running - setting isProcessRunning=true');
-                appendToTerminal(`🔄 **${message.message}**\n📡 You are now connected to the live output stream...`);
+                appendToTerminal(`🔄 **${message.data}**\n📡 You are now connected to the live output stream...`);
                 
                 // Track process start time for duration display
                 setIsProcessRunning(true);
@@ -598,11 +598,11 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                   setResponseStartTime(Date.now());
                 }
                 console.log('✅ Process state updated: isProcessRunning=true, ESC should now work');
-              } else if (message.status === 'process_started' && message.message) {
+              } else if (message.data && message.data.includes('process_started')) {
                 console.log('🚀 Process started - this is the REAL moment ESC should work');
-                appendToTerminal(`🚀 **${message.message}**`);
-              } else {
-                appendToTerminal(`📊 **Status:** ${message.status}`);
+                appendToTerminal(`🚀 **${message.data}**`);
+              } else if (message.data) {
+                appendToTerminal(`📊 **Status:** ${message.data}`);
               }
               
               // Handle explicit process_running flag from backend (for session interrupt sync)
