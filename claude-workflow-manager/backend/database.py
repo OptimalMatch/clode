@@ -853,7 +853,7 @@ class Database:
             return False
         
         # Use upsert to ensure only one selected profile per user (or globally if selected_by is None)
-        filter_query = {"selected_by": selected_by} if selected_by else {"selected_by": {"$exists": False}}
+        filter_query = {"selected_by": selected_by} if selected_by else {"selected_by": None}
         
         selection_doc = {
             "selected_profile_id": profile_id,
@@ -875,7 +875,7 @@ class Database:
         if self.db is None:
             raise RuntimeError("Database not connected")
         
-        filter_query = {"selected_by": selected_by} if selected_by else {"selected_by": {"$exists": False}}
+        filter_query = {"selected_by": selected_by} if selected_by else {"selected_by": None}
         
         selection = await self.db.claude_profile_selections.find_one(filter_query)
         if not selection:
@@ -914,7 +914,7 @@ class Database:
         if self.db is None:
             raise RuntimeError("Database not connected")
         
-        filter_query = {"selected_by": selected_by} if selected_by else {"selected_by": {"$exists": False}}
+        filter_query = {"selected_by": selected_by} if selected_by else {"selected_by": None}
         
         result = await self.db.claude_profile_selections.delete_one(filter_query)
         return result.deleted_count > 0
