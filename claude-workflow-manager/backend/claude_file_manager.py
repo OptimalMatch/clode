@@ -76,6 +76,9 @@ class ClaudeFileManager:
                         print(f"⚠️ Warning: Could not copy credentials to /root/.claude/: {e}")
                         # This is non-fatal - continue with restoration
                     
+                    # Set appropriate permissions on the main credentials file too
+                    os.chmod(credentials_file, 0o600)
+                    
                 except Exception as e:
                     print(f"⚠️ Error restoring credentials.json: {e}")
                     # Create a placeholder credentials file
