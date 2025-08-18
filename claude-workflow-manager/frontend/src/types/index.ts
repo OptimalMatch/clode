@@ -84,7 +84,8 @@ export interface ClaudeInstance {
 
 export interface WebSocketMessage {
   type: string;
-  content?: string;
+  data?: string;          // Main data field used by backend
+  content?: string;       // Legacy field for backward compatibility
   status?: string;
   message?: string;
   error?: string;
@@ -93,6 +94,7 @@ export interface WebSocketMessage {
   execution_time_ms?: number;
   tokens_used?: number;
   process_running?: boolean;
+  timestamp?: string;     // Timestamp field sent by backend
 }
 
 export interface TerminalHistoryEntry {
