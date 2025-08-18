@@ -27,6 +27,16 @@ class ClaudeCodeManager:
         self.claude_file_manager = ClaudeFileManager(db)
         # Configuration for Claude CLI execution mode
         self.use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "false").lower() == "true"
+        
+        # CRITICAL: In max plan mode, forcibly remove API key environment variables
+        # Claude CLI prioritizes API keys over credential files, so we must ensure they're not set
+        if self.use_max_plan:
+            if "CLAUDE_API_KEY" in os.environ:
+                del os.environ["CLAUDE_API_KEY"]
+                print("🗑️ Removed CLAUDE_API_KEY from environment (max plan mode)")
+            if "ANTHROPIC_API_KEY" in os.environ:
+                del os.environ["ANTHROPIC_API_KEY"] 
+                print("🗑️ Removed ANTHROPIC_API_KEY from environment (max plan mode)")
     
     def _log_with_timestamp(self, message: str):
         """Add timestamp to log messages"""
