@@ -57,6 +57,25 @@ class ClaudeFileManager:
                     
                     print(f"✅ Restored credentials.json")
                     
+                    # Also copy credentials to /root/.claude/ so Claude CLI can find them
+                    # regardless of HOME environment variable
+                    try:
+                        root_claude_dir = Path("/root/.claude")
+                        root_claude_dir.mkdir(exist_ok=True, parents=True)
+                        root_credentials_file = root_claude_dir / "credentials.json"
+                        
+                        with open(root_credentials_file, 'w') as f:
+                            f.write(credentials_content)
+                        
+                        # Set appropriate permissions
+                        os.chmod(root_credentials_file, 0o600)
+                        
+                        print(f"✅ Also copied credentials to /root/.claude/credentials.json")
+                        
+                    except Exception as e:
+                        print(f"⚠️ Warning: Could not copy credentials to /root/.claude/: {e}")
+                        # This is non-fatal - continue with restoration
+                    
                 except Exception as e:
                     print(f"⚠️ Error restoring credentials.json: {e}")
                     # Create a placeholder credentials file
@@ -68,6 +87,21 @@ class ClaudeFileManager:
                     }
                     with open(credentials_file, 'w') as f:
                         json.dump(placeholder_creds, f, indent=2)
+                    
+                    # Also copy placeholder credentials to /root/.claude/
+                    try:
+                        root_claude_dir = Path("/root/.claude")
+                        root_claude_dir.mkdir(exist_ok=True, parents=True)
+                        root_credentials_file = root_claude_dir / "credentials.json"
+                        
+                        with open(root_credentials_file, 'w') as f:
+                            json.dump(placeholder_creds, f, indent=2)
+                        
+                        os.chmod(root_credentials_file, 0o600)
+                        print(f"✅ Also copied placeholder credentials to /root/.claude/credentials.json")
+                        
+                    except Exception as e:
+                        print(f"⚠️ Warning: Could not copy placeholder credentials to /root/.claude/: {e}")
             
             # Restore project files
             if profile.project_files:
