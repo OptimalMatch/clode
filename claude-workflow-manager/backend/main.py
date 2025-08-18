@@ -117,8 +117,8 @@ def generate_ssh_key_pair(key_name: str, key_type: str = "ed25519", email: str =
                 raise Exception(f"SSH key generation failed: {result.stderr}")
             
             # Read the generated keys
-            private_key = temp_key_path.read_text().strip()
-            public_key = (temp_key_path.with_suffix('.pub')).read_text().strip()
+            private_key = temp_key_path.read_text()  # Don't strip - SSH keys need exact format
+            public_key = (temp_key_path.with_suffix('.pub')).read_text().strip()  # Public keys can be stripped
             
             # Get fingerprint
             fingerprint_cmd = ['ssh-keygen', '-lf', str(temp_key_path)]
