@@ -150,7 +150,7 @@ jobs:
 
         # Claude API Configuration
         CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
-        USE_CLAUDE_MAX_PLAN=${{ github.event.inputs.use_claude_max_plan || 'true' }}
+        USE_CLAUDE_MAX_PLAN=$CLAUDE_MODE
 
         # Host Configuration (auto-detected IP address)
         HOST_IP=$FINAL_HOST_IP
