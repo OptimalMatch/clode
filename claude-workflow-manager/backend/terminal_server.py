@@ -582,8 +582,11 @@ After installation, try: claude --version
                             # Handle both 'data' and 'content' field names for compatibility
                             input_data = message.get('data', message.get('content', ''))
                             if session.child_process and session.child_process.isalive():
+                                # Add newline if not present to execute the command
+                                if input_data and not input_data.endswith('\n'):
+                                    input_data += '\n'
                                 session.child_process.send(input_data)
-                                logger.info(f"📤 Sent to terminal: '{input_data}'")
+                                logger.info(f"📤 Sent to terminal: '{input_data.strip()}'")
                     except json.JSONDecodeError as e:
                         logger.error(f"❌ JSON decode error: {e}")
                         
@@ -622,8 +625,11 @@ After installation, try: claude --version
                             if not input_data:
                                 logger.warning(f"⚠️ Empty input data in message: {message}")
                                 continue
+                            # Add newline if not present to execute the command
+                            if input_data and not input_data.endswith('\n'):
+                                input_data += '\n'
                             session.child_process.send(input_data)
-                            logger.info(f"📤 Sent input to session {session.session_id}: '{input_data}' (len={len(input_data)})")
+                            logger.info(f"📤 Sent input to session {session.session_id}: '{input_data.strip()}' (len={len(input_data)})")
                         else:
                             await self._send_error(session, "Terminal process not available")
                     
