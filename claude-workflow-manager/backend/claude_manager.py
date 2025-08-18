@@ -436,33 +436,23 @@ class ClaudeCodeManager:
                         if not self.use_max_plan and "Invalid API key" in line and "Please run /login" in line:
                             self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, auto-running /login")
                             await self._send_websocket_update(instance_id, {
-                                "type": "partial_output",
-                                "content": "🔄 **Authentication Required - Running /login**\n\nDetected invalid API key. Automatically running /login for Claude Code max plan account..."
+                                "type": "error",
+                                "content": "❌ **Authentication Error**\n\nDetected invalid API key in max plan mode. This indicates a credential restoration issue that requires manual intervention."
                             })
                             
-                            # Set max plan mode and mark for login retry
-                            self.use_max_plan = True
-                            if not hasattr(self, '_pending_login_requests'):
-                                self._pending_login_requests = {}
-                            self._pending_login_requests[instance_id] = True
-                            
-                            # Return False to trigger session recovery with /login
+                            # Don't try /login in non-interactive mode - return failure
                             return False
                         
                         # Handle max-plan mode authentication requests
                         elif self.use_max_plan and "Invalid API key" in line and "Please run /login" in line:
-                            self._log_with_timestamp(f"🔐 MAX-PLAN: Authentication required, running /login")
+                            self._log_with_timestamp(f"❌ MAX-PLAN: Authentication failed - credentials not found or invalid")
                             await self._send_websocket_update(instance_id, {
-                                "type": "partial_output",
-                                "content": "🔐 **Max-Plan Authentication Required**\n\nRunning /login to authenticate Claude Code account..."
+                                "type": "error",
+                                "content": "❌ **Authentication Error**\n\nClaude CLI cannot find valid credentials. Please check that your profile is properly authenticated in the terminal."
                             })
                             
-                            # Mark for login retry (already in max-plan mode)
-                            if not hasattr(self, '_pending_login_requests'):
-                                self._pending_login_requests = {}
-                            self._pending_login_requests[instance_id] = True
-                            
-                            # Return False to trigger session recovery with /login
+                            # Don't try /login in non-interactive mode - it won't work
+                            # This indicates a credential restoration issue that needs manual intervention
                             return False
                         
                         # Check for actual permission requests (not JSON config fields)
@@ -711,13 +701,12 @@ class ClaudeCodeManager:
         
         # Check if this is a login request retry
         if hasattr(self, '_pending_login_requests') and self._pending_login_requests.get(instance_id):
-            self._log_with_timestamp(f"🔑 Login retry - running /login command")
-            retry_input = "/login"
-            # Generate new session for login
-            new_session_id = str(uuid.uuid4())
-            instance_info["session_id"] = new_session_id
-            retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, instance_id, is_resume=False)
-            # Don't clear the login request flag yet - we need it for the success handler
+            self._log_with_timestamp(f"❌ Cannot retry with /login in non-interactive mode")
+            self._log_with_timestamp(f"❌ This indicates a credential restoration issue")
+            
+            # Clear the pending request and fail - /login won't work in automated mode
+            del self._pending_login_requests[instance_id]
+            return False
         # Check if this is a permission grant retry (use existing session)
         elif hasattr(self, '_pending_permission_grants') and self._pending_permission_grants.get(instance_id):
             self._log_with_timestamp(f"🔑 Permission grant retry - resuming existing session {session_id}")
@@ -754,40 +743,8 @@ class ClaudeCodeManager:
             instance_info["session_created"] = True
             self._log_with_timestamp(f"✅ Session recovery successful with session {current_session_id}")
             
-            # Debug: Check pending login requests
-            has_login_attr = hasattr(self, '_pending_login_requests')
-            login_flag_value = self._pending_login_requests.get(instance_id) if has_login_attr else None
-            self._log_with_timestamp(f"🔍 Login check: has_attr={has_login_attr}, flag_value={login_flag_value}")
-            
-            # If this was a login request, now run the original command
-            if has_login_attr and login_flag_value:
-                self._log_with_timestamp(f"🚀 Login completed - now running original command: {input_text}")
-                # Clear the login flag
-                del self._pending_login_requests[instance_id]
-                
-                # Send update to user
-                await self._send_websocket_update(instance_id, {
-                    "type": "partial_output",
-                    "content": "✅ **Authentication Complete**\n\nLogin successful! Now executing your original command...\n\n"
-                })
-                
-                # Execute the original command - now user should be authenticated globally
-                # Use text-only mode like the test script does after login
-                original_session_id = str(uuid.uuid4())
-                instance_info["session_id"] = original_session_id
-                self._log_with_timestamp(f"🆔 Generated new session ID for original command: {original_session_id}")
-                
-                # Update database with new session ID
-                await self.db.update_instance_session_id(instance_id, original_session_id)
-                
-                # After successful login, the user should be authenticated globally
-                # Based on test script: authentication persists across sessions, so we can use either mode
-                # Let's try JSON stream mode first (like the working tests), then fallback to text mode
-                self._log_with_timestamp(f"🎯 User authenticated - trying original command with JSON stream mode")
-                
-                original_cmd, original_env = self._build_claude_command(original_session_id, input_text, instance_id, is_resume=False)
-                original_success = await self._execute_claude_streaming(original_cmd, instance_id, original_env, input_text)
-                return original_success
+            # Session recovery was successful - credentials should now be working
+            self._log_with_timestamp(f"✅ Session recovery completed - credentials should be available")
         else:
             # Even retry failed
             self._log_with_timestamp(f"❌ Session recovery failed")
