@@ -63,7 +63,7 @@ class TerminalSession:
     
     def __init__(self, session_id: str, session_type: str, profile_id: Optional[str] = None):
         self.session_id = session_id
-        self.session_type = session_type  # 'login' or 'general'
+        self.session_type = session_type  # 'login', 'general', or 'instance'
         self.profile_id = profile_id
         self.profile_name: Optional[str] = None
         self.child_process: Optional[pexpect.spawn] = None
@@ -304,6 +304,8 @@ class TerminalServer:
             
             if session.session_type == 'login':
                 await self._send_status(session, "Starting Claude authentication session...")
+            elif session.session_type == 'instance':
+                await self._send_status(session, "Starting Claude instance terminal...")
             else:
                 await self._send_status(session, "Starting terminal session with default environment...")
         

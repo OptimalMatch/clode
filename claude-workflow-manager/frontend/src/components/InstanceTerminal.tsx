@@ -465,12 +465,12 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         }
       }
       console.log('  Final wsUrl:', wsUrl);
-      console.log('🔌 Attempting WebSocket connection to:', `${wsUrl}/ws/${instanceId}`);
+      console.log('🔌 Attempting WebSocket connection to:', `${wsUrl}/ws/terminal/instance/${instanceId}`);
       
       setConnectionStatus('connecting');
       appendToTerminal('🔌 **Connecting to Claude Code instance...**');
       
-      ws.current = new WebSocket(`${wsUrl}/ws/${instanceId}`);
+      ws.current = new WebSocket(`${wsUrl}/ws/terminal/instance/${instanceId}`);
       
       // Monitor WebSocket state changes
       const stateMonitor = setInterval(() => {
@@ -491,7 +491,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         setLastPingTime(new Date());
         
         // Add connection info to the LexicalEditor terminal
-        appendToTerminal(`✅ **Connected to Claude Code instance!**\n🔗 Connection URL: ${wsUrl}/ws/${instanceId}\n⏰ Timestamp: ${new Date().toLocaleTimeString()}\n📖`);
+        appendToTerminal(`✅ **Connected to Claude Code instance!**\n🔗 Connection URL: ${wsUrl}/ws/terminal/instance/${instanceId}\n⏰ Timestamp: ${new Date().toLocaleTimeString()}\n📖`);
         
         // Load and display terminal history
         loadTerminalHistory();
