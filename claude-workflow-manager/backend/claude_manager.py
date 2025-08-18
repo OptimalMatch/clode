@@ -67,7 +67,7 @@ class ClaudeCodeManager:
         """Use Claude Sonnet 4 for all requests"""
         return "claude-sonnet-4-20250514"
     
-    def _build_claude_command(self, session_id: str, input_text: str, is_resume: bool = False) -> tuple[list, dict]:
+    def _build_claude_command(self, session_id: str, input_text: str, instance_id: str = None, is_resume: bool = False) -> tuple[list, dict]:
         """
         Build Claude CLI command with support for both API key and max plan modes
         Returns: (command_list, environment_dict)
@@ -85,6 +85,13 @@ class ClaudeCodeManager:
                 del env["ANTHROPIC_API_KEY"]
             if "CLAUDE_API_KEY" in env:
                 del env["CLAUDE_API_KEY"]
+            
+            # Set HOME to the working directory so Claude CLI finds the restored credentials
+            # Since we restore credentials to {working_dir}/.claude/, we need HOME to point to {working_dir}
+            if instance_id and hasattr(self, '_instance_working_dirs') and instance_id in self._instance_working_dirs:
+                working_dir = self._instance_working_dirs[instance_id]
+                env['HOME'] = working_dir
+                self._log_with_timestamp(f"🏠 Set HOME={working_dir} for Claude CLI to find credentials")
             
             # Build command for max plan (JSON stream mode with permissions)
             if is_resume:
@@ -709,13 +716,13 @@ class ClaudeCodeManager:
             # Generate new session for login
             new_session_id = str(uuid.uuid4())
             instance_info["session_id"] = new_session_id
-            retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, is_resume=False)
+            retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, instance_id, is_resume=False)
             # Don't clear the login request flag yet - we need it for the success handler
         # Check if this is a permission grant retry (use existing session)
         elif hasattr(self, '_pending_permission_grants') and self._pending_permission_grants.get(instance_id):
             self._log_with_timestamp(f"🔑 Permission grant retry - resuming existing session {session_id}")
             retry_input = "Yes, I grant permission to use the requested tools. Please proceed with the task."
-            retry_cmd, retry_env = self._build_claude_command(session_id, retry_input, is_resume=True)
+            retry_cmd, retry_env = self._build_claude_command(session_id, retry_input, instance_id, is_resume=True)
             # Clear the permission grant flag
             del self._pending_permission_grants[instance_id]
         else:
@@ -731,7 +738,7 @@ class ClaudeCodeManager:
             else:
                 retry_input = input_text
                 
-            retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, is_resume=False)
+            retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, instance_id, is_resume=False)
         
         # Try streaming execution again with new session
         success = await self._execute_claude_streaming(retry_cmd, instance_id, retry_env, input_text)
@@ -778,7 +785,7 @@ class ClaudeCodeManager:
                 # Let's try JSON stream mode first (like the working tests), then fallback to text mode
                 self._log_with_timestamp(f"🎯 User authenticated - trying original command with JSON stream mode")
                 
-                original_cmd, original_env = self._build_claude_command(original_session_id, input_text, is_resume=False)
+                original_cmd, original_env = self._build_claude_command(original_session_id, input_text, instance_id, is_resume=False)
                 original_success = await self._execute_claude_streaming(original_cmd, instance_id, original_env, input_text)
                 return original_success
         else:
@@ -805,6 +812,11 @@ class ClaudeCodeManager:
             
             # Create temporary directory for the git repo
             temp_dir = tempfile.mkdtemp()
+            
+            # Store the working directory for this instance so Claude CLI can find credentials
+            if not hasattr(self, '_instance_working_dirs'):
+                self._instance_working_dirs = {}
+            self._instance_working_dirs[instance.id] = temp_dir
             
             # Clone the git repository with SSH support
             # Use the centralized git environment configuration
@@ -1779,18 +1791,18 @@ class ClaudeCodeManager:
                 if not session_created:
                     # First command - create session with specific ID
                     self._log_with_timestamp(f"🆕 Creating new session {session_id}")
-                    cmd, env = self._build_claude_command(session_id, input_text, is_resume=False)
+                    cmd, env = self._build_claude_command(session_id, input_text, instance_id, is_resume=False)
                     instance_info["session_created"] = True
                     # Save session ID to database for future use
                     await self.db.update_instance_session_id(instance_id, session_id)
                 elif self.use_max_plan:
                     # Max plan mode - resume existing session for context preservation
                     self._log_with_timestamp(f"🎯 Max plan mode - resuming session {session_id} (preserving context)")
-                    cmd, env = self._build_claude_command(session_id, input_text, is_resume=True)
+                    cmd, env = self._build_claude_command(session_id, input_text, instance_id, is_resume=True)
                 else:
                     # API key mode - resume existing session
                     self._log_with_timestamp(f"🔄 Resuming session {session_id}")
-                    cmd, env = self._build_claude_command(session_id, input_text, is_resume=True)
+                    cmd, env = self._build_claude_command(session_id, input_text, instance_id, is_resume=True)
                 
                 self._log_with_timestamp(f"🚀 About to execute Claude CLI command: {' '.join(cmd)}")
                 self._log_with_timestamp(f"🔍 Command length: {len(cmd)} arguments")
