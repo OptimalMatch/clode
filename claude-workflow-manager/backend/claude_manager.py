@@ -761,8 +761,9 @@ class ClaudeCodeManager:
             temp_dir = tempfile.mkdtemp()
             
             # Clone the git repository with SSH support
-            env = os.environ.copy()
-            env['GIT_SSH_COMMAND'] = 'ssh -o UserKnownHostsFile=/root/.ssh/known_hosts -o StrictHostKeyChecking=yes'
+            # Use the centralized git environment configuration
+            from main import get_git_env
+            env = get_git_env()
             
             # Clone repository asynchronously to avoid blocking
             process = await asyncio.create_subprocess_exec(
