@@ -78,6 +78,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.terminal
     container_name: claude-workflow-terminal
+    user: claude
     restart: always
     ports:
       - "8006:8006"  # Terminal WebSocket server
