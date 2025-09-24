@@ -36,9 +36,11 @@ RUN mkdir -p /app/src
 # Change ownership of app directory to claude user
 RUN chown -R claude:claude /app
 
-# Create claude's .claude directory
+# Create claude's .claude directory and SSH keys directory
 RUN mkdir -p /home/claude/.claude && \
-    chown -R claude:claude /home/claude/.claude
+    mkdir -p /app/ssh_keys && \
+    chown -R claude:claude /home/claude/.claude && \
+    chown -R claude:claude /app/ssh_keys
 
 # Set Python path to include both /app and /app/src
 ENV PYTHONPATH="/app:/app/src:${PYTHONPATH}"
