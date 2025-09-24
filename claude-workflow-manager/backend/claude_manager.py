@@ -111,7 +111,7 @@ class ClaudeCodeManager:
                     "--verbose",
                     "--output-format", "stream-json",
                     "--permission-mode", "acceptEdits",
-                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
                     "--model", selected_model,
                     "--resume", session_id,
                     input_text
@@ -123,7 +123,7 @@ class ClaudeCodeManager:
                     "--verbose",
                     "--output-format", "stream-json",
                     "--permission-mode", "acceptEdits",
-                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
                     "--model", selected_model,
                     "--session-id", session_id,
                     input_text
@@ -145,7 +145,7 @@ class ClaudeCodeManager:
                     "--verbose",
                     "--output-format", "stream-json",
                     "--permission-mode", "acceptEdits",
-                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
                     "--model", selected_model,
                     "--resume", session_id,
                     input_text
@@ -157,7 +157,7 @@ class ClaudeCodeManager:
                     "--verbose",
                     "--output-format", "stream-json",
                     "--permission-mode", "acceptEdits",
-                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
                     "--model", selected_model,
                     "--session-id", session_id,
                     input_text
