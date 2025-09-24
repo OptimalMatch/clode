@@ -17,8 +17,7 @@ from urllib.parse import urljoin
 import httpx
 import websockets
 import websockets.exceptions
-from mcp.server.models import InitializationOptions
-from mcp.server.server import NotificationOptions, Server
+from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
     CallToolRequest,
@@ -802,22 +801,12 @@ async def main():
             )
     
     # Run the server
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="claude-workflow-manager",
-                server_version="1.0.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={}
-                )
-            )
-        )
-    
-    # Cleanup
-    await workflow_server.close()
+    try:
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(read_stream, write_stream)
+    finally:
+        # Cleanup
+        await workflow_server.close()
 
 
 if __name__ == "__main__":
