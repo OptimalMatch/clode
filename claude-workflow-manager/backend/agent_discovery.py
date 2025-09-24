@@ -27,7 +27,7 @@ class AgentDiscovery:
                 
                 # Clone the repository with SSH support
                 env = os.environ.copy()
-                env['GIT_SSH_COMMAND'] = 'ssh -o UserKnownHostsFile=/home/claude/.ssh/known_hosts -o StrictHostKeyChecking=yes'
+                env['GIT_SSH_COMMAND'] = 'ssh -o UserKnownHostsFile=/home/claude/.ssh/known_hosts -o StrictHostKeyChecking=no -i /app/ssh_keys/claude-workflow-manager8'
                 
                 print(f"🚀 AGENT DISCOVERY: Starting git clone...")
                 result = subprocess.run(
