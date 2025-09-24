@@ -800,15 +800,44 @@ async def main():
                 isError=True
             )
     
-    # Check if running in Docker (no TTY) or standalone mode
+    # Check if we should run TCP server or stdio
     import sys
-    if not sys.stdin.isatty():
-        # Running in Docker - just keep the server alive and ready
-        logger.info("🚀 MCP Server initialized and ready for connections")
+    import os
+    
+    # Check for TCP mode via environment variable
+    use_tcp = os.getenv('MCP_TCP_MODE', 'false').lower() == 'true'
+    tcp_port = int(os.getenv('MCP_TCP_PORT', '8001'))
+    
+    if use_tcp:
+        # TCP Server mode
+        logger.info(f"🚀 Starting MCP TCP Server on port {tcp_port}")
+        logger.info(f"📊 Available tools: {len(workflow_server.get_available_tools())}")
+        
+        async def handle_client(reader, writer):
+            init_options = {
+                "serverName": "claude-workflow-manager",
+                "serverVersion": "1.0.0"
+            }
+            try:
+                await server.run(reader, writer, init_options)
+            finally:
+                writer.close()
+                await writer.wait_closed()
+        
+        # Start TCP server
+        tcp_server = await asyncio.start_server(handle_client, '0.0.0.0', tcp_port)
+        logger.info(f"🌐 MCP TCP Server listening on 0.0.0.0:{tcp_port}")
+        
+        async with tcp_server:
+            await tcp_server.serve_forever()
+            
+    elif not sys.stdin.isatty():
+        # Running in Docker - stdio mode but keep alive
+        logger.info("🚀 MCP Server initialized and ready for stdio connections")
         logger.info(f"📊 Available tools: {len(workflow_server.get_available_tools())}")
         logger.info("💡 Connect via MCP client using stdio transport")
         
-        # Keep the server alive
+        # Keep the server alive for stdio connections
         try:
             while True:
                 await asyncio.sleep(60)  # Sleep for 1 minute intervals
@@ -819,7 +848,6 @@ async def main():
         # Running interactively - use stdio server
         try:
             async with stdio_server() as (read_stream, write_stream):
-                # Create basic initialization options
                 init_options = {
                     "serverName": "claude-workflow-manager",
                     "serverVersion": "1.0.0"

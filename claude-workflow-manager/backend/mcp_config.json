@@ -1,11 +1,9 @@
 {
   "mcpServers": {
     "claude-workflow-manager": {
-      "command": "python",
-      "args": ["/app/mcp_server.py"],
-      "env": {
-        "BACKEND_URL": "http://localhost:8005"
-      }
+      "command": "nc",
+      "args": ["YOUR_SERVER_IP", "8002"],
+      "cwd": "/tmp"
     }
   }
 }
