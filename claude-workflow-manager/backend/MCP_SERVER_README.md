@@ -166,6 +166,13 @@ Or if using Docker:
 
 ## 📖 Usage Examples
 
+### Claude Code
+
+❯ claude mcp add claude-workflow-manager nc pop-os-1 8002
+Added stdio MCP server claude-workflow-manager with command: nc pop-os-1 8002 to local config
+File modified: /home/unidatum/.claude.json [project: /home/unidatum/github/timesheet]
+
+
 ### **Create a Workflow**
 ```python
 # Using the MCP tool

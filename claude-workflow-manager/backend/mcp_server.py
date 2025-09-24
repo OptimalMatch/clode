@@ -819,10 +819,41 @@ async def main():
                 "serverVersion": "1.0.0"
             }
             try:
-                await server.run(reader, writer, init_options)
+                # Create a simple wrapper that supports async context manager
+                class AsyncStreamWrapper:
+                    def __init__(self, reader, writer):
+                        self.reader = reader
+                        self.writer = writer
+                    
+                    async def __aenter__(self):
+                        return self
+                    
+                    async def __aexit__(self, exc_type, exc_val, exc_tb):
+                        self.writer.close()
+                        await self.writer.wait_closed()
+                    
+                    async def read(self, n=-1):
+                        return await self.reader.read(n)
+                    
+                    async def readline(self):
+                        return await self.reader.readline()
+                    
+                    def write(self, data):
+                        self.writer.write(data)
+                    
+                    async def drain(self):
+                        await self.writer.drain()
+                
+                # Use the wrapper
+                stream_wrapper = AsyncStreamWrapper(reader, writer)
+                await server.run(stream_wrapper, stream_wrapper, init_options)
+                
+            except Exception as e:
+                logger.error(f"❌ Error in TCP client handler: {e}")
             finally:
-                writer.close()
-                await writer.wait_closed()
+                if not writer.is_closing():
+                    writer.close()
+                    await writer.wait_closed()
         
         # Start TCP server
         tcp_server = await asyncio.start_server(handle_client, '0.0.0.0', tcp_port)
