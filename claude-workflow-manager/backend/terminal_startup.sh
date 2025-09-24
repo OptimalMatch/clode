@@ -38,7 +38,7 @@ else
         
         # Method 2: Try curl installation  
         if curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null; then
-            export PATH="/root/.local/bin:$PATH"
+            export PATH="/home/claude/.local/bin:$PATH"
             if command -v claude &> /dev/null; then
                 echo "✅ Claude CLI installed via curl"
                 CLAUDE_INSTALLED=true

@@ -30,7 +30,7 @@ ENV LC_ALL en_US.UTF-8
 RUN npm install -g @anthropic-ai/claude-code || \
     (curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null || \
      echo "⚠️ Claude CLI installation failed, will install at runtime")
-ENV PATH="/home/claude/.npm-global/bin:/root/.local/bin:/usr/local/bin:$PATH"
+ENV PATH="/home/claude/.npm-global/bin:/home/claude/.local/bin:/usr/local/bin:$PATH"
 
 # Create app directory
 WORKDIR /app
@@ -66,10 +66,16 @@ RUN mkdir -p /home/claude/.npm-global && \
     npm config set prefix '/home/claude/.npm-global' && \
     echo 'export PATH=/home/claude/.npm-global/bin:$PATH' >> /home/claude/.bashrc
 
-# Copy startup script
+# Switch back to root to copy files and set permissions
 USER root
 COPY terminal_startup.sh /app/terminal_startup.sh
 RUN chmod +x /app/terminal_startup.sh
+
+# Change ownership of app directory to claude user
+RUN chown -R claude:claude /app /home/claude
+
+# Switch to claude user for runtime
+USER claude
 
 # Environment variables
 ENV PYTHONPATH=/app

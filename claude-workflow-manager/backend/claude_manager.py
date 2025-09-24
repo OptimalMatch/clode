@@ -96,12 +96,10 @@ class ClaudeCodeManager:
             if "CLAUDE_API_KEY" in env:
                 del env["CLAUDE_API_KEY"]
             
-            # Set HOME to the working directory so Claude CLI finds the restored credentials
-            # Since we restore credentials to {working_dir}/.claude/, we need HOME to point to {working_dir}
-            if instance_id and hasattr(self, '_instance_working_dirs') and instance_id in self._instance_working_dirs:
-                working_dir = self._instance_working_dirs[instance_id]
-                env['HOME'] = working_dir
-                self._log_with_timestamp(f"🏠 Set HOME={working_dir} for Claude CLI to find credentials")
+            # Set HOME to /home/claude since credentials are restored there
+            # The claude_file_manager.py copies credentials to /home/claude/.claude/
+            env['HOME'] = '/home/claude'
+            self._log_with_timestamp(f"🏠 Set HOME=/home/claude for Claude CLI to find credentials")
             
             # Build command for max plan (JSON stream mode with permissions)
             if is_resume:
