@@ -47,6 +47,71 @@ class ClaudeWorkflowMCPServer:
         """Close the HTTP client"""
         await self.client.aclose()
     
+    async def handle_call_tool(self, request) -> CallToolResult:
+        """Handle tool calls by routing to appropriate methods"""
+        tool_name = request.params["name"]
+        arguments = request.params.get("arguments", {})
+        
+        try:
+            if tool_name == "health_check":
+                result = await self._make_request("GET", "/health")
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps(result, indent=2))],
+                    isError=False
+                )
+            elif tool_name == "list_workflows":
+                result = await self._make_request("GET", "/api/workflows")
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps(result, indent=2))],
+                    isError=False
+                )
+            elif tool_name == "get_workflow":
+                workflow_id = arguments.get("workflow_id")
+                result = await self._make_request("GET", f"/api/workflows/{workflow_id}")
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps(result, indent=2))],
+                    isError=False
+                )
+            elif tool_name == "create_workflow":
+                result = await self._make_request("POST", "/api/workflows", json=arguments)
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps(result, indent=2))],
+                    isError=False
+                )
+            elif tool_name == "delete_workflow":
+                workflow_id = arguments.get("workflow_id")
+                result = await self._make_request("DELETE", f"/api/workflows/{workflow_id}")
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps(result, indent=2))],
+                    isError=False
+                )
+            elif tool_name == "spawn_instance":
+                result = await self._make_request("POST", "/api/instances", json=arguments)
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps(result, indent=2))],
+                    isError=False
+                )
+            elif tool_name == "list_instances":
+                workflow_id = arguments.get("workflow_id")
+                include_archived = arguments.get("include_archived", False)
+                params = {"include_archived": include_archived}
+                result = await self._make_request("GET", f"/api/workflows/{workflow_id}/instances", params=params)
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps(result, indent=2))],
+                    isError=False
+                )
+            else:
+                return CallToolResult(
+                    content=[TextContent(type="text", text=f"Tool '{tool_name}' not yet implemented")],
+                    isError=True
+                )
+                
+        except Exception as e:
+            return CallToolResult(
+                content=[TextContent(type="text", text=f"Error executing {tool_name}: {str(e)}")],
+                isError=True
+            )
+    
     def _make_url(self, path: str) -> str:
         """Create full URL from path"""
         return urljoin(self.base_url + '/', path.lstrip('/'))
