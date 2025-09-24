@@ -862,23 +862,13 @@ async def main():
                             elif method == 'tools/list':
                                 # Return available tools
                                 tools_list = workflow_server.get_available_tools()
-                                # Convert list of tool names to proper MCP tool schema
+                                # Convert Tool objects to MCP tool schema
                                 tools_schema = []
-                                for tool_name in tools_list:
-                                    # Get the tool handler from the server
-                                    handler = getattr(workflow_server, f'handle_{tool_name}', None)
-                                    description = f"Tool: {tool_name}"
-                                    if handler and hasattr(handler, '__doc__') and handler.__doc__:
-                                        description = handler.__doc__.strip().split('\n')[0]
-                                    
+                                for tool in tools_list:
                                     tools_schema.append({
-                                        "name": tool_name,
-                                        "description": description,
-                                        "inputSchema": {
-                                            "type": "object",
-                                            "properties": {},
-                                            "required": []
-                                        }
+                                        "name": tool.name,
+                                        "description": tool.description,
+                                        "inputSchema": tool.inputSchema
                                     })
                                 
                                 response = {
