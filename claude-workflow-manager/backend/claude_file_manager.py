@@ -41,9 +41,9 @@ class ClaudeFileManager:
             print(f"🔧 Restoring Claude files for profile: {profile.profile_name}")
             print(f"📁 Target directory: {claude_dir}")
             
-            # Restore credentials.json
+            # Restore .credentials.json (note the dot prefix - required by Claude CLI)
             if profile.credentials_json:
-                credentials_file = claude_dir / "credentials.json"
+                credentials_file = claude_dir / ".credentials.json"
                 
                 # Decode the credentials (assuming it's base64 encoded for security)
                 try:
@@ -55,14 +55,14 @@ class ClaudeFileManager:
                     with open(credentials_file, 'w') as f:
                         f.write(credentials_content)
                     
-                    print(f"✅ Restored credentials.json")
+                    print(f"✅ Restored .credentials.json")
                     
                     # Also copy credentials to /root/.claude/ so Claude CLI can find them
                     # regardless of HOME environment variable
                     try:
                         root_claude_dir = Path("/root/.claude")
                         root_claude_dir.mkdir(exist_ok=True, parents=True)
-                        root_credentials_file = root_claude_dir / "credentials.json"
+                        root_credentials_file = root_claude_dir / ".credentials.json"
                         
                         with open(root_credentials_file, 'w') as f:
                             f.write(credentials_content)
@@ -70,7 +70,7 @@ class ClaudeFileManager:
                         # Set appropriate permissions
                         os.chmod(root_credentials_file, 0o600)
                         
-                        print(f"✅ Also copied credentials to /root/.claude/credentials.json")
+                        print(f"✅ Also copied credentials to /root/.claude/.credentials.json")
                         
                     except Exception as e:
                         print(f"⚠️ Warning: Could not copy credentials to /root/.claude/: {e}")
@@ -80,7 +80,7 @@ class ClaudeFileManager:
                     os.chmod(credentials_file, 0o600)
                     
                 except Exception as e:
-                    print(f"⚠️ Error restoring credentials.json: {e}")
+                    print(f"⚠️ Error restoring .credentials.json: {e}")
                     # Create a placeholder credentials file
                     placeholder_creds = {
                         "profile_name": profile.profile_name,
@@ -95,13 +95,13 @@ class ClaudeFileManager:
                     try:
                         root_claude_dir = Path("/root/.claude")
                         root_claude_dir.mkdir(exist_ok=True, parents=True)
-                        root_credentials_file = root_claude_dir / "credentials.json"
+                        root_credentials_file = root_claude_dir / ".credentials.json"
                         
                         with open(root_credentials_file, 'w') as f:
                             json.dump(placeholder_creds, f, indent=2)
                         
                         os.chmod(root_credentials_file, 0o600)
-                        print(f"✅ Also copied placeholder credentials to /root/.claude/credentials.json")
+                        print(f"✅ Also copied placeholder credentials to /root/.claude/.credentials.json")
                         
                     except Exception as e:
                         print(f"⚠️ Warning: Could not copy placeholder credentials to /root/.claude/: {e}")
@@ -163,14 +163,14 @@ class ClaudeFileManager:
             
             updates = {}
             
-            # Backup credentials.json
-            credentials_file = claude_dir / "credentials.json"
+            # Backup .credentials.json
+            credentials_file = claude_dir / ".credentials.json"
             if credentials_file.exists():
                 with open(credentials_file, 'r') as f:
                     credentials_content = f.read()
                 # Encode as base64 for security
                 updates["credentials_json"] = base64.b64encode(credentials_content.encode('utf-8')).decode('utf-8')
-                print("✅ Backed up credentials.json")
+                print("✅ Backed up .credentials.json")
             
             # Backup project files
             projects_dir = claude_dir / "projects"
@@ -281,7 +281,7 @@ class ClaudeFileManager:
                 return {"credentials": [], "project_files": []}
             
             result = {
-                "credentials": ["credentials.json"] if profile.credentials_json else [],
+                "credentials": [".credentials.json"] if profile.credentials_json else [],
                 "project_files": list(profile.project_files.keys()) if profile.project_files else []
             }
             
