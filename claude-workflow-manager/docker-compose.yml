@@ -23,6 +23,7 @@ services:
   backend:
     build: ./backend
     container_name: claude-workflow-backend
+    user: claude
     restart: always
     ports:
       - "8005:8000"
