@@ -110,7 +110,7 @@ class ClaudeCodeManager:
                     "--print",
                     "--verbose",
                     "--output-format", "stream-json",
-                    "--permission-mode", "acceptEdits",
+                    "--permission-mode", "acceptAll",
                     "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
                     "--model", selected_model,
                     "--resume", session_id,
@@ -122,7 +122,7 @@ class ClaudeCodeManager:
                     "--print",
                     "--verbose",
                     "--output-format", "stream-json",
-                    "--permission-mode", "acceptEdits",
+                    "--permission-mode", "acceptAll",
                     "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
                     "--model", selected_model,
                     "--session-id", session_id,
@@ -144,7 +144,7 @@ class ClaudeCodeManager:
                     "--print",
                     "--verbose",
                     "--output-format", "stream-json",
-                    "--permission-mode", "acceptEdits",
+                    "--permission-mode", "acceptAll",
                     "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
                     "--model", selected_model,
                     "--resume", session_id,
@@ -156,7 +156,7 @@ class ClaudeCodeManager:
                     "--print",
                     "--verbose",
                     "--output-format", "stream-json",
-                    "--permission-mode", "acceptEdits",
+                    "--permission-mode", "acceptAll",
                     "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
                     "--model", selected_model,
                     "--session-id", session_id,
@@ -467,6 +467,7 @@ class ClaudeCodeManager:
                         
                         # Check for actual permission requests (not JSON config fields)
                         # Look for specific permission request patterns that require user approval
+                        # Exclude WebSearch permission messages since they should be auto-granted
                         permission_request_patterns = [
                             "claude requested permissions", 
                             "need permission to", 
@@ -474,7 +475,11 @@ class ClaudeCodeManager:
                             "authorize tool",
                             "tool permissions required"
                         ]
-                        is_permission_request = any(pattern in line.lower() for pattern in permission_request_patterns)
+                        
+                        # Skip WebSearch permission requests since they should be auto-allowed
+                        is_websearch_permission = "websearch" in line.lower() and "haven't granted it yet" in line.lower()
+                        is_permission_request = (any(pattern in line.lower() for pattern in permission_request_patterns) 
+                                               and not is_websearch_permission)
                         
                         if is_permission_request:
                             self._log_with_timestamp(f"🔑 PERMISSION REQUEST: Detected actual permission request: {line}")
