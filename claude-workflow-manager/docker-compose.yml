@@ -119,7 +119,7 @@ services:
       - ./backend:/app/src  # Development volume mount
     networks:
       - claude-network
-    command: ["python", "/app/mcp_server.py"]
+    command: ["python", "/app/src/mcp_server.py"]
 
   redis:
     image: redis:7-alpine
