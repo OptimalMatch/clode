@@ -803,7 +803,12 @@ async def main():
     # Run the server
     try:
         async with stdio_server() as (read_stream, write_stream):
-            await server.run(read_stream, write_stream)
+            # Create basic initialization options
+            init_options = {
+                "serverName": "claude-workflow-manager",
+                "serverVersion": "1.0.0"
+            }
+            await server.run(read_stream, write_stream, init_options)
     finally:
         # Cleanup
         await workflow_server.close()
