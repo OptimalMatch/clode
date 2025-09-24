@@ -878,6 +878,76 @@ async def main():
                                     },
                                     "id": msg_id
                                 }
+                            elif method == 'tools/call':
+                                # Execute a tool
+                                params = rpc_message.get('params', {})
+                                tool_name = params.get('name')
+                                arguments = params.get('arguments', {})
+                                
+                                logger.info(f"🔧 Calling tool: {tool_name} with args: {arguments}")
+                                
+                                try:
+                                    # Call the appropriate handler method
+                                    handler_name = f'handle_{tool_name}'
+                                    if hasattr(workflow_server, handler_name):
+                                        handler = getattr(workflow_server, handler_name)
+                                        # Create a mock CallToolRequest
+                                        from mcp.types import CallToolRequest
+                                        mock_request = CallToolRequest(
+                                            method="tools/call",
+                                            params={
+                                                "name": tool_name,
+                                                "arguments": arguments
+                                            }
+                                        )
+                                        result = await handler(mock_request)
+                                        
+                                        # Extract content from CallToolResult
+                                        if hasattr(result, 'content') and result.content:
+                                            content_text = ""
+                                            for content_item in result.content:
+                                                if hasattr(content_item, 'text'):
+                                                    content_text += content_item.text
+                                            
+                                            response = {
+                                                "jsonrpc": "2.0",
+                                                "result": {
+                                                    "content": [{"type": "text", "text": content_text}],
+                                                    "isError": getattr(result, 'isError', False)
+                                                },
+                                                "id": msg_id
+                                            }
+                                        else:
+                                            response = {
+                                                "jsonrpc": "2.0",
+                                                "result": {
+                                                    "content": [{"type": "text", "text": "Tool executed successfully"}],
+                                                    "isError": False
+                                                },
+                                                "id": msg_id
+                                            }
+                                    else:
+                                        response = {
+                                            "jsonrpc": "2.0",
+                                            "error": {
+                                                "code": -32601,
+                                                "message": f"Tool not found: {tool_name}"
+                                            },
+                                            "id": msg_id
+                                        }
+                                        
+                                except Exception as e:
+                                    logger.error(f"❌ Error executing tool {tool_name}: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                                    response = {
+                                        "jsonrpc": "2.0",
+                                        "result": {
+                                            "content": [{"type": "text", "text": f"Error executing tool: {str(e)}"}],
+                                            "isError": True
+                                        },
+                                        "id": msg_id
+                                    }
                             elif method == 'notifications/initialized':
                                 # This is a notification, no response needed
                                 logger.info("🎯 MCP Client initialized successfully")
