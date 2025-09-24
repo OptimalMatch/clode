@@ -832,13 +832,65 @@ async def main():
                             
                         logger.info(f"📨 Received: {message}")
                         
-                        # For now, just echo back a simple response
-                        # In a full implementation, we'd parse the JSON-RPC and route to the right handler
-                        response = '{"jsonrpc": "2.0", "result": "Hello from MCP Server", "id": 1}\n'
-                        writer.write(response.encode('utf-8'))
-                        await writer.drain()
+                        # Parse and handle the JSON-RPC message properly
+                        import json
                         
-                        logger.info(f"📤 Sent: {response.strip()}")
+                        try:
+                            rpc_message = json.loads(message)
+                            method = rpc_message.get('method')
+                            msg_id = rpc_message.get('id')
+                            
+                            if method == 'initialize':
+                                # Respond with proper MCP initialize response
+                                response = {
+                                    "jsonrpc": "2.0",
+                                    "result": {
+                                        "protocolVersion": "2025-06-18",
+                                        "capabilities": {
+                                            "tools": {},
+                                            "prompts": {},
+                                            "resources": {},
+                                            "logging": {}
+                                        },
+                                        "serverInfo": {
+                                            "name": "claude-workflow-manager",
+                                            "version": "1.0.0"
+                                        }
+                                    },
+                                    "id": msg_id
+                                }
+                            elif method == 'tools/list':
+                                # Return available tools
+                                tools = workflow_server.get_available_tools()
+                                response = {
+                                    "jsonrpc": "2.0",
+                                    "result": {
+                                        "tools": [{"name": tool_name, "description": tool_info.get("description", "")} for tool_name, tool_info in tools.items()]
+                                    },
+                                    "id": msg_id
+                                }
+                            else:
+                                # Method not implemented
+                                response = {
+                                    "jsonrpc": "2.0",
+                                    "error": {
+                                        "code": -32601,
+                                        "message": f"Method not found: {method}"
+                                    },
+                                    "id": msg_id
+                                }
+                            
+                            response_str = json.dumps(response) + '\n'
+                            writer.write(response_str.encode('utf-8'))
+                            await writer.drain()
+                            
+                            logger.info(f"📤 Sent: {response_str.strip()}")
+                            
+                        except json.JSONDecodeError as e:
+                            logger.error(f"❌ Invalid JSON: {e}")
+                            error_response = f'{{"jsonrpc": "2.0", "error": {{"code": -32700, "message": "Parse error"}}, "id": null}}\n'
+                            writer.write(error_response.encode('utf-8'))
+                            await writer.drain()
                         
                     except Exception as e:
                         logger.error(f"❌ Error processing message: {e}")
