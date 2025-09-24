@@ -42,7 +42,7 @@ services:
       - mongodb
       - redis
     volumes:
-      # - ./backend:/app/src  # Temporarily disabled for testing
+      - ./backend:/app/src  # Re-enabled for development
       - claude_profiles:/app/claude_profiles  # Isolated Claude profiles for multi-user
       - terminal_sessions:/app/terminal_sessions  # Isolated terminal sessions
       - ssh_generated_keys:/app/ssh_keys
