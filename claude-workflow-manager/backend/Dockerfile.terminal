@@ -54,9 +54,7 @@ COPY terminal_server.py .
 COPY claude_profile_manager.py .
 
 # Create non-root user for better security
-RUN useradd -m -s /bin/bash claude && \
-    usermod -aG sudo claude && \
-    echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+RUN useradd -m -s /bin/bash claude
 
 # Set up npm global directory for claude user
 USER claude

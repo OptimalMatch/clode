@@ -14,8 +14,7 @@ RUN apt-get update && apt-get install -y \
 RUN npm install -g @anthropic-ai/claude-code
 
 # Create non-root user for better security
-RUN useradd -m -s /bin/bash claude && \
-    usermod -aG sudo claude
+RUN useradd -m -s /bin/bash claude
 
 # Set up SSH configuration for claude user
 RUN mkdir -p /home/claude/.ssh && \
