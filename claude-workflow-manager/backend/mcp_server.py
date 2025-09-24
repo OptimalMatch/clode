@@ -49,8 +49,8 @@ class ClaudeWorkflowMCPServer:
     
     async def handle_call_tool(self, request) -> CallToolResult:
         """Handle tool calls by routing to appropriate methods"""
-        tool_name = request.params["name"]
-        arguments = request.params.get("arguments", {})
+        tool_name = request.params.name
+        arguments = request.params.arguments or {}
         
         try:
             if tool_name == "health_check":
