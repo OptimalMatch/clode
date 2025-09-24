@@ -809,48 +809,49 @@ async def main():
     tcp_port = int(os.getenv('MCP_TCP_PORT', '8001'))
     
     if use_tcp:
-        # TCP Server mode
+        # TCP Server mode - Simple line-based protocol
         logger.info(f"🚀 Starting MCP TCP Server on port {tcp_port}")
         logger.info(f"📊 Available tools: {len(workflow_server.get_available_tools())}")
         
         async def handle_client(reader, writer):
-            init_options = {
-                "serverName": "claude-workflow-manager",
-                "serverVersion": "1.0.0"
-            }
+            logger.info(f"🔌 New TCP client connected from {writer.get_extra_info('peername')}")
+            
             try:
-                # Create a simple wrapper that supports async context manager
-                class AsyncStreamWrapper:
-                    def __init__(self, reader, writer):
-                        self.reader = reader
-                        self.writer = writer
+                # Simple line-based protocol - each line is a JSON-RPC message
+                while True:
+                    # Read a line from the client
+                    line = await reader.readline()
+                    if not line:
+                        break
                     
-                    async def __aenter__(self):
-                        return self
-                    
-                    async def __aexit__(self, exc_type, exc_val, exc_tb):
-                        self.writer.close()
-                        await self.writer.wait_closed()
-                    
-                    async def read(self, n=-1):
-                        return await self.reader.read(n)
-                    
-                    async def readline(self):
-                        return await self.reader.readline()
-                    
-                    def write(self, data):
-                        self.writer.write(data)
-                    
-                    async def drain(self):
-                        await self.writer.drain()
-                
-                # Use the wrapper
-                stream_wrapper = AsyncStreamWrapper(reader, writer)
-                await server.run(stream_wrapper, stream_wrapper, init_options)
-                
+                    try:
+                        # Decode and parse the JSON-RPC message
+                        message = line.decode('utf-8').strip()
+                        if not message:
+                            continue
+                            
+                        logger.info(f"📨 Received: {message}")
+                        
+                        # For now, just echo back a simple response
+                        # In a full implementation, we'd parse the JSON-RPC and route to the right handler
+                        response = '{"jsonrpc": "2.0", "result": "Hello from MCP Server", "id": 1}\n'
+                        writer.write(response.encode('utf-8'))
+                        await writer.drain()
+                        
+                        logger.info(f"📤 Sent: {response.strip()}")
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Error processing message: {e}")
+                        error_response = f'{{"jsonrpc": "2.0", "error": {{"code": -32603, "message": "Internal error"}}, "id": null}}\n'
+                        writer.write(error_response.encode('utf-8'))
+                        await writer.drain()
+                        
             except Exception as e:
                 logger.error(f"❌ Error in TCP client handler: {e}")
+                import traceback
+                traceback.print_exc()
             finally:
+                logger.info(f"🔌 TCP client disconnected")
                 if not writer.is_closing():
                     writer.close()
                     await writer.wait_closed()
