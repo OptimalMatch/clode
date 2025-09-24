@@ -1,8 +1,8 @@
-fastapi==0.109.0
+fastapi>=0.115.0
 uvicorn[standard]==0.27.0
 pymongo==4.6.1
 motor==3.3.2
-pydantic==2.5.3
+pydantic>=2.8.0
 python-multipart==0.0.6
 websockets==12.0
 redis==5.0.1
