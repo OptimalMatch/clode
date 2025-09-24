@@ -106,6 +106,21 @@ services:
     depends_on:
       - mongodb
 
+  mcp-server:
+    build: ./backend
+    container_name: claude-workflow-mcp
+    user: claude
+    restart: always
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./backend:/app/src  # Development volume mount
+    networks:
+      - claude-network
+    command: ["python", "/app/mcp_server.py"]
+
   redis:
     image: redis:7-alpine
     container_name: claude-workflow-redis

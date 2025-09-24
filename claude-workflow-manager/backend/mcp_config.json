@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "claude-workflow-manager": {
+      "command": "python",
+      "args": ["/app/mcp_server.py"],
+      "env": {
+        "BACKEND_URL": "http://localhost:8005"
+      }
+    }
+  }
+}
