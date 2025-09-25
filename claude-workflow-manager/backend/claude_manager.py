@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from models import ClaudeInstance, InstanceStatus, PromptStep, Subagent, InstanceLog, LogType
 from database import Database
+from claude_file_manager import ClaudeFileManager
 import re
 import time
 import uuid
@@ -23,11 +24,144 @@ class ClaudeCodeManager:
         self.interrupt_timers: Dict[str, asyncio.Task] = {}  # Track 30-second fallback interrupt timers
         self.interrupt_listeners: Dict[str, asyncio.Task] = {}  # Track background interrupt listeners
         self.db = db
+        self.claude_file_manager = ClaudeFileManager(db)
+        # Configuration for Claude CLI execution mode
+        self.use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "false").lower() == "true"
+        
+        # CRITICAL: In max plan mode, forcibly remove API key environment variables
+        # Claude CLI prioritizes API keys over credential files, so we must ensure they're not set
+        if self.use_max_plan:
+            if "CLAUDE_API_KEY" in os.environ:
+                del os.environ["CLAUDE_API_KEY"]
+                print("🗑️ Removed CLAUDE_API_KEY from environment (max plan mode)")
+            if "ANTHROPIC_API_KEY" in os.environ:
+                del os.environ["ANTHROPIC_API_KEY"] 
+                print("🗑️ Removed ANTHROPIC_API_KEY from environment (max plan mode)")
     
     def _log_with_timestamp(self, message: str):
         """Add timestamp to log messages"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Include milliseconds
         print(f"[{timestamp}] {message}")
+    
+    async def _restore_claude_profile_for_instance(self, working_dir: str):
+        """Restore the selected Claude profile credentials for an instance"""
+        try:
+            # Get the selected profile with full details from the database
+            selected_profile_details = await self.db.get_selected_profile_with_details()
+            if not selected_profile_details:
+                self._log_with_timestamp("📝 No selected Claude profile found, using default authentication")
+                return
+            
+            profile_id = selected_profile_details["selected_profile_id"]
+            profile_name = selected_profile_details["profile_name"]
+            
+            # Use the file manager to restore the profile to the working directory
+            claude_dir = os.path.join(working_dir, ".claude")
+            os.makedirs(claude_dir, exist_ok=True)
+            
+            success = await self.claude_file_manager.restore_claude_files(
+                profile_id, 
+                claude_dir
+            )
+            
+            if success:
+                self._log_with_timestamp(f"✅ Restored Claude profile '{profile_name}' to {claude_dir}")
+            else:
+                raise Exception(f"Failed to restore profile '{profile_name}'")
+                
+        except Exception as e:
+            self._log_with_timestamp(f"❌ Error restoring Claude profile: {e}")
+            raise
+    
+    def _select_model(self, input_text: str) -> str:
+        """Use Claude Sonnet 4 for all requests"""
+        return "claude-sonnet-4-20250514"
+    
+    def _build_claude_command(self, session_id: str, input_text: str, instance_id: str = None, is_resume: bool = False) -> tuple[list, dict]:
+        """
+        Build Claude CLI command with support for both API key and max plan modes
+        Returns: (command_list, environment_dict)
+        """
+        # Base environment
+        env = os.environ.copy()
+        
+        # Select appropriate model based on task complexity
+        selected_model = self._select_model(input_text)
+        
+        if self.use_max_plan:
+            # Max plan mode: unset API key and use JSON stream mode for proper authentication
+            self._log_with_timestamp(f"🎯 Using Claude Code max plan account (JSON stream mode with Sonnet 4)")
+            if "ANTHROPIC_API_KEY" in env:
+                del env["ANTHROPIC_API_KEY"]
+            if "CLAUDE_API_KEY" in env:
+                del env["CLAUDE_API_KEY"]
+            
+            # Set HOME to /home/claude since credentials are restored there
+            # The claude_file_manager.py copies credentials to /home/claude/.claude/
+            env['HOME'] = '/home/claude'
+            self._log_with_timestamp(f"🏠 Set HOME=/home/claude for Claude CLI to find credentials")
+            
+            # Build command for max plan (JSON stream mode with permissions)
+            if is_resume:
+                cmd = [
+                    "claude", 
+                    "--print",
+                    "--verbose",
+                    "--output-format", "stream-json",
+                    "--permission-mode", "bypassPermissions",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
+                    "--model", selected_model,
+                    "--resume", session_id,
+                    input_text
+                ]
+            else:
+                cmd = [
+                    "claude", 
+                    "--print",
+                    "--verbose",
+                    "--output-format", "stream-json",
+                    "--permission-mode", "bypassPermissions",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
+                    "--model", selected_model,
+                    "--session-id", session_id,
+                    input_text
+                ]
+        else:
+            # API key mode: standard streaming JSON mode
+            self._log_with_timestamp(f"🔑 Using ANTHROPIC_API_KEY (streaming JSON mode with Sonnet 4)")
+            
+            # Ensure API key is available
+            claude_api_key = os.getenv("CLAUDE_API_KEY")
+            if claude_api_key and not env.get("ANTHROPIC_API_KEY"):
+                env["ANTHROPIC_API_KEY"] = claude_api_key
+            
+            # Build command for API key mode (streaming JSON)
+            if is_resume:
+                cmd = [
+                    "claude", 
+                    "--print",
+                    "--verbose",
+                    "--output-format", "stream-json",
+                    "--permission-mode", "bypassPermissions",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
+                    "--model", selected_model,
+                    "--resume", session_id,
+                    input_text
+                ]
+            else:
+                cmd = [
+                    "claude", 
+                    "--print",
+                    "--verbose",
+                    "--output-format", "stream-json",
+                    "--permission-mode", "bypassPermissions",
+                    "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*) WebSearch(*)",
+                    "--model", selected_model,
+                    "--session-id", session_id,
+                    input_text
+                ]
+        
+        return cmd, env
     
     async def _start_interrupt_timer(self, instance_id: str):
         """Start a 30-second timer that will force interrupt if the process is still running"""
@@ -129,12 +263,16 @@ class ClaudeCodeManager:
             finished_str = f"Finished: {finished_pids}" if finished_pids else ""
             self._log_with_timestamp(f"📊   Instance {instance_id}: {active_str} {finished_str}")
     
-    async def _execute_claude_streaming(self, cmd: List[str], instance_id: str):
+    async def _execute_claude_streaming(self, cmd: List[str], instance_id: str, env: dict = None, input_text: str = None):
         """Execute Claude CLI with real-time streaming output"""
         self._log_with_timestamp(f"📡 Starting streaming execution...")
         start_time = time.time()
         
         try:
+            # Use provided environment or default
+            if env is None:
+                env = os.environ.copy()
+            
             # Start the process with process group for better termination control
             import os
             process = subprocess.Popen(
@@ -142,7 +280,7 @@ class ClaudeCodeManager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=os.environ.copy(),
+                env=env,
                 bufsize=1,  # Line buffered
                 universal_newlines=True,
                 preexec_fn=os.setsid if hasattr(os, 'setsid') else None  # Create new process group on Unix
@@ -302,54 +440,138 @@ class ClaudeCodeManager:
                         stdout_lines.append(line)
                         self._log_with_timestamp(f"📤 Stream line: {line}")
                         
-                        # Process this line immediately
-                        try:
-                            event = json.loads(line)
+                        # Check for invalid API key message and auto-fallback to max plan (only when in API key mode)
+                        if not self.use_max_plan and "Invalid API key" in line and "Please run /login" in line:
+                            self._log_with_timestamp(f"🔄 FALLBACK: Detected invalid API key, auto-running /login")
+                            await self._send_websocket_update(instance_id, {
+                                "type": "error",
+                                "content": "❌ **Authentication Error**\n\nDetected invalid API key in max plan mode. This indicates a credential restoration issue that requires manual intervention."
+                            })
                             
-                            # Extract detailed token usage and cost from result events
-                            if event.get('type') == 'result':
-                                usage = event.get('usage', {})
-                                cost = event.get('total_cost_usd', 0.0)
+                            # Don't try /login in non-interactive mode - return failure
+                            return False
+                        
+                        # Handle max-plan mode authentication requests
+                        elif self.use_max_plan and "Invalid API key" in line and "Please run /login" in line:
+                            self._log_with_timestamp(f"❌ MAX-PLAN: Authentication failed - credentials not found or invalid")
+                            await self._send_websocket_update(instance_id, {
+                                "type": "error",
+                                "content": "❌ **Authentication Error**\n\nClaude CLI cannot find valid credentials. Please check that your profile is properly authenticated in the terminal."
+                            })
+                            
+                            # Don't try /login in non-interactive mode - it won't work
+                            # This indicates a credential restoration issue that needs manual intervention
+                            return False
+                        
+                        # Check for actual permission requests (not JSON config fields)
+                        # Look for specific permission request patterns that require user approval
+                        # Exclude WebSearch permission messages since they should be auto-granted
+                        permission_request_patterns = [
+                            "claude requested permissions", 
+                            "need permission to", 
+                            "grant permission",
+                            "authorize tool",
+                            "tool permissions required"
+                        ]
+                        
+                        # Skip WebSearch permission requests since they should be auto-allowed
+                        is_websearch_permission = "websearch" in line.lower() and "haven't granted it yet" in line.lower()
+                        is_permission_request = (any(pattern in line.lower() for pattern in permission_request_patterns) 
+                                               and not is_websearch_permission)
+                        
+                        if is_permission_request:
+                            self._log_with_timestamp(f"🔑 PERMISSION REQUEST: Detected actual permission request: {line}")
+                            await self._send_websocket_update(instance_id, {
+                                "type": "partial_output",
+                                "content": "🔑 **Auto-granting permissions...**\n\nDetected permission request. Automatically granting tool access and retrying...\n"
+                            })
+                            
+                            # Mark for permission grant retry
+                            if not hasattr(self, '_pending_permission_grants'):
+                                self._pending_permission_grants = {}
+                            self._pending_permission_grants[instance_id] = True
+                            
+                            # Return False to trigger session recovery with permission grant
+                            return False
+                        
+                        # Process this line - check if it's JSON mode or text mode
+                        # Remove terminal control characters that might prefix JSON
+                        clean_line = line
+                        if '\x1b[' in line:
+                            # Remove all terminal escape sequences and extract JSON part
+                            import re
+                            clean_line = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', line)
+                        
+                        # Skip if the cleaned line is empty or just whitespace
+                        if not clean_line.strip():
+                            continue
+                        
+                        # Check if this looks like JSON (starts with { or [)
+                        is_json = clean_line.strip().startswith(('{', '['))
+                        
+                        if is_json:
+                            try:
+                                event = json.loads(clean_line)
+                            
+                                # Extract detailed token usage and cost from result events
+                                if event.get('type') == 'result':
+                                    usage = event.get('usage', {})
+                                    cost = event.get('total_cost_usd', 0.0)
+                                    
+                                    if usage:
+                                        # Track individual token categories
+                                        input_tokens = usage.get('input_tokens', 0)
+                                        output_tokens = usage.get('output_tokens', 0)
+                                        cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
+                                        cache_read_tokens = usage.get('cache_read_input_tokens', 0)
+                                        
+                                        # Accumulate totals
+                                        total_input_tokens += input_tokens
+                                        total_output_tokens += output_tokens
+                                        total_cache_creation_tokens += cache_creation_tokens
+                                        total_cache_read_tokens += cache_read_tokens
+                                        if cost > 0:
+                                            total_cost_usd += cost
+                                        
+                                        result_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
+                                        if result_tokens > 0:
+                                            total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
+                                            self._log_with_timestamp(f"🔢 Result tokens: {result_tokens} (in:{input_tokens}, out:{output_tokens}, cache_create:{cache_creation_tokens}, cache_read:{cache_read_tokens})")
+                                            self._log_with_timestamp(f"💰 Session totals: {total_tokens} tokens, ${total_cost_usd:.4f} USD")
                                 
-                                if usage:
-                                    # Track individual token categories
-                                    input_tokens = usage.get('input_tokens', 0)
-                                    output_tokens = usage.get('output_tokens', 0)
-                                    cache_creation_tokens = usage.get('cache_creation_input_tokens', 0)
-                                    cache_read_tokens = usage.get('cache_read_input_tokens', 0)
-                                    
-                                    # Accumulate totals
-                                    total_input_tokens += input_tokens
-                                    total_output_tokens += output_tokens
-                                    total_cache_creation_tokens += cache_creation_tokens
-                                    total_cache_read_tokens += cache_read_tokens
-                                    if cost > 0:
-                                        total_cost_usd += cost
-                                    
-                                    result_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
-                                    if result_tokens > 0:
-                                        total_tokens = total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens
-                                        self._log_with_timestamp(f"🔢 Result tokens: {result_tokens} (in:{input_tokens}, out:{output_tokens}, cache_create:{cache_creation_tokens}, cache_read:{cache_read_tokens})")
-                                        self._log_with_timestamp(f"💰 Session totals: {total_tokens} tokens, ${total_cost_usd:.4f} USD")
-                            
-                            formatted_msg = self._format_streaming_event(event)
-                            if formatted_msg:
+                                formatted_msg = self._format_streaming_event(event)
+                                if formatted_msg:
+                                    await self._send_websocket_update(instance_id, {
+                                        "type": "partial_output",
+                                        "content": formatted_msg
+                                    })
+                                    # Store in terminal history
+                                    await self.db.append_terminal_history(instance_id, formatted_msg, "output")
+                                    # Also create instance logs for analytics
+                                    await self._create_event_logs(instance_id, event, formatted_msg)
+                            except json.JSONDecodeError:
+                                # JSON parsing failed - treat as raw text
+                                if clean_line.strip():
+                                    self._log_with_timestamp(f"⚠️ Invalid JSON: {clean_line}")
+                                    await self._send_websocket_update(instance_id, {
+                                        "type": "partial_output",
+                                        "content": clean_line
+                                    })
+                                    await self.db.append_terminal_history(instance_id, clean_line, "output")
+                        else:
+                            # Text-only mode output - send as-is
+                            if clean_line.strip():
                                 await self._send_websocket_update(instance_id, {
                                     "type": "partial_output",
-                                    "content": formatted_msg
+                                    "content": clean_line
                                 })
-                                # Store in terminal history
-                                await self.db.append_terminal_history(instance_id, formatted_msg, "output")
-                                # Also create instance logs for analytics
-                                await self._create_event_logs(instance_id, event, formatted_msg)
-                                
-                                # CRITICAL: Check interrupt flag after processing each line during busy output
-                                if self.interrupt_flags.get(instance_id, False):
-                                    self._log_with_timestamp(f"🛑 SESSION INTERRUPT: Flag detected while processing output line")
-                                    break  # Break out of line processing to get to main flag check
-                        except json.JSONDecodeError:
-                            # Not a JSON line, might be error or other output
-                            self._log_with_timestamp(f"⚠️ Non-JSON line: {line}")
+                                await self.db.append_terminal_history(instance_id, clean_line, "output")
+
+                        
+                        # CRITICAL: Check interrupt flag after processing each line during busy output
+                        if self.interrupt_flags.get(instance_id, False):
+                            self._log_with_timestamp(f"🛑 SESSION INTERRUPT: Flag detected while processing output line")
+                            break  # Break out of line processing to get to main flag check
                 
                 # Small delay to prevent busy waiting (reduced for more responsive interrupts)
                 await asyncio.sleep(0.005)  # 5ms instead of 10ms for more responsive interrupts
@@ -460,6 +682,8 @@ class ClaudeCodeManager:
             })
             return False
     
+
+
     async def _handle_session_recovery(self, instance_id: str, session_id: str, input_text: str):
         """Handle session recovery when Claude CLI session is invalid"""
         self._log_with_timestamp(f"⚠️ Session {session_id} is invalid, creating new session...")
@@ -468,35 +692,72 @@ class ClaudeCodeManager:
         if not instance_info:
             return
         
+        # Check recovery attempt count to prevent infinite loops
+        recovery_count = getattr(self, '_recovery_counts', {}).get(instance_id, 0)
+        if recovery_count >= 3:
+            self._log_with_timestamp(f"❌ Max recovery attempts (3) reached for instance {instance_id}")
+            await self._send_websocket_update(instance_id, {
+                "type": "error",
+                "error": "Maximum session recovery attempts reached. Please try again with a new instance."
+            })
+            return False
+        
+        # Increment recovery count
+        if not hasattr(self, '_recovery_counts'):
+            self._recovery_counts = {}
+        self._recovery_counts[instance_id] = recovery_count + 1
+        self._log_with_timestamp(f"🔄 Recovery attempt {self._recovery_counts[instance_id]}/3 for instance {instance_id}")
+        
         # Clear the invalid session from database
         await self.db.update_instance_session_id(instance_id, "")
         instance_info["session_created"] = False
         
-        # Generate new session ID
-        new_session_id = str(uuid.uuid4())
-        instance_info["session_id"] = new_session_id
-        self._log_with_timestamp(f"🆕 Creating new session {new_session_id} (retry)")
-        
-        # Create retry command
-        retry_cmd = [
-            "claude", 
-            "--print",
-            "--verbose",
-            "--output-format", "stream-json",
-            "--permission-mode", "acceptEdits",
-            "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*)",
-            "--session-id", new_session_id,
-            input_text
-        ]
+        # Check if this is a login request retry
+        if hasattr(self, '_pending_login_requests') and self._pending_login_requests.get(instance_id):
+            self._log_with_timestamp(f"❌ Cannot retry with /login in non-interactive mode")
+            self._log_with_timestamp(f"❌ This indicates a credential restoration issue")
+            
+            # Clear the pending request and fail - /login won't work in automated mode
+            del self._pending_login_requests[instance_id]
+            return False
+        # Check if this is a permission grant retry (use existing session)
+        elif hasattr(self, '_pending_permission_grants') and self._pending_permission_grants.get(instance_id):
+            self._log_with_timestamp(f"🔑 Permission grant retry - resuming existing session {session_id}")
+            retry_input = "Yes, I grant permission to use the requested tools. Please proceed with the task."
+            retry_cmd, retry_env = self._build_claude_command(session_id, retry_input, instance_id, is_resume=True)
+            # Clear the permission grant flag
+            del self._pending_permission_grants[instance_id]
+        else:
+            # Generate new session ID for other retries
+            new_session_id = str(uuid.uuid4())
+            instance_info["session_id"] = new_session_id
+            self._log_with_timestamp(f"🆕 Creating new session {new_session_id} (retry)")
+            
+            # In max plan mode, don't try to recover sessions - start fresh
+            if self.use_max_plan:
+                self._log_with_timestamp(f"🎯 Max plan mode - running original command directly (no session recovery)")
+                retry_input = input_text  # Just run the original command
+            else:
+                retry_input = input_text
+                
+            retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, instance_id, is_resume=False)
         
         # Try streaming execution again with new session
-        success = await self._execute_claude_streaming(retry_cmd, instance_id)
+        success = await self._execute_claude_streaming(retry_cmd, instance_id, retry_env, input_text)
         
         if success:
+            # Clear recovery count on success
+            if hasattr(self, '_recovery_counts') and instance_id in self._recovery_counts:
+                del self._recovery_counts[instance_id]
+            
             # Save the new session ID and mark as created
-            await self.db.update_instance_session_id(instance_id, new_session_id)
+            current_session_id = instance_info.get("session_id", "unknown")
+            await self.db.update_instance_session_id(instance_id, current_session_id)
             instance_info["session_created"] = True
-            self._log_with_timestamp(f"✅ Session recovery successful with session {new_session_id}")
+            self._log_with_timestamp(f"✅ Session recovery successful with session {current_session_id}")
+            
+            # Session recovery was successful - credentials should now be working
+            self._log_with_timestamp(f"✅ Session recovery completed - credentials should be available")
         else:
             # Even retry failed
             self._log_with_timestamp(f"❌ Session recovery failed")
@@ -504,6 +765,8 @@ class ClaudeCodeManager:
                 "type": "error",
                 "error": "Session recovery failed"
             })
+            
+        return success
         
     async def spawn_instance(self, instance: ClaudeInstance):
         start_time = time.time()
@@ -520,9 +783,15 @@ class ClaudeCodeManager:
             # Create temporary directory for the git repo
             temp_dir = tempfile.mkdtemp()
             
+            # Store the working directory for this instance so Claude CLI can find credentials
+            if not hasattr(self, '_instance_working_dirs'):
+                self._instance_working_dirs = {}
+            self._instance_working_dirs[instance.id] = temp_dir
+            
             # Clone the git repository with SSH support
-            env = os.environ.copy()
-            env['GIT_SSH_COMMAND'] = 'ssh -o UserKnownHostsFile=/root/.ssh/known_hosts -o StrictHostKeyChecking=yes'
+            # Use the centralized git environment configuration
+            from main import get_git_env
+            env = get_git_env()
             
             # Clone repository asynchronously to avoid blocking
             process = await asyncio.create_subprocess_exec(
@@ -534,6 +803,15 @@ class ClaudeCodeManager:
             stdout, stderr = await process.communicate()
             if process.returncode != 0:
                 raise subprocess.CalledProcessError(process.returncode, ["git", "clone"], output=stdout, stderr=stderr)
+            
+            # Restore selected Claude profile for this instance
+            try:
+                self._log_with_timestamp(f"🔐 Restoring Claude profile for instance {instance.id}...")
+                await self._restore_claude_profile_for_instance(temp_dir)
+                self._log_with_timestamp(f"✅ Claude profile restored successfully for instance {instance.id}")
+            except Exception as e:
+                self._log_with_timestamp(f"⚠️ Failed to restore Claude profile (will use default): {e}")
+                # Don't fail the instance spawn - continue with default auth
             
             # Auto-discover agents from the repository before proceeding
             try:
@@ -1123,8 +1401,11 @@ class ClaudeCodeManager:
                     "instance": instance.dict()
                 })
                 print(f"📤 Sending connection data for instance: {instance_id}")
-                await websocket.send_json(connection_data)
-                print(f"✅ Connection data sent successfully for instance: {instance_id}")
+                if await self._safe_websocket_send(instance_id, websocket, connection_data):
+                    print(f"✅ Connection data sent successfully for instance: {instance_id}")
+                else:
+                    print(f"❌ Failed to send connection data for instance: {instance_id}")
+                    return
                 
                 # Check if there are ongoing Claude CLI processes for this instance
                 if instance_id in self.running_processes and self.running_processes[instance_id]:
@@ -1132,7 +1413,7 @@ class ClaudeCodeManager:
                     if active_processes:
                         latest_process = active_processes[-1]  # Use the most recent process
                         self._log_with_timestamp(f"🔄 Found {len(active_processes)} ongoing Claude CLI processes for instance {instance_id}, latest PID: {latest_process.pid}")
-                        await websocket.send_json({
+                        await self._safe_websocket_send(instance_id, websocket, {
                             "type": "status",
                             "status": "running",
                             "message": f"Connected to ongoing Claude CLI execution ({len(active_processes)} processes, latest PID: {latest_process.pid})"
@@ -1146,7 +1427,7 @@ class ClaudeCodeManager:
                         
             else:
                 print(f"⚠️ Instance not found in database: {instance_id}")
-                await websocket.send_json({
+                await self._safe_websocket_send(instance_id, websocket, {
                     "type": "error",
                     "error": f"Instance {instance_id} not found"
                 })
@@ -1452,11 +1733,6 @@ class ClaudeCodeManager:
             # Start background interrupt listener to monitor for interrupt flags
             await self._start_interrupt_listener(instance_id)
             
-            # Ensure ANTHROPIC_API_KEY is available for subprocess calls
-            claude_api_key = os.getenv("CLAUDE_API_KEY")
-            if claude_api_key and not os.getenv("ANTHROPIC_API_KEY"):
-                os.environ["ANTHROPIC_API_KEY"] = claude_api_key
-            
             # Change to the working directory for this instance
             original_cwd = os.getcwd()
             working_dir = instance_info["working_directory"]
@@ -1485,38 +1761,24 @@ class ClaudeCodeManager:
                 if not session_created:
                     # First command - create session with specific ID
                     self._log_with_timestamp(f"🆕 Creating new session {session_id}")
-                    cmd = [
-                        "claude", 
-                        "--print",
-                        "--verbose",
-                        "--output-format", "stream-json",
-                        "--permission-mode", "acceptEdits",
-                        "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
-                        "--session-id", session_id,
-                        input_text
-                    ]
+                    cmd, env = self._build_claude_command(session_id, input_text, instance_id, is_resume=False)
                     instance_info["session_created"] = True
                     # Save session ID to database for future use
                     await self.db.update_instance_session_id(instance_id, session_id)
+                elif self.use_max_plan:
+                    # Max plan mode - resume existing session for context preservation
+                    self._log_with_timestamp(f"🎯 Max plan mode - resuming session {session_id} (preserving context)")
+                    cmd, env = self._build_claude_command(session_id, input_text, instance_id, is_resume=True)
                 else:
-                    # Subsequent commands - resume existing session
+                    # API key mode - resume existing session
                     self._log_with_timestamp(f"🔄 Resuming session {session_id}")
-                    cmd = [
-                        "claude", 
-                        "--print",
-                        "--verbose",
-                        "--output-format", "stream-json",
-                        "--permission-mode", "acceptEdits",
-                        "--allowedTools", "Bash(*) Edit(*) Write(*) Read(*) MultiEdit(*) TodoWrite(*) Grep(*) LS(*) Glob(*) Python(*)",
-                        "--resume", session_id,
-                        input_text
-                    ]
+                    cmd, env = self._build_claude_command(session_id, input_text, instance_id, is_resume=True)
                 
                 self._log_with_timestamp(f"🚀 About to execute Claude CLI command: {' '.join(cmd)}")
                 self._log_with_timestamp(f"🔍 Command length: {len(cmd)} arguments")
                 
                 # Use Popen for real-time streaming instead of run()
-                success = await self._execute_claude_streaming(cmd, instance_id)
+                success = await self._execute_claude_streaming(cmd, instance_id, env, input_text)
                 
                 if not success:
                     # Check if instance was explicitly cancelled - if so, don't attempt session recovery
@@ -1971,15 +2233,34 @@ class ClaudeCodeManager:
         else:
             return obj
     
+    async def _safe_websocket_send(self, instance_id: str, websocket: WebSocket, data: dict) -> bool:
+        """Safely send data to a WebSocket connection with automatic cleanup on failure"""
+        try:
+            # Check if WebSocket is still in our registry (might have been removed by another thread)
+            if instance_id not in self.websockets:
+                return False
+                
+            serializable_data = self._make_json_serializable(data)
+            await websocket.send_json(serializable_data)
+            return True
+        except Exception as e:
+            # WebSocket is likely disconnected - remove it from registry to prevent future attempts
+            error_msg = str(e)
+            if "websocket.close" in error_msg or "response already completed" in error_msg:
+                print(f"🔌 WebSocket already closed for instance {instance_id}")
+            else:
+                print(f"❌ WebSocket error for instance {instance_id}: {error_msg}")
+                
+            # Always clean up the WebSocket reference on any error
+            if instance_id in self.websockets:
+                print(f"🧹 Removing disconnected WebSocket for instance {instance_id}")
+                del self.websockets[instance_id]
+            return False
+
     async def _send_websocket_update(self, instance_id: str, data: dict):
         websocket = self.websockets.get(instance_id)
         if websocket:
-            try:
-                # Make data JSON serializable
-                serializable_data = self._make_json_serializable(data)
-                await websocket.send_json(serializable_data)
-            except Exception as e:
-                print(f"Error sending websocket update: {e}")
+            await self._safe_websocket_send(instance_id, websocket, data)
     
     def _parse_prompt_steps(self, prompt_content: str) -> list:
         # Try to parse as JSON first
@@ -2110,6 +2391,10 @@ Please leverage the above subagent capabilities and follow their system instruct
                 if instance_id in self.instances:
                     self.instances[instance_id]["active_subagent"] = subagent_name
         
+        # Determine current Claude mode
+        use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "true").lower() == "true"
+        claude_mode = "max-plan" if use_max_plan else "api-key"
+        
         log = InstanceLog(
             instance_id=instance_id,
             workflow_id=workflow_id or "",
@@ -2123,7 +2408,8 @@ Please leverage the above subagent capabilities and follow their system instruct
             total_cost_usd=total_cost_usd,
             execution_time_ms=execution_time_ms,
             subagent_name=subagent_name,
-            step_id=step_id
+            step_id=step_id,
+            claude_mode=claude_mode
         )
         
         if self.db.db is None:

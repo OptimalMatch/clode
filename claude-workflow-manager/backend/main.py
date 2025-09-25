@@ -26,7 +26,11 @@ from models import (
     AgentFormatExamplesResponse, ErrorResponse, LogAnalytics,
     GitValidationRequest, GitValidationResponse, GitBranchesResponse,
     SSHKeyGenerationRequest, SSHKeyResponse, SSHKeyListResponse, 
-    GitConnectionTestRequest, SSHKeyInfo
+    GitConnectionTestRequest, SSHKeyInfo, ClaudeAuthProfile,
+    ClaudeAuthProfileListResponse, ClaudeLoginSessionRequest, 
+    ClaudeLoginSessionResponse, ClaudeAuthTokenRequest,
+    ClaudeProfileSelection, ClaudeProfileSelectionRequest,
+    ClaudeProfileSelectionResponse
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -49,17 +53,10 @@ def get_git_env():
     # Build SSH command that checks both directories for keys
     ssh_command_parts = [
         'ssh',
-        '-o', 'UserKnownHostsFile=/root/.ssh/known_hosts',
-        '-o', 'StrictHostKeyChecking=yes',
+        '-o', 'UserKnownHostsFile=/dev/null',
+        '-o', 'StrictHostKeyChecking=no',
         '-o', f'IdentitiesOnly=yes'
     ]
-    
-    # Add keys from both directories
-    mounted_ssh_dir = Path('/root/.ssh')
-    if mounted_ssh_dir.exists():
-        for key_file in mounted_ssh_dir.glob('id_*'):
-            if key_file.is_file() and not key_file.name.endswith('.pub'):
-                ssh_command_parts.extend(['-i', str(key_file)])
     
     # Add generated keys from writable directory
     for key_file in ssh_key_dir.glob('*'):
@@ -120,8 +117,8 @@ def generate_ssh_key_pair(key_name: str, key_type: str = "ed25519", email: str =
                 raise Exception(f"SSH key generation failed: {result.stderr}")
             
             # Read the generated keys
-            private_key = temp_key_path.read_text().strip()
-            public_key = (temp_key_path.with_suffix('.pub')).read_text().strip()
+            private_key = temp_key_path.read_text()  # Don't strip - SSH keys need exact format
+            public_key = (temp_key_path.with_suffix('.pub')).read_text().strip()  # Public keys can be stripped
             
             # Get fingerprint
             fingerprint_cmd = ['ssh-keygen', '-lf', str(temp_key_path)]
@@ -208,44 +205,7 @@ def list_ssh_keys():
                 print(f"Error reading generated SSH key {key_name}: {e}")
                 continue
     
-    # Also list keys from mounted SSH directory (read-only)
-    mounted_ssh_dir = Path('/root/.ssh')
-    if mounted_ssh_dir.exists():
-        for pub_key_file in mounted_ssh_dir.glob("*.pub"):
-            key_name = pub_key_file.stem
-            private_key_file = mounted_ssh_dir / key_name
-            
-            if private_key_file.exists():
-                try:
-                    public_key = pub_key_file.read_text().strip()
-                    
-                    # Get fingerprint
-                    fingerprint_cmd = ['ssh-keygen', '-lf', str(pub_key_file)]
-                    fingerprint_result = subprocess.run(
-                        fingerprint_cmd, capture_output=True, text=True, timeout=10
-                    )
-                    
-                    if fingerprint_result.returncode == 0:
-                        fingerprint_line = fingerprint_result.stdout.strip()
-                        fingerprint = fingerprint_line.split(' ')[1] if ' ' in fingerprint_line else "unknown"
-                    else:
-                        fingerprint = "unknown"
-                    
-                    # Get file creation time
-                    created_at = datetime.fromtimestamp(private_key_file.stat().st_ctime).isoformat()
-                    
-                    keys.append({
-                        'fingerprint': fingerprint,
-                        'key_name': f"{key_name} (mounted)",
-                        'public_key': public_key,
-                        'created_at': created_at,
-                        'last_used': None,
-                        'source': 'mounted'
-                    })
-                    
-                except Exception as e:
-                    print(f"Error reading mounted SSH key {key_name}: {e}")
-                    continue
+
     
     return keys
 
@@ -276,14 +236,7 @@ def test_ssh_connection(git_repo: str, key_name: str = None):
             if generated_key_path.exists() and generated_key_path.is_file():
                 cmd.extend(['-i', str(generated_key_path)])
                 key_found = True
-            else:
-                # Check in mounted SSH directory
-                mounted_ssh_dir = Path('/root/.ssh')
-                if mounted_ssh_dir.exists():
-                    mounted_key_path = mounted_ssh_dir / clean_key_name
-                    if mounted_key_path.exists() and mounted_key_path.is_file():
-                        cmd.extend(['-i', str(mounted_key_path)])
-                        key_found = True
+
             
             if not key_found:
                 return False, f"SSH key '{clean_key_name}' not found"
@@ -294,13 +247,6 @@ def test_ssh_connection(git_repo: str, key_name: str = None):
         else:
             # Test with all available keys (original behavior)
             ssh_key_dir = get_ssh_key_directory()
-            mounted_ssh_dir = Path('/root/.ssh')
-            
-            # Add mounted SSH keys
-            if mounted_ssh_dir.exists():
-                for key_file in mounted_ssh_dir.glob('id_*'):
-                    if key_file.is_file() and not key_file.name.endswith('.pub'):
-                        cmd.extend(['-i', str(key_file)])
             
             # Add generated SSH keys
             for key_file in ssh_key_dir.glob('*'):
@@ -499,6 +445,283 @@ async def health_check():
     status_code = 200 if health_status["status"] == "healthy" else 503
     return JSONResponse(content=health_status, status_code=status_code)
 
+@app.get(
+    "/api/claude-mode",
+    summary="Get Claude Authentication Mode",
+    description="Get the current Claude authentication mode (max-plan or api-key).",
+    tags=["Configuration"]
+)
+async def get_claude_mode():
+    """Get the current Claude authentication mode."""
+    use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "true").lower() == "true"
+    
+    return {
+        "mode": "max-plan" if use_max_plan else "api-key",
+        "use_max_plan": use_max_plan,
+        "description": "Max Plan (authenticated via claude /login)" if use_max_plan else "API Key (using CLAUDE_API_KEY)"
+    }
+
+# Claude Authentication Profile Management Endpoints
+@app.get(
+    "/api/claude-auth/profiles",
+    response_model=ClaudeAuthProfileListResponse,
+    summary="List Claude Auth Profiles",
+    description="Get all available Claude authentication profiles.",
+    tags=["Claude Authentication"]
+)
+async def get_claude_auth_profiles():
+    """Get all Claude authentication profiles."""
+    try:
+        profiles = await db.get_claude_auth_profiles()
+        # Don't return sensitive credentials in the list
+        safe_profiles = []
+        for profile in profiles:
+            safe_profile = profile.dict()
+            safe_profile["credentials_json"] = "[REDACTED]"  # Hide credentials
+            safe_profile["project_files"] = {}  # Hide project files
+            safe_profiles.append(safe_profile)
+        return {"profiles": safe_profiles}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve profiles: {str(e)}")
+
+@app.post(
+    "/api/claude-auth/login-session",
+    response_model=ClaudeLoginSessionResponse,
+    summary="Start Claude Login Session",
+    description="Start an interactive Claude login session.",
+    tags=["Claude Authentication"]
+)
+async def start_claude_login_session(request: ClaudeLoginSessionRequest):
+    """Start an interactive Claude login session."""
+    try:
+        session_id = str(uuid.uuid4())
+        
+        # Store session info in memory (you might want to use Redis for production)
+        if not hasattr(app.state, 'claude_login_sessions'):
+            app.state.claude_login_sessions = {}
+        
+        app.state.claude_login_sessions[session_id] = {
+            "profile_name": request.profile_name,
+            "user_email": request.user_email,
+            "created_at": datetime.utcnow(),
+            "status": "started"
+        }
+        
+        return ClaudeLoginSessionResponse(
+            session_id=session_id,
+            profile_name=request.profile_name,
+            message="Login session started. Use the returned session_id to continue the authentication flow."
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start login session: {str(e)}")
+
+@app.post(
+    "/api/claude-auth/submit-token",
+    summary="Submit Claude Auth Token",
+    description="Submit the authentication token from Claude login flow.",
+    tags=["Claude Authentication"]
+)
+async def submit_claude_auth_token(request: ClaudeAuthTokenRequest):
+    """Submit Claude authentication token and save profile."""
+    try:
+        # Verify session exists
+        if not hasattr(app.state, 'claude_login_sessions') or request.session_id not in app.state.claude_login_sessions:
+            raise HTTPException(status_code=404, detail="Login session not found")
+        
+        session = app.state.claude_login_sessions[request.session_id]
+        
+        # Here you would process the token and create the auth profile
+        # For now, we'll create a placeholder profile
+        profile_id = str(uuid.uuid4())
+        
+        profile = ClaudeAuthProfile(
+            id=profile_id,
+            profile_name=session["profile_name"],
+            user_email=session.get("user_email"),
+            credentials_json=request.auth_token,  # In real implementation, this would be the processed credentials
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            auth_method="max-plan"
+        )
+        
+        await db.create_claude_auth_profile(profile)
+        
+        # Clean up session
+        del app.state.claude_login_sessions[request.session_id]
+        
+        return {"success": True, "profile_id": profile_id, "message": "Authentication profile created successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process auth token: {str(e)}")
+
+@app.post(
+    "/api/claude-auth/import-terminal-credentials",
+    summary="Import Terminal Claude Credentials",
+    description="Import Claude credentials from the terminal container into the backend profile system.",
+    tags=["Claude Authentication"]
+)
+async def import_terminal_credentials():
+    """Import Claude credentials from terminal container."""
+    try:
+        import httpx
+        import json
+        
+        # Call the terminal server's export endpoint
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://claude-workflow-terminal:8006/export-credentials")
+            response.raise_for_status()
+            export_data = response.json()
+        
+        if not export_data.get("has_credentials", False):
+            error_msg = export_data.get("error", "No Claude credentials found")
+            raise HTTPException(status_code=404, detail=error_msg)
+        
+        credentials_data = export_data["credentials"]
+        subscription_type = export_data.get("subscription_type")
+        user_email = export_data.get("user_email")
+        
+        # Create a profile name based on subscription type
+        profile_name = f"Terminal Login ({subscription_type.title()} Plan)" if subscription_type else "Terminal Login"
+        
+        # Create the profile
+        profile_id = str(uuid.uuid4())
+        
+        profile = ClaudeAuthProfile(
+            id=profile_id,
+            profile_name=profile_name,
+            user_email=user_email,
+            credentials_json=json.dumps(credentials_data),  # Store the full credentials
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            last_used_at=datetime.utcnow(),
+            auth_method="terminal-oauth"
+        )
+        
+        await db.create_claude_auth_profile(profile)
+        
+        return {
+            "success": True, 
+            "profile_id": profile_id, 
+            "profile_name": profile_name,
+            "subscription_type": subscription_type,
+            "message": "Terminal credentials imported successfully"
+        }
+        
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to connect to terminal server: {str(e)}")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=500, detail=f"Terminal server error: {str(e)}")
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Invalid credentials format: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to import credentials: {str(e)}")
+
+@app.delete(
+    "/api/claude-auth/profiles/{profile_id}",
+    summary="Delete Claude Auth Profile",
+    description="Delete (deactivate) a Claude authentication profile.",
+    tags=["Claude Authentication"]
+)
+async def delete_claude_auth_profile(profile_id: str):
+    """Delete a Claude authentication profile."""
+    try:
+        success = await db.delete_claude_auth_profile(profile_id)
+        if success:
+            return {"success": True, "message": "Profile deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Profile not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete profile: {str(e)}")
+
+@app.get(
+    "/api/claude-auth/profiles/{profile_id}/files",
+    summary="List Profile Files",
+    description="List the files stored in a Claude authentication profile.",
+    tags=["Claude Authentication"]
+)
+async def list_profile_files(profile_id: str):
+    """List files stored in a Claude auth profile."""
+    try:
+        files = await claude_manager.claude_file_manager.list_profile_files(profile_id)
+        return files
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list profile files: {str(e)}")
+
+@app.post(
+    "/api/claude-auth/selected-profile",
+    summary="Set Selected Claude Profile",
+    description="Set the default/selected Claude authentication profile for use in terminals and instances.",
+    tags=["Claude Authentication"]
+)
+async def set_selected_claude_profile(request: ClaudeProfileSelectionRequest):
+    """Set the selected Claude profile."""
+    try:
+        success = await db.set_selected_claude_profile(request.profile_id)
+        if success:
+            return {"success": True, "message": "Selected profile updated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Profile not found or inactive")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to set selected profile: {str(e)}")
+
+@app.get(
+    "/api/claude-auth/selected-profile",
+    response_model=ClaudeProfileSelectionResponse,
+    summary="Get Selected Claude Profile",
+    description="Get the currently selected/default Claude authentication profile.",
+    tags=["Claude Authentication"]
+)
+async def get_selected_claude_profile():
+    """Get the selected Claude profile."""
+    try:
+        selection = await db.get_selected_profile_with_details()
+        if selection:
+            return ClaudeProfileSelectionResponse(
+                selected_profile_id=selection["selected_profile_id"],
+                profile_name=selection["profile_name"],
+                selected_at=selection["selected_at"]
+            )
+        else:
+            return ClaudeProfileSelectionResponse()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get selected profile: {str(e)}")
+
+@app.delete(
+    "/api/claude-auth/selected-profile",
+    summary="Clear Selected Claude Profile",
+    description="Clear the currently selected/default Claude authentication profile.",
+    tags=["Claude Authentication"]
+)
+async def clear_selected_claude_profile():
+    """Clear the selected Claude profile."""
+    try:
+        success = await db.clear_selected_claude_profile()
+        return {"success": success, "message": "Selected profile cleared" if success else "No profile was selected"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear selected profile: {str(e)}")
+
+@app.post(
+    "/api/claude-auth/profiles/{profile_id}/restore",
+    summary="Restore Claude Profile Files",
+    description="Restore Claude authentication files from a profile to a specified directory.",
+    tags=["Claude Authentication"]
+)
+async def restore_claude_profile_files(profile_id: str, target_directory: str = None):
+    """Restore Claude files from a profile to a target directory."""
+    try:
+        # Use the claude file manager to restore files
+        success = await claude_manager.claude_file_manager.restore_claude_files(
+            profile_id, 
+            target_directory
+        )
+        
+        if success:
+            return {"success": True, "message": f"Profile {profile_id} files restored successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Profile not found or restoration failed")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to restore profile files: {str(e)}")
+
 @app.post(
     "/api/workflows",
     response_model=IdResponse,
@@ -652,6 +875,11 @@ async def spawn_instance(request: SpawnInstanceRequest):
             raise HTTPException(status_code=400, detail="No git repository specified in request or workflow")
             
         instance_id = str(uuid.uuid4())
+        
+        # Determine current Claude mode
+        use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "true").lower() == "true"
+        claude_mode = "max-plan" if use_max_plan else "api-key"
+        
         instance = ClaudeInstance(
             id=instance_id,
             workflow_id=workflow_id,
@@ -660,7 +888,8 @@ async def spawn_instance(request: SpawnInstanceRequest):
             status=InstanceStatus.INITIALIZING,
             created_at=datetime.utcnow(),
             start_sequence=start_sequence,
-            end_sequence=end_sequence
+            end_sequence=end_sequence,
+            claude_mode=claude_mode
         )
         
         await db.create_instance(instance)

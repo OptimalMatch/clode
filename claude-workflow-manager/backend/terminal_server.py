@@ -1,0 +1,909 @@
+"""
+Claude Terminal Server - WebSocket-based terminal interface for Claude CLI
+"""
+import asyncio
+import json
+import os
+import logging
+import signal
+import sys
+import uuid
+import threading
+import time
+from pathlib import Path
+from typing import Dict, Optional, Set
+import re
+import ptyprocess
+import pexpect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+from claude_profile_manager import ClaudeProfileManager
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+class HealthHandler(BaseHTTPRequestHandler):
+    """Simple health check handler that runs independently"""
+    
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response = json.dumps({
+                "status": "healthy",
+                "timestamp": time.time()
+            })
+            self.wfile.write(response.encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        # Suppress default HTTP server logs
+        pass
+
+def start_health_server(port=8007):
+    """Start a simple HTTP health server on a separate thread"""
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info(f"🏥 Health server started on port {port}")
+    return server
+
+class TerminalSession:
+    """Represents an active terminal session with Claude CLI"""
+    
+    def __init__(self, session_id: str, session_type: str, profile_id: Optional[str] = None):
+        self.session_id = session_id
+        self.session_type = session_type  # 'login', 'general', or 'instance'
+        self.profile_id = profile_id
+        self.profile_name: Optional[str] = None
+        self.child_process: Optional[pexpect.spawn] = None
+        self.websocket: Optional[WebSocket] = None
+        self.environment: Dict[str, str] = {}
+        self.working_directory: Optional[Path] = None
+        self.oauth_urls: Set[str] = set()
+        self.is_authenticated = False
+        self.last_output_buffer = ""
+        self.message_task: Optional[asyncio.Task] = None
+        
+        # OAuth URL detection patterns
+        self.oauth_patterns = [
+            re.compile(r'https://claude\.ai/oauth/authorize\?[^\s\n\r]+'),
+            re.compile(r'https://console\.anthropic\.com/[^\s\n\r]+'),
+            re.compile(r'https://[^\s\n\r]*oauth[^\s\n\r]*'),
+        ]
+        
+        # Authentication completion patterns
+        self.auth_success_patterns = [
+            re.compile(r'Login successful', re.IGNORECASE),
+            re.compile(r'Logged in as', re.IGNORECASE),
+            re.compile(r'Authentication successful', re.IGNORECASE),
+            re.compile(r'Welcome.*Claude', re.IGNORECASE),
+        ]
+        
+        self.auth_failure_patterns = [
+            re.compile(r'Authentication failed', re.IGNORECASE),
+            re.compile(r'Login failed', re.IGNORECASE),
+            re.compile(r'Invalid credentials', re.IGNORECASE),
+            re.compile(r'Access denied', re.IGNORECASE),
+        ]
+        
+        logger.info(f"🎯 Created terminal session: {session_id} (type: {session_type})")
+
+class TerminalServer:
+    """WebSocket-based terminal server for Claude CLI"""
+    
+    def __init__(self):
+        self.app = FastAPI(title="Claude Terminal Server", version="1.0.0")
+        self.sessions: Dict[str, TerminalSession] = {}
+        self.profile_manager = ClaudeProfileManager()
+        
+        # Environment configuration
+        self.claude_profiles_dir = os.getenv('CLAUDE_PROFILES_DIR', '/app/claude_profiles')
+        self.terminal_sessions_dir = os.getenv('TERMINAL_SESSIONS_DIR', '/app/terminal_sessions')
+        self.use_max_plan = os.getenv('USE_CLAUDE_MAX_PLAN', 'false').lower() == 'true'
+        
+        # Create directories
+        Path(self.terminal_sessions_dir).mkdir(exist_ok=True, parents=True)
+        
+        self._setup_routes()
+        self._setup_middleware()
+        
+        logger.info(f"🚀 Terminal server initialized")
+        logger.info(f"📁 Profiles directory: {self.claude_profiles_dir}")
+        logger.info(f"📁 Sessions directory: {self.terminal_sessions_dir}")
+        logger.info(f"🎯 Max plan mode: {self.use_max_plan}")
+    
+    def _check_claude_cli_available(self) -> bool:
+        """Check if Claude CLI is available in the system"""
+        try:
+            import subprocess
+            result = subprocess.run(['which', 'claude'], 
+                                  capture_output=True, 
+                                  text=True, 
+                                  timeout=5)
+            return result.returncode == 0
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to check Claude CLI availability: {e}")
+            return False
+    
+    def _setup_middleware(self):
+        """Setup CORS and other middleware"""
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],  # Configure appropriately for production
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    
+    def _setup_routes(self):
+        """Setup FastAPI routes"""
+        
+        @self.app.get("/health")
+        async def health_check():
+            # Simple, fast health check that doesn't depend on session state
+            return {"status": "healthy", "timestamp": asyncio.get_event_loop().time()}
+        
+        @self.app.get("/status")
+        async def detailed_status():
+            # More detailed status endpoint for monitoring
+            return {
+                "status": "healthy",
+                "active_sessions": len(self.sessions),
+                "profiles_dir": self.claude_profiles_dir,
+                "max_plan_mode": self.use_max_plan,
+                "uptime": asyncio.get_event_loop().time()
+            }
+        
+        @self.app.websocket("/ws/terminal/{session_type}/{session_id}")
+        async def websocket_endpoint(websocket: WebSocket, session_type: str, session_id: str):
+            await self._handle_websocket_connection(websocket, session_type, session_id)
+        
+        @self.app.get("/sessions")
+        async def list_sessions():
+            return {
+                "sessions": [
+                    {
+                        "session_id": session.session_id,
+                        "session_type": session.session_type,
+                        "profile_id": session.profile_id,
+                        "is_authenticated": session.is_authenticated,
+                        "oauth_urls": list(session.oauth_urls)
+                    }
+                    for session in self.sessions.values()
+                ]
+            }
+        
+        @self.app.get("/profiles")
+        async def list_profiles():
+            return {"profiles": self.profile_manager.list_profiles()}
+
+        @self.app.get("/export-credentials")
+        async def export_claude_credentials(session_id: str = None):
+            """Export Claude credentials for backend integration"""
+            try:
+                # Check multiple possible locations for credentials
+                credential_locations = []
+                
+                # If specific session ID provided, check that first
+                if session_id:
+                    specific_session_creds = Path(self.terminal_sessions_dir) / session_id / ".claude" / ".credentials.json"
+                    credential_locations.append(specific_session_creds)
+                
+                # Add default location
+                credential_locations.append(Path("/home/claude/.claude/.credentials.json"))
+                
+                # Add all other session directories
+                sessions_dir = Path(self.terminal_sessions_dir)
+                if sessions_dir.exists():
+                    for session_dir in sessions_dir.iterdir():
+                        if session_dir.is_dir() and (not session_id or session_dir.name != session_id):
+                            session_creds = session_dir / ".claude" / ".credentials.json"
+                            credential_locations.append(session_creds)
+                
+                # Find the most recent credentials file
+                valid_credentials = []
+                for cred_path in credential_locations:
+                    if cred_path.exists():
+                        try:
+                            with open(cred_path, 'r') as f:
+                                credentials_data = json.load(f)
+                            valid_credentials.append((cred_path, credentials_data))
+                        except Exception as e:
+                            logger.warning(f"⚠️ Failed to read credentials from {cred_path}: {e}")
+                
+                if not valid_credentials:
+                    return {"error": "No credentials found", "has_credentials": False}
+                
+                # Use the most recently modified credentials
+                credentials_path, credentials_data = max(valid_credentials, key=lambda x: x[0].stat().st_mtime)
+                logger.info(f"📁 Using credentials from: {credentials_path}")
+                
+                # Extract metadata
+                subscription_type = None
+                user_email = None
+                if "claudeAiOauth" in credentials_data:
+                    oauth_data = credentials_data["claudeAiOauth"]
+                    subscription_type = oauth_data.get("subscriptionType", "unknown")
+                
+                return {
+                    "has_credentials": True,
+                    "credentials": credentials_data,
+                    "subscription_type": subscription_type,
+                    "user_email": user_email,
+                    "created_at": credentials_path.stat().st_mtime,
+                    "source_path": str(credentials_path)
+                }
+            except Exception as e:
+                logger.error(f"❌ Failed to export credentials: {e}")
+                return {"error": str(e), "has_credentials": False}
+    
+    async def _handle_websocket_connection(self, websocket: WebSocket, session_type: str, session_id: str):
+        """Handle new WebSocket connection for terminal session"""
+        await websocket.accept()
+        
+        # Extract profile_id from query parameters if provided
+        query_params = dict(websocket.query_params)
+        profile_id = query_params.get('profile_id')
+        
+        logger.info(f"🔗 WebSocket connected: {session_id} (type: {session_type}, profile: {profile_id})")
+        
+        # Create or get existing session
+        if session_id in self.sessions:
+            logger.info(f"🔄 Reusing existing session: {session_id}")
+            session = self.sessions[session_id]
+            
+            # Close old WebSocket if it exists
+            if session.websocket:
+                try:
+                    await session.websocket.close()
+                    logger.info(f"🔌 Closed previous WebSocket for session {session_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error closing previous WebSocket: {e}")
+            
+            # Update with new WebSocket
+            session.websocket = websocket
+        else:
+            logger.info(f"🆕 Creating new session: {session_id}")
+            session = TerminalSession(session_id, session_type, profile_id)
+            session.websocket = websocket
+            self.sessions[session_id] = session
+        
+        try:
+            # Initialize terminal session
+            await self._initialize_terminal_session(session)
+            
+            # Start terminal process
+            await self._start_terminal_process(session)
+            
+            # Try a simpler WebSocket handling approach
+            await self._simple_websocket_handler(session)
+            
+        except WebSocketDisconnect:
+            logger.info(f"🔌 WebSocket disconnected: {session_id}")
+        except Exception as e:
+            logger.error(f"❌ Terminal session error for {session_id}: {e}")
+            await self._send_error(session, f"Terminal session error: {str(e)}")
+        finally:
+            await self._cleanup_session(session)
+    
+    async def _initialize_terminal_session(self, session: TerminalSession):
+        """Initialize environment and working directory for terminal session"""
+        
+        # Create session working directory first
+        session.working_directory = Path(self.terminal_sessions_dir) / session.session_id
+        session.working_directory.mkdir(exist_ok=True, parents=True)
+        logger.info(f"📁 Session working directory: {session.working_directory}")
+        
+        # Get profile_id - either provided or get selected profile from backend
+        profile_id_to_use = session.profile_id
+        
+        if not profile_id_to_use and session.session_type != 'login':
+            # For non-login sessions, try to get the selected profile from backend
+            try:
+                profile_id_to_use = await self._get_selected_profile_from_backend()
+                if profile_id_to_use:
+                    logger.info(f"🎯 Using selected profile from backend: {profile_id_to_use}")
+                    session.profile_id = profile_id_to_use
+                else:
+                    logger.info("📝 No selected profile found, using default environment")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to get selected profile from backend: {e}")
+        
+        # Setup profile-specific environment if we have a profile_id
+        if profile_id_to_use:
+            try:
+                await self._setup_claude_profile_for_session(session, profile_id_to_use)
+            except Exception as e:
+                logger.error(f"❌ Failed to setup profile {profile_id_to_use}: {e}")
+                await self._send_error(session, f"Profile setup failed: {str(e)}")
+                return
+        else:
+            # Use default environment
+            session.environment = os.environ.copy()
+            session.environment['HOME'] = str(session.working_directory)
+            
+            if session.session_type == 'login':
+                await self._send_status(session, "Starting Claude authentication session...")
+            elif session.session_type == 'instance':
+                await self._send_status(session, "Starting Claude instance terminal...")
+            else:
+                await self._send_status(session, "Starting terminal session with default environment...")
+        
+        # Configure Claude CLI environment
+        if self.use_max_plan:
+            # Max plan mode - no API key needed
+            if 'CLAUDE_API_KEY' in session.environment:
+                del session.environment['CLAUDE_API_KEY']
+            if 'ANTHROPIC_API_KEY' in session.environment:
+                del session.environment['ANTHROPIC_API_KEY']
+        else:
+            # API key mode
+            api_key = os.getenv('CLAUDE_API_KEY') or os.getenv('ANTHROPIC_API_KEY')
+            if api_key:
+                session.environment['CLAUDE_API_KEY'] = api_key
+                session.environment['ANTHROPIC_API_KEY'] = api_key
+    
+    async def _start_terminal_process(self, session: TerminalSession):
+        """Start Claude CLI process for the session"""
+        
+        try:
+            # Check if Claude CLI is available
+            claude_available = self._check_claude_cli_available()
+            
+            # For login sessions, try to start Claude CLI
+            if session.session_type == 'login':
+                if claude_available:
+                    command = 'claude'
+                    initial_input = '/login\n'
+                else:
+                    # Fallback to bash with helpful message
+                    command = 'bash'
+                    initial_input = None
+                    await self._send_error(session, 
+                        "Claude CLI not available in container. Please check installation.")
+                    await self._send_status(session, 
+                        "Starting bash session instead. You can try installing Claude CLI manually.")
+                    
+                    # Send installation instructions
+                    install_help = """
+╭─────────────────────────────────────────────────────────╮
+│ 🔧 Claude CLI Installation Instructions                 │
+╰─────────────────────────────────────────────────────────╯
+
+Try these commands to install Claude CLI:
+
+1. Using npm (recommended):
+   npm install -g @anthropic-ai/claude-code
+
+2. Using curl:
+   curl -fsSL https://claude.ai/cli/install.sh | bash
+   export PATH="$HOME/.local/bin:$PATH"
+
+3. Manual download:
+   Visit: https://github.com/anthropics/claude-cli
+
+After installation, try: claude --version
+"""
+                    await self._send_output(session, install_help)
+            else:
+                command = 'bash'  # Start with bash for general sessions
+                initial_input = None
+            
+            # Start the process using pexpect for better control
+            session.child_process = pexpect.spawn(
+                command,
+                cwd=str(session.working_directory),
+                env=session.environment,
+                encoding='utf-8',
+                codec_errors='ignore'
+            )
+            
+            # Set non-blocking mode
+            session.child_process.setwinsize(24, 80)  # Standard terminal size
+            
+            logger.info(f"🖥️ Started terminal process for session {session.session_id}")
+            
+            # Send initial status
+            await self._send_status(session, f"Terminal process started (PID: {session.child_process.pid})")
+            
+            # Send initial command for login sessions
+            if initial_input:
+                session.child_process.send(initial_input)
+                await self._send_status(session, "Executing /login command...")
+            else:
+                # For bash sessions, send a welcome prompt
+                await self._send_output(session, "Terminal ready. Type 'claude --version' to check if Claude CLI is available.\n")
+            
+            # Temporarily disable output monitoring to test WebSocket receive
+            # asyncio.create_task(self._monitor_process_output(session))
+            logger.info("⚠️ Output monitoring disabled for testing")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to start terminal process for {session.session_id}: {e}")
+            await self._send_error(session, f"Failed to start terminal: {str(e)}")
+    
+    async def _monitor_process_output(self, session: TerminalSession):
+        """Monitor and relay process output to WebSocket"""
+        
+        if not session.child_process:
+            logger.error(f"❌ No child process for session {session.session_id}")
+            return
+        
+        logger.info(f"🔍 Starting output monitoring for session {session.session_id}")
+        
+        try:
+            while session.child_process.isalive():
+                try:
+                    # Read output with timeout
+                    output = session.child_process.read_nonblocking(size=1024, timeout=0.1)
+                    
+                    if output:
+                        session.last_output_buffer += output
+                        logger.info(f"📤 Process output for session {session.session_id}: '{output}' (len={len(output)})")
+                        
+                        # Send output to WebSocket
+                        await self._send_output(session, output)
+                        
+                        # Check for OAuth URLs
+                        self._check_for_oauth_urls(session, output)
+                        
+                        # Check for authentication status
+                        self._check_authentication_status(session, output)
+                
+                except pexpect.TIMEOUT:
+                    # No output available, continue monitoring
+                    continue
+                except pexpect.EOF:
+                    logger.info(f"📤 Process ended for session {session.session_id}")
+                    break
+                except Exception as e:
+                    logger.error(f"❌ Error reading process output for session {session.session_id}: {e}")
+                    break
+                
+                # Small delay to prevent excessive CPU usage
+                await asyncio.sleep(0.01)
+                
+        except Exception as e:
+            logger.error(f"❌ Output monitoring error for {session.session_id}: {e}")
+            await self._send_error(session, f"Output monitoring failed: {str(e)}")
+    
+    def _check_for_oauth_urls(self, session: TerminalSession, output: str):
+        """Check output for OAuth URLs and extract them"""
+        
+        for pattern in session.oauth_patterns:
+            matches = pattern.findall(output)
+            for match in matches:
+                if match not in session.oauth_urls:
+                    session.oauth_urls.add(match)
+                    logger.info(f"🔗 OAuth URL detected in session {session.session_id}: {match}")
+                    
+                    # Send OAuth URL to frontend
+                    asyncio.create_task(self._send_oauth_url(session, match))
+    
+    def _check_authentication_status(self, session: TerminalSession, output: str):
+        """Check output for authentication success/failure"""
+        
+        # Check for success patterns
+        for pattern in session.auth_success_patterns:
+            if pattern.search(output):
+                if not session.is_authenticated:
+                    session.is_authenticated = True
+                    logger.info(f"✅ Authentication successful for session {session.session_id}")
+                    asyncio.create_task(self._send_auth_complete(session, True))
+                break
+        
+        # Check for failure patterns
+        for pattern in session.auth_failure_patterns:
+            if pattern.search(output):
+                logger.warning(f"❌ Authentication failed for session {session.session_id}")
+                asyncio.create_task(self._send_auth_complete(session, False))
+                break
+    
+    async def _handle_websocket_messages(self, session: TerminalSession):
+        """Handle incoming WebSocket messages from frontend"""
+        
+        logger.info(f"🎧 Starting WebSocket message handler for session {session.session_id}")
+        
+        # First, try to send a test message to confirm WebSocket works
+        try:
+            await session.websocket.send_json({"type": "test", "data": "server_ready"})
+            logger.info(f"✅ Sent test message to session {session.session_id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to send test message: {e}")
+        
+        message_count = 0
+        while True:
+            try:
+                logger.info(f"🔄 Waiting for WebSocket message (attempt #{message_count + 1}) for session {session.session_id}")
+                # Try receiving with raw receive_text and manual JSON parsing
+                raw_data = await asyncio.wait_for(
+                    session.websocket.receive_text(),
+                    timeout=5.0  # Shorter timeout for testing
+                )
+                logger.info(f"📥 Received raw WebSocket data: {raw_data}")
+                message = json.loads(raw_data)
+                message_count += 1
+                logger.info(f"📨 Received WebSocket message for session {session.session_id}: {message}")
+                
+                if message['type'] == 'input':
+                    # Send input to terminal process
+                    if session.child_process and session.child_process.isalive():
+                        input_data = message['data']
+                        session.child_process.send(input_data)
+                        logger.info(f"📤 Sent input to session {session.session_id}: '{input_data}' (len={len(input_data)})")
+                    else:
+                        await self._send_error(session, "Terminal process not available")
+                
+                elif message['type'] == 'resize':
+                    # Handle terminal resize
+                    if session.child_process and session.child_process.isalive():
+                        rows = message.get('rows', 24)
+                        cols = message.get('cols', 80)
+                        session.child_process.setwinsize(rows, cols)
+                        logger.debug(f"📐 Resized terminal for session {session.session_id}: {rows}x{cols}")
+                
+                elif message['type'] == 'ping':
+                    # Handle ping for connection health
+                    await session.websocket.send_json({"type": "pong", "data": "alive"})
+                
+                else:
+                    logger.warning(f"⚠️ Unknown message type from session {session.session_id}: {message['type']}")
+                    
+            except asyncio.TimeoutError:
+                logger.info(f"⏰ WebSocket receive timeout (5s) for session {session.session_id}")
+                # Send ping to keep connection alive
+                try:
+                    await session.websocket.send_json({"type": "ping", "data": "keepalive"})
+                    logger.info(f"📡 Sent keepalive ping to session {session.session_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to send keepalive ping to session {session.session_id}: {e}")
+                    break
+            except WebSocketDisconnect:
+                logger.info(f"🔌 WebSocket disconnected during message handling for session {session.session_id}")
+                break
+            except asyncio.CancelledError:
+                logger.info(f"🚫 WebSocket message handling cancelled for session {session.session_id}")
+                break
+            except Exception as e:
+                logger.error(f"❌ Message handling error for session {session.session_id}: {e}")
+                logger.error(f"❌ Exception type: {type(e)}")
+                import traceback
+                logger.error(f"❌ Traceback: {traceback.format_exc()}")
+                break
+    
+    async def _simple_websocket_handler(self, session: TerminalSession):
+        """Integrated WebSocket handler with output monitoring"""
+        
+        logger.info(f"🧪 Starting integrated WebSocket handler for session {session.session_id}")
+        
+        try:
+            while True:
+                # Check for terminal output first (non-blocking)
+                if session.child_process and session.child_process.isalive():
+                    try:
+                        output = session.child_process.read_nonblocking(size=1024, timeout=0.01)
+                        if output:
+                            logger.info(f"📤 Terminal output: '{output}' (len={len(output)})")
+                            await self._send_output(session, output)
+                    except Exception:
+                        pass  # No output available, continue
+                
+                # Try to receive WebSocket message with short timeout
+                try:
+                    data = await asyncio.wait_for(
+                        session.websocket.receive_text(),
+                        timeout=0.1  # Short timeout to allow output checking
+                    )
+                    logger.info(f"📥 Received input: {data}")
+                    
+                    try:
+                        message = json.loads(data)
+                        if message.get('type') == 'input':
+                            # Handle both 'data' and 'content' field names for compatibility
+                            input_data = message.get('data', message.get('content', ''))
+                            if session.child_process and session.child_process.isalive():
+                                # Send input exactly as received (no automatic newline)
+                                session.child_process.send(input_data)
+                                logger.info(f"📤 Sent to terminal: '{repr(input_data)}'")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"❌ JSON decode error: {e}")
+                        
+                except asyncio.TimeoutError:
+                    # No input received, continue to check output
+                    continue
+                
+        except WebSocketDisconnect:
+            logger.info(f"🔌 WebSocket disconnected")
+        except Exception as e:
+            logger.error(f"❌ Integrated handler error: {e}")
+    
+    async def _handle_websocket_messages_non_blocking(self, session: TerminalSession):
+        """Handle incoming WebSocket messages with non-blocking approach"""
+        
+        logger.info(f"🎧 Starting non-blocking WebSocket message handler for session {session.session_id}")
+        
+        message_count = 0
+        while True:
+            try:
+                # Use a moderate timeout to balance responsiveness and message reception
+                try:
+                    message = await asyncio.wait_for(
+                        session.websocket.receive_json(),
+                        timeout=1.0  # 1 second timeout - better for message reception
+                    )
+                    
+                    message_count += 1
+                    logger.info(f"📨 Received WebSocket message #{message_count} for session {session.session_id}: {message}")
+                    
+                    if message['type'] == 'input':
+                        # Send input to terminal process
+                        if session.child_process and session.child_process.isalive():
+                            # Handle both 'data' and 'content' field names for compatibility
+                            input_data = message.get('data', message.get('content', ''))
+                            if not input_data:
+                                logger.warning(f"⚠️ Empty input data in message: {message}")
+                                continue
+                            # Send input exactly as received (no automatic newline)
+                            session.child_process.send(input_data)
+                            logger.info(f"📤 Sent input to session {session.session_id}: '{repr(input_data)}' (len={len(input_data)})")
+                        else:
+                            await self._send_error(session, "Terminal process not available")
+                    
+                    elif message['type'] == 'resize':
+                        # Handle terminal resize
+                        if session.child_process and session.child_process.isalive():
+                            rows = message.get('rows', 24)
+                            cols = message.get('cols', 80)
+                            session.child_process.setwinsize(rows, cols)
+                            logger.debug(f"📐 Resized terminal for session {session.session_id}: {rows}x{cols}")
+                    
+                    elif message['type'] == 'ping':
+                        # Handle ping for connection health
+                        await session.websocket.send_json({"type": "pong", "data": "alive"})
+                    
+                    else:
+                        logger.warning(f"⚠️ Unknown message type from session {session.session_id}: {message['type']}")
+                        
+                except asyncio.TimeoutError:
+                    # Timeout is expected - this allows other coroutines to run
+                    # Yield control and continue listening
+                    await asyncio.sleep(0.01)  # Small yield to event loop
+                    continue
+                    
+            except WebSocketDisconnect:
+                break
+            except asyncio.CancelledError:
+                logger.info(f"🚫 WebSocket message handling cancelled for session {session.session_id}")
+                break
+            except Exception as e:
+                logger.error(f"❌ Message handling error for session {session.session_id}: {e}")
+                break
+    
+    async def _send_output(self, session: TerminalSession, data: str):
+        """Send terminal output to WebSocket"""
+        if session.websocket:
+            try:
+                message = {
+                    "type": "output",
+                    "data": data,
+                    "timestamp": str(asyncio.get_event_loop().time())
+                }
+                await session.websocket.send_json(message)
+                logger.info(f"📤 Sent output to WebSocket for session {session.session_id}: '{data[:50]}...' (len={len(data)})")
+            except Exception as e:
+                logger.error(f"❌ Failed to send output for session {session.session_id}: {e}")
+        else:
+            logger.warning(f"⚠️ No WebSocket connection for session {session.session_id}")
+    
+    async def _send_error(self, session: TerminalSession, error: str):
+        """Send error message to WebSocket"""
+        if session.websocket:
+            try:
+                await session.websocket.send_json({
+                    "type": "error",
+                    "data": error,
+                    "timestamp": str(asyncio.get_event_loop().time())
+                })
+            except Exception as e:
+                logger.error(f"❌ Failed to send error for session {session.session_id}: {e}")
+
+    async def _get_selected_profile_from_backend(self) -> Optional[str]:
+        """Get the selected Claude profile from the backend API"""
+        try:
+            import httpx
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://claude-workflow-backend:8000/api/claude-auth/selected-profile")
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get("selected_profile_id")
+                else:
+                    logger.warning(f"⚠️ Backend returned {response.status_code} when getting selected profile")
+                    return None
+        except Exception as e:
+            logger.error(f"❌ Failed to get selected profile from backend: {e}")
+            return None
+
+    async def _setup_claude_profile_for_session(self, session: TerminalSession, profile_id: str):
+        """Setup Claude profile for a terminal session using backend's file manager"""
+        try:
+            import httpx
+            
+            # Get profile details from backend
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"http://claude-workflow-backend:8000/api/claude-auth/profiles")
+                if response.status_code != 200:
+                    raise Exception(f"Failed to get profiles from backend: {response.status_code}")
+                
+                profiles_data = response.json()
+                profile = None
+                for p in profiles_data.get("profiles", []):
+                    if p["id"] == profile_id:
+                        profile = p
+                        break
+                
+                if not profile:
+                    raise Exception(f"Profile {profile_id} not found in backend")
+            
+            # Create isolated Claude environment for this session
+            claude_dir = session.working_directory / ".claude"
+            claude_dir.mkdir(exist_ok=True, parents=True)
+            
+            # Use backend's file manager to restore profile files
+            async with httpx.AsyncClient() as client:
+                restore_response = await client.post(
+                    f"http://claude-workflow-backend:8000/api/claude-auth/profiles/{profile_id}/restore",
+                    params={"target_directory": str(claude_dir)}
+                )
+                
+                if restore_response.status_code == 200:
+                    logger.info(f"✅ Successfully restored Claude files for profile: {profile['profile_name']}")
+                else:
+                    logger.warning(f"⚠️ Failed to restore Claude files: {restore_response.status_code}")
+                    # Continue anyway - the profile metadata is still useful
+            
+            # Setup environment
+            session.environment = os.environ.copy()
+            session.environment['HOME'] = str(session.working_directory)
+            session.environment['CLAUDE_HOME'] = str(claude_dir)
+            
+            # Update session metadata
+            session.profile_name = profile["profile_name"]
+            
+            await self._send_status(session, f"✅ Loaded Claude profile: {profile['profile_name']} ({profile['auth_method']})")
+            logger.info(f"🎯 Setup Claude profile for session {session.session_id}: {profile['profile_name']}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to setup Claude profile {profile_id}: {e}")
+            raise
+    
+    async def _send_status(self, session: TerminalSession, status: str):
+        """Send status message to WebSocket"""
+        if session.websocket:
+            try:
+                await session.websocket.send_json({
+                    "type": "status",
+                    "data": status,
+                    "timestamp": str(asyncio.get_event_loop().time())
+                })
+            except Exception as e:
+                logger.error(f"❌ Failed to send status for session {session.session_id}: {e}")
+    
+    async def _send_oauth_url(self, session: TerminalSession, url: str):
+        """Send detected OAuth URL to WebSocket"""
+        if session.websocket:
+            try:
+                await session.websocket.send_json({
+                    "type": "oauth_url",
+                    "data": url,
+                    "timestamp": str(asyncio.get_event_loop().time())
+                })
+            except Exception as e:
+                logger.error(f"❌ Failed to send OAuth URL for session {session.session_id}: {e}")
+    
+    async def _send_auth_complete(self, session: TerminalSession, success: bool):
+        """Send authentication completion status to WebSocket"""
+        if session.websocket:
+            try:
+                await session.websocket.send_json({
+                    "type": "auth_complete",
+                    "data": "success" if success else "failure",
+                    "timestamp": str(asyncio.get_event_loop().time())
+                })
+            except Exception as e:
+                logger.error(f"❌ Failed to send auth completion for session {session.session_id}: {e}")
+    
+    async def _cleanup_session(self, session: TerminalSession):
+        """Clean up terminal session resources"""
+        
+        logger.info(f"🧹 Cleaning up session {session.session_id}")
+        
+        # Cancel message handling task
+        if hasattr(session, 'message_task') and session.message_task and not session.message_task.done():
+            try:
+                session.message_task.cancel()
+                await asyncio.sleep(0.1)  # Give it a moment to cancel
+                logger.info(f"🚫 Cancelled message task for session {session.session_id}")
+            except Exception as e:
+                logger.error(f"❌ Failed to cancel message task for session {session.session_id}: {e}")
+        
+        # Terminate child process
+        if session.child_process and session.child_process.isalive():
+            try:
+                session.child_process.terminate(force=True)
+                logger.info(f"🔥 Terminated process for session {session.session_id}")
+            except Exception as e:
+                logger.error(f"❌ Failed to terminate process for session {session.session_id}: {e}")
+        
+        # Remove from active sessions
+        if session.session_id in self.sessions:
+            del self.sessions[session.session_id]
+        
+        # Optionally clean up working directory (keep for debugging)
+        # if session.working_directory and session.working_directory.exists():
+        #     shutil.rmtree(session.working_directory)
+    
+    def run(self, host: str = "0.0.0.0", port: int = 8006):
+        """Run the terminal server"""
+        
+        logger.info(f"🚀 Starting Claude Terminal Server on {host}:{port}")
+        
+        # Start independent health server
+        health_server = start_health_server(port + 1)  # Health on port+1 (8007)
+        
+        # Setup signal handlers for graceful shutdown
+        def signal_handler(signum, frame):
+            logger.info(f"📶 Received signal {signum}, shutting down...")
+            
+            # Shutdown health server
+            health_server.shutdown()
+            
+            # Cleanup all active sessions
+            for session in list(self.sessions.values()):
+                asyncio.create_task(self._cleanup_session(session))
+            
+            sys.exit(0)
+        
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
+        # Run the server with proper async concurrency
+        uvicorn.run(
+            self.app,
+            host=host,
+            port=port,
+            log_level="info",
+            access_log=True,
+            loop="asyncio",
+            ws_ping_interval=20,
+            ws_ping_timeout=10,
+            timeout_keep_alive=30,
+            limit_concurrency=1000,  # Allow many concurrent connections
+            limit_max_requests=10000,  # High request limit
+            backlog=2048  # Large connection backlog
+        )
+
+def main():
+    """Main entry point"""
+    
+    # Get configuration from environment
+    host = os.getenv('WEBSOCKET_HOST', '0.0.0.0')
+    port = int(os.getenv('TERMINAL_SERVER_PORT', 8006))
+    
+    # Create and run server
+    server = TerminalServer()
+    server.run(host=host, port=port)
+
+if __name__ == "__main__":
+    main()

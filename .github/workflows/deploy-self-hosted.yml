@@ -16,6 +16,14 @@ on:
           - production
           - staging
           - development
+      use_claude_max_plan:
+        description: 'Claude Authentication Mode'
+        required: true
+        default: 'max-plan'
+        type: choice
+        options:
+          - 'max-plan'
+          - 'api-key'
 
 env:
   DOCKER_BUILDKIT: 1
@@ -124,14 +132,27 @@ jobs:
         
         echo "🌐 Using HOST_IP: $FINAL_HOST_IP"
         
+        # Determine Claude mode
+        CLAUDE_MODE_INPUT="${{ github.event.inputs.use_claude_max_plan || 'max-plan' }}"
+        if [ "$CLAUDE_MODE_INPUT" = "max-plan" ]; then
+          CLAUDE_MODE="true"
+          echo "🤖 Claude Mode: Max Plan (authenticated via claude /login)"
+        else
+          CLAUDE_MODE="false"
+          echo "🔑 Claude Mode: API Key (using CLAUDE_API_KEY)"
+        fi
+        
         # Create .env file from GitHub secrets
         cat > .env << EOF
         # MongoDB Configuration
         MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USERNAME }}
         MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }}
 
-        # Claude API Configuration
-        CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
+        # Claude API Configuration (conditional based on mode)
+        # In max-plan mode, leave API key empty so Claude CLI uses credential files
+        # In API key mode, use the provided API key
+        CLAUDE_API_KEY=$(if [ "$CLAUDE_MODE" = "true" ]; then echo ""; else echo "${{ secrets.CLAUDE_API_KEY }}"; fi)
+        USE_CLAUDE_MAX_PLAN=$CLAUDE_MODE
 
         # Host Configuration (auto-detected IP address)
         HOST_IP=$FINAL_HOST_IP
@@ -148,6 +169,7 @@ jobs:
         EOF
         
         echo "✅ Environment file created with HOST_IP=$FINAL_HOST_IP"
+        echo "🤖 Claude mode set to: $CLAUDE_MODE"
 
     - name: Build and start services
       run: |
@@ -219,6 +241,12 @@ jobs:
           echo "📅 Deployed: $DEPLOYMENT_TIME"
           echo "🌿 Branch: $BRANCH_NAME"
           echo "📝 Commit: $GIT_SHA"
+          CLAUDE_DISPLAY_MODE="${{ github.event.inputs.use_claude_max_plan || 'max-plan' }}"
+          if [ "$CLAUDE_DISPLAY_MODE" = "max-plan" ]; then
+            echo "🤖 Claude Mode: Max Plan"
+          else
+            echo "🔑 Claude Mode: API Key"
+          fi
         else
           echo "❌ Deployment failed!"
           echo "📅 Failed at: $(date -u)"

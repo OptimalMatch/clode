@@ -10,11 +10,12 @@ import {
   IconButton,
   Typography,
   Paper,
+  Chip,
 } from '@mui/material';
 import { Pause, PlayArrow, Close, Stop } from '@mui/icons-material';
 // Removed xterm dependencies - now using LexicalEditor for rich terminal experience
 
-import { WebSocketMessage, TerminalHistoryEntry } from '../types';
+import { WebSocketMessage, TerminalHistoryEntry, ClaudeInstance } from '../types';
 import { instanceApi } from '../services/api';
 import ReactMarkdown from 'react-markdown';
 import RunnerSprite from './RunnerSprite';
@@ -54,6 +55,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const ws = useRef<WebSocket | null>(null);
   const isInitializingRef = useRef(false);
   const stopwatchIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -72,6 +74,22 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [currentTodos, setCurrentTodos] = useState<Array<{id: string, content: string, status: string, priority?: string}>>([]);
   const [lastContent, setLastContent] = useState<string | null>(null);
+  const [claudeMode, setClaudeMode] = useState<{mode: string, description: string} | null>(null);
+
+  // Set Claude mode from instance data
+  const setClaudeModeFromInstance = (instance: ClaudeInstance) => {
+    if (instance?.claude_mode) {
+      const description = instance.claude_mode === 'max-plan' 
+        ? 'Max Plan (authenticated via claude /login)'
+        : 'API Key (using CLAUDE_API_KEY)';
+      
+      setClaudeMode({
+        mode: instance.claude_mode,
+        description: description
+      });
+      console.log('🤖 Claude mode from instance:', instance.claude_mode);
+    }
+  };
 
   // Helper functions
   const parseTodosFromMessage = (content: string) => {
@@ -399,6 +417,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     };
   }, [isProcessRunning, isCancelling, showCancelDialog, handleHttpCancel]);
 
+  // Claude mode will be set from WebSocket connection data
+
   useEffect(() => {
     console.log('🚀 Initializing LexicalEditor terminal with WebSocket connection...');
     
@@ -406,44 +426,18 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       console.log('🌐 Starting WebSocket connection...');
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const currentHostname = window.location.hostname;
-      const port = process.env.REACT_APP_WS_PORT || '8005';
+      // InstanceTerminal always uses backend port 8005 (claude_manager.py)
+      const port = '8005';
       
       // Apply same hostname-matching logic as API URL
       let wsUrl: string;
-      if (process.env.REACT_APP_WS_URL) {
-        try {
-          const envUrl = new URL(process.env.REACT_APP_WS_URL);
-          // If the hostname in the env URL matches current hostname, use env URL
-          if (envUrl.hostname === currentHostname) {
-            wsUrl = process.env.REACT_APP_WS_URL;
-          } else {
-            // Otherwise, use current hostname with the port from env URL or default
-            const envPort = envUrl.port || port;
-            wsUrl = `${protocol}//${currentHostname}:${envPort}`;
-          }
-        } catch (e) {
-          // If env URL is malformed, fall back to dynamic construction
-          console.warn('Invalid REACT_APP_WS_URL, using dynamic construction:', e instanceof Error ? e.message : String(e));
-          wsUrl = `${protocol}//${currentHostname}:${port}`;
-        }
-      } else {
-        // Construct URL from current window location
-        wsUrl = `${protocol}//${currentHostname}:${port}`;
-      }
+      // InstanceTerminal always connects to backend (port 8005), ignore REACT_APP_WS_URL
+      wsUrl = `${protocol}//${currentHostname}:${port}`;
       
-      console.log('🔍 WebSocket environment variables:');
-      console.log('  REACT_APP_WS_URL:', process.env.REACT_APP_WS_URL);
-      console.log('  REACT_APP_WS_PORT:', process.env.REACT_APP_WS_PORT);
-      console.log('  window.location.hostname:', currentHostname);
-      if (process.env.REACT_APP_WS_URL) {
-        try {
-          const envUrl = new URL(process.env.REACT_APP_WS_URL);
-          console.log('  Env WS URL hostname:', envUrl.hostname);
-          console.log('  Hostname match:', envUrl.hostname === currentHostname);
-        } catch (e) {
-          console.log('  Env WS URL parse error:', e instanceof Error ? e.message : String(e));
-        }
-      }
+      console.log('🔍 WebSocket connection details:');
+      console.log('  Protocol:', protocol);
+      console.log('  Hostname:', currentHostname);
+      console.log('  Port:', port, '(backend - claude_manager.py)');
       console.log('  Final wsUrl:', wsUrl);
       console.log('🔌 Attempting WebSocket connection to:', `${wsUrl}/ws/${instanceId}`);
       
@@ -471,16 +465,41 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
         setLastPingTime(new Date());
         
         // Add connection info to the LexicalEditor terminal
-        appendToTerminal(`✅ **Connected to Claude Code instance!**\n🔗 Connection URL: ${wsUrl}/ws/${instanceId}\n⏰ Timestamp: ${new Date().toLocaleTimeString()}\n📖 **Enhanced terminal powered by LexicalEditor** - All content displays with rich formatting!`);
+        appendToTerminal(`✅ **Connected to Claude Code instance!**\n🔗 Connection URL: ${wsUrl}/ws/${instanceId}\n⏰ Timestamp: ${new Date().toLocaleTimeString()}\n📖`);
         
         // Load and display terminal history
         loadTerminalHistory();
         
         // Load last todos if they exist
         loadLastTodos();
+        
+        // Start automatic ping interval to keep connection alive
+        pingIntervalRef.current = setInterval(() => {
+          if (ws.current?.readyState === WebSocket.OPEN) {
+            try {
+              // Check if we've received any messages recently
+              const now = Date.now();
+              const lastActivity = lastPingTime?.getTime() || 0;
+              const timeSinceActivity = now - lastActivity;
+              
+              // Only send ping if we haven't received anything in the last 20 seconds
+              // This prevents unnecessary pings during active streaming
+              if (timeSinceActivity > 20000) {
+                ws.current.send(JSON.stringify({ type: 'ping', timestamp: now }));
+                console.log(`🏓 Keepalive ping sent (${(timeSinceActivity/1000).toFixed(1)}s since activity)`);
+              } else {
+                console.log(`⚡ Skipping ping - recent activity (${(timeSinceActivity/1000).toFixed(1)}s ago)`);
+              }
+            } catch (error) {
+              console.error('❌ Error sending keepalive ping:', error);
+            }
+          }
+        }, 25000); // Check every 25 seconds
+        
+        console.log('⚡ Smart keepalive interval started (25s checks, ping only if >20s idle)');
       };
           
-      // Send a ping to test the connection
+      // Send an initial ping to test the connection
       setTimeout(() => {
         if (ws.current?.readyState === WebSocket.OPEN) {
           ws.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
@@ -499,9 +518,15 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               console.log('🏓 Ping/Pong received - connection alive');
               appendToTerminal(`🏓 Connection alive (${new Date().toLocaleTimeString()})`);
               break;
+            case 'connection':
+              console.log('🔗 Connection data received:', message);
+              if (message.instance) {
+                setClaudeModeFromInstance(message.instance);
+              }
+              break;
             case 'output':
-              if (message.content) {
-                writeContentToTerminal(message.content);
+              if (message.data) {
+                writeContentToTerminal(message.data);
               }
               break;
             case 'partial_output':
@@ -535,9 +560,9 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               appendToTerminal(`❌ **Error:** ${message.error}`);
               break;
             case 'status':
-              if (message.status === 'running' && message.message) {
+              if (message.data === 'running' || (message.data && message.data.includes('running'))) {
                 console.log('🔄 Status update: Process is now running - setting isProcessRunning=true');
-                appendToTerminal(`🔄 **${message.message}**\n📡 You are now connected to the live output stream...`);
+                appendToTerminal(`🔄 **${message.data}**\n📡 You are now connected to the live output stream...`);
                 
                 // Track process start time for duration display
                 setIsProcessRunning(true);
@@ -547,11 +572,11 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                   setResponseStartTime(Date.now());
                 }
                 console.log('✅ Process state updated: isProcessRunning=true, ESC should now work');
-              } else if (message.status === 'process_started' && message.message) {
+              } else if (message.data && message.data.includes('process_started')) {
                 console.log('🚀 Process started - this is the REAL moment ESC should work');
-                appendToTerminal(`🚀 **${message.message}**`);
-              } else {
-                appendToTerminal(`📊 **Status:** ${message.status}`);
+                appendToTerminal(`🚀 **${message.data}**`);
+              } else if (message.data) {
+                appendToTerminal(`📊 **Status:** ${message.data}`);
               }
               
               // Handle explicit process_running flag from backend (for session interrupt sync)
@@ -627,6 +652,13 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             timestamp: new Date().toLocaleTimeString()
           });
           
+          // Clean up ping interval
+          if (pingIntervalRef.current) {
+            clearInterval(pingIntervalRef.current);
+            pingIntervalRef.current = null;
+            console.log('🧹 Ping interval cleared due to WebSocket close');
+          }
+          
           setIsConnected(false);
           setConnectionStatus('disconnected');
           setIsCancelling(false); // Reset cancelling state on disconnect
@@ -661,6 +693,12 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       if (stopwatchIntervalRef.current) {
         clearInterval(stopwatchIntervalRef.current);
         stopwatchIntervalRef.current = null;
+      }
+      
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+        pingIntervalRef.current = null;
+        console.log('🧹 Ping interval cleared on component cleanup');
       }
       
       // Note: Individual timeout cleanup is handled by each useEffect cleanup
@@ -1146,6 +1184,22 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
                   </span>
                 )}
               </Typography>
+              {claudeMode && (
+                <Chip
+                  label={claudeMode.mode === 'max-plan' ? '🤖 Max Plan' : '🔑 API Key'}
+                  size="small"
+                  color={claudeMode.mode === 'max-plan' ? 'primary' : 'secondary'}
+                  variant="outlined"
+                  title={claudeMode.description}
+                  sx={{ 
+                    fontSize: '0.75rem',
+                    height: '22px',
+                    '& .MuiChip-label': {
+                      paddingX: 1
+                    }
+                  }}
+                />
+              )}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Box 
                   sx={{ 

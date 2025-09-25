@@ -1,0 +1,93 @@
+# Claude Terminal Server Dockerfile
+# Specialized container for running Claude CLI with terminal interface
+
+FROM python:3.11-slim
+
+# Install system dependencies for terminal and Claude CLI
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    nodejs \
+    npm \
+    sudo \
+    locales \
+    tmux \
+    screen \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up locale for proper terminal display
+RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
+    locale-gen && \
+    update-locale LANG=en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
+
+# Install Claude CLI using npm (more reliable)
+RUN npm install -g @anthropic-ai/claude-code || \
+    (curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null || \
+     echo "⚠️ Claude CLI installation failed, will install at runtime")
+ENV PATH="/home/claude/.npm-global/bin:/home/claude/.local/bin:/usr/local/bin:$PATH"
+
+# Create app directory
+WORKDIR /app
+
+# Create directories for profiles and sessions
+RUN mkdir -p /app/claude_profiles /app/terminal_sessions
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional dependencies for terminal server
+RUN pip install --no-cache-dir \
+    pexpect \
+    ptyprocess \
+    asyncio-mqtt \
+    python-multipart
+
+# Copy terminal server code
+COPY terminal_server.py .
+COPY claude_profile_manager.py .
+
+# Create non-root user for better security
+RUN useradd -m -s /bin/bash claude
+
+# Set up npm global directory for claude user
+USER claude
+WORKDIR /home/claude
+RUN mkdir -p /home/claude/.npm-global && \
+    mkdir -p /home/claude/.claude && \
+    npm config set prefix '/home/claude/.npm-global' && \
+    echo 'export PATH=/home/claude/.npm-global/bin:$PATH' >> /home/claude/.bashrc
+
+# Switch back to root to copy files and set permissions
+USER root
+COPY terminal_startup.sh /app/terminal_startup.sh
+RUN chmod +x /app/terminal_startup.sh
+
+# Change ownership of app directory to claude user
+RUN chown -R claude:claude /app /home/claude
+
+# Switch to claude user for runtime
+USER claude
+
+# Environment variables
+ENV PYTHONPATH=/app
+ENV CLAUDE_HOME=/home/claude/.claude
+ENV TERMINAL_SERVER_PORT=8006
+ENV WEBSOCKET_HOST=0.0.0.0
+
+# Expose the terminal server port and health port
+EXPOSE 8006
+EXPOSE 8007
+
+# Health check for terminal server using dedicated health port
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8007/health || exit 1
+
+# Start the terminal server
+CMD ["/app/terminal_startup.sh"]

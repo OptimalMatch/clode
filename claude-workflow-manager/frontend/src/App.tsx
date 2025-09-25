@@ -10,6 +10,7 @@ import PromptsPage from './components/PromptsPage';
 import InstancesPage from './components/InstancesPage';
 import SubagentsPage from './components/SubagentsPage';
 import SSHKeysPage from './components/SSHKeysPage';
+import ClaudeAuthPage from './components/ClaudeAuthPage';
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ function App() {
               <Route path="/design" element={<DesignPage />} />
               <Route path="/prompts" element={<PromptsPage />} />
               <Route path="/subagents" element={<SubagentsPage />} />
+              <Route path="/claude-auth" element={<ClaudeAuthPage />} />
               <Route path="/ssh-keys" element={<SSHKeysPage />} />
               <Route path="/instances/:workflowId" element={<InstancesPage />} />
             </Routes>

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "claude-workflow-manager": {
+      "command": "nc",
+      "args": ["YOUR_SERVER_IP", "8002"],
+      "cwd": "/tmp"
+    }
+  }
+}

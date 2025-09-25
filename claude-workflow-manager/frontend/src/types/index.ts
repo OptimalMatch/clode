@@ -73,6 +73,7 @@ export interface ClaudeInstance {
   error?: string;
   archived?: boolean;
   archived_at?: string;
+  claude_mode?: string;  // "max-plan" or "api-key"
   // Aggregated metrics
   total_tokens?: number;
   total_cost_usd?: number;
@@ -83,7 +84,8 @@ export interface ClaudeInstance {
 
 export interface WebSocketMessage {
   type: string;
-  content?: string;
+  data?: string;          // Main data field used by backend
+  content?: string;       // Legacy field for backward compatibility
   status?: string;
   message?: string;
   error?: string;
@@ -92,6 +94,7 @@ export interface WebSocketMessage {
   execution_time_ms?: number;
   tokens_used?: number;
   process_running?: boolean;
+  timestamp?: string;     // Timestamp field sent by backend
 }
 
 export interface TerminalHistoryEntry {
@@ -133,6 +136,7 @@ export interface InstanceLog {
   execution_time_ms?: number;
   subagent_name?: string;
   step_id?: string;
+  claude_mode?: string;  // "max-plan" or "api-key"
 }
 
 export interface LogAnalytics {
@@ -192,4 +196,44 @@ export interface SSHConnectionTestResponse {
   repository: string;
   key_name?: string;
   timestamp: string;
+}
+
+// Claude Authentication Types
+export interface ClaudeAuthProfile {
+  id: string;
+  profile_name: string;
+  user_email?: string;
+  credentials_json: string;
+  project_files: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+  last_used_at?: string;
+  is_active: boolean;
+  claude_version?: string;
+  auth_method: string;
+}
+
+export interface ClaudeLoginSessionRequest {
+  profile_name: string;
+  user_email?: string;
+}
+
+export interface ClaudeLoginSessionResponse {
+  session_id: string;
+  profile_name: string;
+  message: string;
+}
+
+export interface ClaudeAuthTokenRequest {
+  session_id: string;
+  auth_token: string;
+}
+
+export interface SpawnInstanceRequest {
+  workflow_id: string;
+  prompt_id?: string;
+  git_repo?: string;
+  claude_profile_id?: string;  // Optional Claude auth profile to use
+  start_sequence?: number;
+  end_sequence?: number;
 }

@@ -23,6 +23,7 @@ services:
   backend:
     build: ./backend
     container_name: claude-workflow-backend
+    user: claude
     restart: always
     ports:
       - "8005:8000"
@@ -36,13 +37,14 @@ services:
       REDIS_URL: redis://redis:6379
       CLAUDE_PROMPTS_FOLDER: ${CLAUDE_PROMPTS_FOLDER:-.clode/claude_prompts}
       CLAUDE_AGENTS_FOLDER: ${CLAUDE_AGENTS_FOLDER:-.claude/agents}
+      USE_CLAUDE_MAX_PLAN: ${USE_CLAUDE_MAX_PLAN:-false}
     depends_on:
       - mongodb
       - redis
     volumes:
-      - ./backend:/app/src
-      - ${HOME}/.ssh:/root/.ssh:ro
-      - ssh_known_hosts:/root/.ssh_known_hosts
+      - ./backend:/app/src  # Re-enabled for development
+      - claude_profiles:/app/claude_profiles  # Isolated Claude profiles for multi-user
+      - terminal_sessions:/app/terminal_sessions  # Isolated terminal sessions
       - ssh_generated_keys:/app/ssh_keys
     networks:
       - claude-network
@@ -52,8 +54,9 @@ services:
       context: ./frontend
       args:
         REACT_APP_API_URL: http://${HOST_IP:-localhost}:8005
-        REACT_APP_WS_URL: ws://${HOST_IP:-localhost}:8005
+        REACT_APP_WS_URL: ws://${HOST_IP:-localhost}:8006
         REACT_APP_API_PORT: 8005
+        REACT_APP_WS_PORT: 8006
     container_name: claude-workflow-frontend
     restart: always
     ports:
@@ -70,6 +73,58 @@ services:
     networks:
       - claude-network
 
+  claude-terminal:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile.terminal
+    container_name: claude-workflow-terminal
+    user: claude
+    restart: always
+    ports:
+      - "8006:8006"  # Terminal WebSocket server
+      - "8007:8007"  # Health check server
+    cpus: 2.0
+    mem_limit: 1g
+    mem_reservation: 512m
+    environment:
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+      ANTHROPIC_API_KEY: ${CLAUDE_API_KEY}
+      USE_CLAUDE_MAX_PLAN: ${USE_CLAUDE_MAX_PLAN:-false}
+      TERMINAL_SERVER_PORT: 8006
+      CLAUDE_PROFILES_DIR: /app/claude_profiles
+      TERMINAL_SESSIONS_DIR: /app/terminal_sessions
+    volumes:
+      - claude_profiles:/app/claude_profiles  # Isolated Claude profiles
+      - terminal_sessions:/app/terminal_sessions  # Session working directories
+      - ~/.claude:/root/.claude  # Fallback to host Claude auth
+    networks:
+      - claude-network
+      - default  # Add default network for internet access
+    dns:
+      - 8.8.8.8  # Google DNS
+      - 1.1.1.1  # Cloudflare DNS
+    depends_on:
+      - mongodb
+
+  mcp-server:
+    build: ./backend
+    container_name: claude-workflow-mcp
+    user: claude
+    restart: always
+    environment:
+      BACKEND_URL: http://backend:8000
+      MCP_TCP_MODE: "true"
+      MCP_TCP_PORT: "8002"
+    depends_on:
+      - backend
+    volumes:
+      - ./backend:/app/src  # Development volume mount
+    ports:
+      - "8002:8002"  # Expose MCP server on host port 8002
+    networks:
+      - claude-network
+    command: ["python", "/app/src/mcp_server.py"]
+
   redis:
     image: redis:7-alpine
     container_name: claude-workflow-redis
@@ -83,6 +138,8 @@ volumes:
   mongo_data:
   ssh_known_hosts:
   ssh_generated_keys:
+  claude_profiles:    # Named volume for isolated Claude authentication profiles
+  terminal_sessions:  # Named volume for isolated terminal working directories
 
 networks:
   claude-network:

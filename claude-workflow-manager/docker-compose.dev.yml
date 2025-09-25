@@ -40,6 +40,9 @@ services:
       - redis
     volumes:
       - ./backend:/app/src
+      - ~/.claude:/root/.claude  # Mount Claude authentication (read-write for projects)
+      - claude_profiles_dev:/app/claude_profiles  # Isolated Claude profiles for multi-user
+      - terminal_sessions_dev:/app/terminal_sessions  # Isolated terminal sessions
       - ${HOME}/.ssh:/root/.ssh:ro
       - ssh_known_hosts_dev:/root/.ssh_known_hosts
       - ssh_generated_keys_dev:/app/ssh_keys
@@ -71,6 +74,33 @@ services:
     networks:
       - claude-network-dev
 
+  claude-terminal:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile.terminal
+    container_name: claude-workflow-terminal
+    restart: always
+    ports:
+      - "8006:8006"  # Terminal WebSocket server
+    cpus: 2.0
+    mem_limit: 1g
+    mem_reservation: 512m
+    environment:
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+      ANTHROPIC_API_KEY: ${CLAUDE_API_KEY}
+      USE_CLAUDE_MAX_PLAN: ${USE_CLAUDE_MAX_PLAN:-false}
+      TERMINAL_SERVER_PORT: 8006
+      CLAUDE_PROFILES_DIR: /app/claude_profiles
+      TERMINAL_SESSIONS_DIR: /app/terminal_sessions
+    volumes:
+      - claude_profiles_dev:/app/claude_profiles  # Isolated Claude profiles
+      - terminal_sessions_dev:/app/terminal_sessions  # Session working directories
+      - ~/.claude:/root/.claude  # Fallback to host Claude auth
+    networks:
+      - claude-network-dev
+    depends_on:
+      - mongodb
+
   redis:
     image: redis:7-alpine
     container_name: claude-workflow-redis-dev
@@ -84,6 +114,8 @@ volumes:
   mongo_data_dev:
   ssh_known_hosts_dev:
   ssh_generated_keys_dev:
+  claude_profiles_dev:    # Named volume for isolated Claude authentication profiles
+  terminal_sessions_dev:  # Named volume for isolated terminal working directories
 
 networks:
   claude-network-dev:

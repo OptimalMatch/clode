@@ -97,6 +97,8 @@ class ClaudeInstance(BaseModel):
     end_sequence: Optional[int] = None    # Which sequence to end at
     archived: bool = False  # For soft delete functionality
     archived_at: Optional[datetime] = None
+    # Claude authentication mode
+    claude_mode: Optional[str] = None  # "max-plan" or "api-key"
     # Aggregated metrics
     total_tokens: Optional[int] = None
     total_cost_usd: Optional[float] = None
@@ -129,6 +131,21 @@ class InstanceLog(BaseModel):
     execution_time_ms: Optional[int] = None
     subagent_name: Optional[str] = None
     step_id: Optional[str] = None
+    claude_mode: Optional[str] = None  # "max-plan" or "api-key"
+
+class ClaudeAuthProfile(BaseModel):
+    id: Optional[str] = None
+    profile_name: str  # User-friendly name like "John's Account", "Team Account"
+    user_email: Optional[str] = None  # Associated email for identification
+    credentials_json: str  # Encrypted/encoded ~/.claude/credentials.json content
+    project_files: Dict[str, str] = {}  # Map of filename -> base64 content for ~/.claude/projects/*
+    created_at: datetime
+    updated_at: datetime
+    last_used_at: Optional[datetime] = None
+    is_active: bool = True
+    # Metadata
+    claude_version: Optional[str] = None
+    auth_method: str = "max-plan"  # "max-plan" or "api-key"
 
 class LogAnalytics(BaseModel):
     instance_id: str
@@ -185,6 +202,7 @@ class SpawnInstanceRequest(BaseModel):
     workflow_id: str
     prompt_id: Optional[str] = None
     git_repo: Optional[str] = None
+    claude_profile_id: Optional[str] = None  # Optional Claude auth profile to use
     start_sequence: Optional[int] = None  # Which sequence to start from (None = start from beginning)
     end_sequence: Optional[int] = None    # Which sequence to end at (None = run to end)
 
@@ -270,3 +288,42 @@ class GitConnectionTestRequest(BaseModel):
     git_repo: str
     use_ssh_agent: bool = True
     key_name: Optional[str] = None  # Specific key to test, if None tests all keys
+
+# Claude Auth API Models
+class ClaudeAuthProfileListResponse(BaseModel):
+    """Response model for Claude auth profile list"""
+    profiles: List[ClaudeAuthProfile]
+
+class ClaudeLoginSessionRequest(BaseModel):
+    """Request model for starting a Claude login session"""
+    profile_name: str
+    user_email: Optional[str] = None
+
+class ClaudeLoginSessionResponse(BaseModel):
+    """Response model for Claude login session"""
+    session_id: str
+    profile_name: str
+    message: str
+
+class ClaudeAuthTokenRequest(BaseModel):
+    """Request model for submitting Claude auth token"""
+    session_id: str
+    auth_token: str
+
+class ClaudeProfileSelection(BaseModel):
+    """Model for storing the selected/default Claude profile"""
+    id: Optional[str] = None
+    selected_profile_id: str  # ID of the selected Claude auth profile
+    selected_by: Optional[str] = None  # User identifier (optional for multi-user support)
+    selected_at: datetime
+    updated_at: datetime
+
+class ClaudeProfileSelectionRequest(BaseModel):
+    """Request model for setting selected profile"""
+    profile_id: str
+
+class ClaudeProfileSelectionResponse(BaseModel):
+    """Response model for selected profile"""
+    selected_profile_id: Optional[str] = None
+    profile_name: Optional[str] = None
+    selected_at: Optional[datetime] = None

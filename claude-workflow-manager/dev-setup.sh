@@ -22,7 +22,7 @@ fi
 
 # Build and start development services
 echo "🔨 Building and starting development services..."
-docker-compose -f docker-compose.dev.yml up --build -d
+docker compose -f docker-compose.dev.yml up --build -d
 
 echo "🎉 Development environment is starting!"
 echo ""
