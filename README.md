@@ -532,7 +532,7 @@ Focus on:
 - For production, consider using git credential helpers instead of embedding tokens in URLs
 
 
-##Recommendations
+## Recommendations
 Also check out Reuven Cohen's claude-flow for hive orchestration with Claude Code at [https://github.com/ruvnet/claude-flow]
 
 
