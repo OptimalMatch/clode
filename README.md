@@ -2,6 +2,8 @@
 
 A full-stack application for managing Claude Code instances in Git workflows with parallel execution capabilities.
 
+[![Watch the demo video](docs/images/demo1-screen.png)](https://youtu.be/X_xzj3vHSeM?hd=1 "Demo")
+
 ## Features
 
 - **Workflow Management**: Create and manage workflows for different Git repositories
