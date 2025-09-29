@@ -1,10 +1,10 @@
 # Project Directory Fix for Claude Terminal
 
 ## Problem
-The Claude terminal interface was previously working in temporary directories (`/tmp/tmpth5hlmel`) instead of the actual project directory, causing issues with git operations like pushing to origin.
+Both the Claude terminal interface and Claude Code instances were previously working in temporary directories (`/tmp/tmpth5hlmel`) instead of the actual project directory, causing issues with git operations like pushing to origin.
 
 ## Solution
-Modified the terminal server to use the actual project directory as the working directory instead of creating isolated temporary session directories.
+Modified both the terminal server and Claude Code Manager to use the actual project directory as the working directory instead of creating isolated temporary session directories.
 
 ## Changes Made
 
@@ -18,8 +18,20 @@ Modified the terminal server to use the actual project directory as the working 
 - Added fallback to session-specific directories if project root doesn't exist
 - Enhanced logging to show which directory is being used
 
-### 3. Dockerfile Updates
-- Created `/app/project` directory in the container
+### 3. Claude Code Manager Updates
+- Added `self.project_root_dir` configuration option (defaults to `/app/project`)
+- Modified `spawn_instance()` method to use existing project directory when available
+- Added git repository verification to ensure the project directory contains the expected repository
+- Falls back to temporary directory cloning if project directory doesn't exist or isn't the right repository
+- Updated all references from `temp_dir` to `working_dir` throughout the codebase
+
+### 4. Backend Container Updates  
+- Added `PROJECT_ROOT_DIR` environment variable to backend container
+- Added volume mount `${PWD}:/app/project` to both docker-compose files
+- Updated backend Dockerfile to create `/app/project` directory
+
+### 5. Dockerfile Updates
+- Created `/app/project` directory in both terminal and backend containers
 - Set proper permissions for the project directory
 
 ## Environment Variables
@@ -51,11 +63,12 @@ docker-compose up --build claude-terminal
 
 ## Testing
 
-After rebuilding and restarting the terminal container, Claude should now:
-- Start in the actual project directory
+After rebuilding and restarting the containers, Claude should now:
+- Start in the actual project directory (both terminal sessions and Claude Code instances)
 - Have access to the real git repository
 - Be able to push changes to origin (assuming proper SSH/auth setup)
 - Work with actual project files instead of copies
+- Show working directory as `/app/project` instead of temporary directories like `/tmp/tmpXXXXXX`
 
 ## Backward Compatibility
 

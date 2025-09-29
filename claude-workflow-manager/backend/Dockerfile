@@ -30,8 +30,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Create src directory for development volume mounting
-RUN mkdir -p /app/src
+# Create src and project directories for development volume mounting
+RUN mkdir -p /app/src /app/project
 
 # Change ownership of app directory to claude user
 RUN chown -R claude:claude /app

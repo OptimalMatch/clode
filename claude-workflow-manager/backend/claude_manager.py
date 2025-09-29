@@ -6,6 +6,7 @@ from fastapi import WebSocket
 from claude_code_sdk import query
 import subprocess
 import tempfile
+from pathlib import Path
 from models import ClaudeInstance, InstanceStatus, PromptStep, Subagent, InstanceLog, LogType
 from database import Database
 from claude_file_manager import ClaudeFileManager
@@ -27,6 +28,8 @@ class ClaudeCodeManager:
         self.claude_file_manager = ClaudeFileManager(db)
         # Configuration for Claude CLI execution mode
         self.use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "false").lower() == "true"
+        # Project directory configuration - use project directory instead of temp dirs when available
+        self.project_root_dir = os.getenv("PROJECT_ROOT_DIR", "/app/project")
         
         # CRITICAL: In max plan mode, forcibly remove API key environment variables
         # Claude CLI prioritizes API keys over credential files, so we must ensure they're not set
@@ -780,34 +783,70 @@ class ClaudeCodeManager:
                 metadata={"git_repo": instance.git_repo}
             )
             
-            # Create temporary directory for the git repo
-            temp_dir = tempfile.mkdtemp()
+            # Use project directory if available, otherwise create temporary directory
+            project_root = Path(self.project_root_dir)
+            if project_root.exists() and project_root.is_dir():
+                # Use the existing project directory
+                working_dir = str(project_root)
+                self._log_with_timestamp(f"📁 Using existing project directory: {working_dir}")
+                
+                # Verify it's a git repository
+                git_dir = project_root / ".git"
+                if not git_dir.exists():
+                    raise ValueError(f"Project directory {working_dir} is not a git repository")
+                    
+                # Check if the remote matches the expected repository
+                try:
+                    from main import get_git_env
+                    env = get_git_env()
+                    
+                    # Get current remote URL
+                    process = await asyncio.create_subprocess_exec(
+                        "git", "remote", "get-url", "origin",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        cwd=working_dir,
+                        env=env
+                    )
+                    stdout, stderr = await process.communicate()
+                    if process.returncode == 0:
+                        current_remote = stdout.decode().strip()
+                        if current_remote != instance.git_repo:
+                            self._log_with_timestamp(f"⚠️ Warning: Remote URL mismatch. Expected: {instance.git_repo}, Found: {current_remote}")
+                    else:
+                        self._log_with_timestamp(f"⚠️ Warning: Could not determine remote URL: {stderr.decode()}")
+                        
+                except Exception as e:
+                    self._log_with_timestamp(f"⚠️ Warning: Could not verify remote URL: {e}")
+            else:
+                # Fallback to temporary directory and clone
+                working_dir = tempfile.mkdtemp()
+                self._log_with_timestamp(f"📁 Project directory not found, using temporary directory: {working_dir}")
+                
+                # Clone the git repository with SSH support
+                from main import get_git_env
+                env = get_git_env()
+                
+                # Clone repository asynchronously to avoid blocking
+                process = await asyncio.create_subprocess_exec(
+                    "git", "clone", instance.git_repo, working_dir,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env
+                )
+                stdout, stderr = await process.communicate()
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(process.returncode, ["git", "clone"], output=stdout, stderr=stderr)
             
             # Store the working directory for this instance so Claude CLI can find credentials
             if not hasattr(self, '_instance_working_dirs'):
                 self._instance_working_dirs = {}
-            self._instance_working_dirs[instance.id] = temp_dir
-            
-            # Clone the git repository with SSH support
-            # Use the centralized git environment configuration
-            from main import get_git_env
-            env = get_git_env()
-            
-            # Clone repository asynchronously to avoid blocking
-            process = await asyncio.create_subprocess_exec(
-                "git", "clone", instance.git_repo, temp_dir,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env
-            )
-            stdout, stderr = await process.communicate()
-            if process.returncode != 0:
-                raise subprocess.CalledProcessError(process.returncode, ["git", "clone"], output=stdout, stderr=stderr)
+            self._instance_working_dirs[instance.id] = working_dir
             
             # Restore selected Claude profile for this instance
             try:
                 self._log_with_timestamp(f"🔐 Restoring Claude profile for instance {instance.id}...")
-                await self._restore_claude_profile_for_instance(temp_dir)
+                await self._restore_claude_profile_for_instance(working_dir)
                 self._log_with_timestamp(f"✅ Claude profile restored successfully for instance {instance.id}")
             except Exception as e:
                 self._log_with_timestamp(f"⚠️ Failed to restore Claude profile (will use default): {e}")
@@ -853,7 +892,7 @@ class ClaudeCodeManager:
                         *cmd,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
-                        cwd=temp_dir,
+                        cwd=working_dir,
                         env=env
                     )
                     stdout, stderr = await process.communicate()
@@ -880,7 +919,7 @@ class ClaudeCodeManager:
                 session_created = False  # Session needs to be created
             
             # Update .claude/settings.local.json to add missing bash permissions
-            claude_dir = os.path.join(temp_dir, '.claude')
+            claude_dir = os.path.join(working_dir, '.claude')
             settings_file = os.path.join(claude_dir, 'settings.local.json')
             
             if os.path.exists(settings_file):
@@ -949,7 +988,7 @@ class ClaudeCodeManager:
             # Store instance information
             instance_info = {
                 "id": instance.id,
-                "working_directory": temp_dir,
+                "working_directory": working_dir,
                 "git_repo": instance.git_repo,
                 "workflow_id": instance.workflow_id,
                 "status": InstanceStatus.READY,
@@ -971,7 +1010,7 @@ class ClaudeCodeManager:
                 log_type=LogType.STATUS,
                 content="Instance initialized successfully",
                 execution_time_ms=execution_time,
-                metadata={"status": InstanceStatus.READY.value, "working_dir": temp_dir}
+                metadata={"status": InstanceStatus.READY.value, "working_dir": working_dir}
             )
             
             # Send status update via websocket if connected

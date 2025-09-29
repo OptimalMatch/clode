@@ -38,6 +38,7 @@ services:
       CLAUDE_PROMPTS_FOLDER: ${CLAUDE_PROMPTS_FOLDER:-.clode/claude_prompts}
       CLAUDE_AGENTS_FOLDER: ${CLAUDE_AGENTS_FOLDER:-.claude/agents}
       USE_CLAUDE_MAX_PLAN: ${USE_CLAUDE_MAX_PLAN:-false}
+      PROJECT_ROOT_DIR: ${PROJECT_ROOT_DIR:-/app/project}
     depends_on:
       - mongodb
       - redis
@@ -46,6 +47,7 @@ services:
       - claude_profiles:/app/claude_profiles  # Isolated Claude profiles for multi-user
       - terminal_sessions:/app/terminal_sessions  # Isolated terminal sessions
       - ssh_generated_keys:/app/ssh_keys
+      - ${PWD}:/app/project  # Mount the actual project directory
     networks:
       - claude-network
 
