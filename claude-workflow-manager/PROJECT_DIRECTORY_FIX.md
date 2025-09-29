@@ -120,7 +120,7 @@ If you're on Windows, make sure:
   volumes:
     - C:/path/to/your/project:/app/project  # Point to the repository root, not claude-workflow-manager
   ```
-
+ 
 ### Issue: Wrong directory mounted
 
 If you see project files but no `.git` directory, check:
