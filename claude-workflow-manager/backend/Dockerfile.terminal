@@ -35,8 +35,8 @@ ENV PATH="/home/claude/.npm-global/bin:/home/claude/.local/bin:/usr/local/bin:$P
 # Create app directory
 WORKDIR /app
 
-# Create directories for profiles and sessions
-RUN mkdir -p /app/claude_profiles /app/terminal_sessions
+# Create directories for profiles, sessions, and project
+RUN mkdir -p /app/claude_profiles /app/terminal_sessions /app/project
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
@@ -71,8 +71,9 @@ RUN chmod +x /app/terminal_startup.sh
 
 # Change ownership of app directory and create necessary directories
 RUN chown -R claude:claude /app /home/claude && \
-    mkdir -p /app/claude_profiles /app/terminal_sessions && \
-    chown -R claude:claude /app/claude_profiles /app/terminal_sessions
+    mkdir -p /app/claude_profiles /app/terminal_sessions /app/project && \
+    chown -R claude:claude /app/claude_profiles /app/terminal_sessions && \
+    chmod 755 /app/project
 
 # Switch to claude user for runtime
 USER claude

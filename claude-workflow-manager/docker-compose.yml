@@ -93,10 +93,12 @@ services:
       TERMINAL_SERVER_PORT: 8006
       CLAUDE_PROFILES_DIR: /app/claude_profiles
       TERMINAL_SESSIONS_DIR: /app/terminal_sessions
+      PROJECT_ROOT_DIR: ${PROJECT_ROOT_DIR:-/app/project}
     volumes:
       - claude_profiles:/app/claude_profiles  # Isolated Claude profiles
       - terminal_sessions:/app/terminal_sessions  # Session working directories
       - ~/.claude:/root/.claude  # Fallback to host Claude auth
+      - ${PWD}:/app/project  # Mount the actual project directory
     networks:
       - claude-network
       - default  # Add default network for internet access
