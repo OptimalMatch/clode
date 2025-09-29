@@ -69,7 +69,7 @@ After rebuilding and restarting the containers, Claude should now:
 - Be able to push changes to origin (assuming proper SSH/auth setup)
 - Work with actual project files instead of copies
 - Show working directory as `/app/project` instead of temporary directories like `/tmp/tmpXXXXXX`
-
+S
 ## Backward Compatibility
 
 The system still falls back to session-specific directories if the project root directory is not found, ensuring compatibility with existing deployments.
