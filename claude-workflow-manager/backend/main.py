@@ -1087,10 +1087,11 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
                     print(f"🔍 MAIN: About to call send_input for instance {instance_id}")
                     print(f"🔍 MAIN: Input content length: {len(message['content'])} characters")
                     try:
-                        await claude_manager.send_input(instance_id, message["content"])
-                        print(f"✅ MAIN: send_input completed successfully")
+                        # Start send_input in background to prevent blocking WebSocket
+                        asyncio.create_task(claude_manager.send_input(instance_id, message["content"]))
+                        print(f"✅ MAIN: send_input started in background (non-blocking)")
                     except Exception as e:
-                        print(f"❌ MAIN: send_input failed with exception: {str(e)}")
+                        print(f"❌ MAIN: send_input task creation failed with exception: {str(e)}")
                         import traceback
                         print(f"❌ MAIN: Traceback: {traceback.format_exc()}")
                         raise
@@ -1150,10 +1151,25 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
 @app.post("/api/instances/{instance_id}/execute")
 async def execute_prompt(instance_id: str, data: dict):
     prompt_content = data.get("prompt")
-    success = await claude_manager.execute_prompt(instance_id, prompt_content)
-    if not success:
-        raise HTTPException(status_code=404, detail="Instance not found")
-    return {"success": True}
+    
+    # Check if instance exists first
+    instance_info = claude_manager.instances.get(instance_id)
+    if not instance_info:
+        # Check database
+        db_instance = await db.get_instance(instance_id)
+        if not db_instance:
+            raise HTTPException(status_code=404, detail="Instance not found")
+    
+    # Start prompt execution in background - don't await it!
+    asyncio.create_task(claude_manager.execute_prompt(instance_id, prompt_content))
+    
+    # Return immediately to prevent blocking
+    return {
+        "success": True, 
+        "message": "Prompt execution started",
+        "instance_id": instance_id,
+        "non_blocking": True
+    }
 
 # Subagent endpoints
 @app.post(

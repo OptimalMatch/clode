@@ -18,7 +18,7 @@ class ClaudeCodeManager:
     def __init__(self, db: Database):
         self.instances: Dict[str, dict] = {}  # Store instance info instead of session objects
         self.websockets: Dict[str, WebSocket] = {}
-        self.running_processes: Dict[str, List[subprocess.Popen]] = {}  # Track all running Claude CLI processes for each instance
+        self.running_processes: Dict[str, List] = {}  # Track all running Claude CLI processes for each instance
         self.cancelled_instances: set = set()  # Track instances that have been explicitly cancelled
         self.interrupt_flags: Dict[str, bool] = {}  # Track graceful interrupt requests per instance
         self.interrupt_timers: Dict[str, asyncio.Task] = {}  # Track 30-second fallback interrupt timers
@@ -273,16 +273,13 @@ class ClaudeCodeManager:
             if env is None:
                 env = os.environ.copy()
             
-            # Start the process with process group for better termination control
+            # Start the process with asyncio for non-blocking execution
             import os
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 env=env,
-                bufsize=1,  # Line buffered
-                universal_newlines=True,
                 preexec_fn=os.setsid if hasattr(os, 'setsid') else None  # Create new process group on Unix
             )
             
@@ -347,10 +344,7 @@ class ClaudeCodeManager:
                             
                             # Wait a very short time for termination (100ms max)
                             try:
-                                await asyncio.wait_for(
-                                    asyncio.create_task(asyncio.to_thread(process.wait)), 
-                                    timeout=0.1
-                                )
+                                await asyncio.wait_for(process.wait(), timeout=0.1)
                                 self._log_with_timestamp(f"✅ SESSION INTERRUPT: Process terminated quickly")
                             except asyncio.TimeoutError:
                                 # Force kill if needed
@@ -397,12 +391,17 @@ class ClaudeCodeManager:
                         break
                 
                 # Check if process is still running
-                if process.poll() is not None:
+                if process.returncode is not None:
                     # Process finished, read any remaining output
-                    remaining_stdout = process.stdout.read()
-                    if remaining_stdout:
-                        stdout_lines.append(remaining_stdout)
-                        self._log_with_timestamp(f"📤 Final output: {remaining_stdout}")
+                    try:
+                        remaining_stdout, _ = await asyncio.wait_for(process.communicate(), timeout=1.0)
+                        if remaining_stdout:
+                            remaining_output = remaining_stdout.decode('utf-8').strip()
+                            if remaining_output:
+                                stdout_lines.append(remaining_output)
+                                self._log_with_timestamp(f"📤 Final output: {remaining_output}")
+                    except asyncio.TimeoutError:
+                        self._log_with_timestamp("⏰ Timeout waiting for final output")
                     break
                 
                 # Check interrupt flag again before trying to read (in case it was set while processing previous lines)
@@ -410,29 +409,26 @@ class ClaudeCodeManager:
                 
                 # Read a line from stdout (with timeout to avoid blocking)
                 try:
-                    # Use a non-blocking approach with poll() first
-                    import select
-                    ready, _, _ = select.select([process.stdout], [], [], 0.01)  # 10ms timeout
-                    if ready:
-                        line = process.stdout.readline()
-                    else:
-                        line = None
-                        # Periodically log that we're waiting for output (but only every 100 iterations to avoid spam)
-                        if not hasattr(self, '_wait_count'):
-                            self._wait_count = {}
-                        self._wait_count[instance_id] = self._wait_count.get(instance_id, 0) + 1
-                        if self._wait_count[instance_id] % 100 == 0:
-                            self._log_with_timestamp(f"🔄 STREAMING: Waiting for output from PID {process.pid} (checked {self._wait_count[instance_id]} times)")
-                        
-                        # CRITICAL: Check interrupt flag here too, since we might be stuck waiting for output
-                        if self.interrupt_flags.get(instance_id, False):
-                            self._log_with_timestamp(f"🛑 GRACEFUL INTERRUPT: Flag detected while waiting for output (check #{self._wait_count[instance_id]})")
-                            # Don't set line, let the main flag check at top of loop handle the interrupt
-                            break  # Break out of select/readline logic to get to main flag check
+                    # Use asyncio for non-blocking read with timeout
+                    line_bytes = await asyncio.wait_for(process.stdout.readline(), timeout=0.01)
+                    line = line_bytes.decode('utf-8') if line_bytes else None
+                except asyncio.TimeoutError:
+                    line = None
+                    # Periodically log that we're waiting for output (but only every 100 iterations to avoid spam)
+                    if not hasattr(self, '_wait_count'):
+                        self._wait_count = {}
+                    self._wait_count[instance_id] = self._wait_count.get(instance_id, 0) + 1
+                    if self._wait_count[instance_id] % 100 == 0:
+                        self._log_with_timestamp(f"🔄 STREAMING: Waiting for output from PID {process.pid} (checked {self._wait_count[instance_id]} times)")
+                    
+                    # CRITICAL: Check interrupt flag here too, since we might be stuck waiting for output
+                    if self.interrupt_flags.get(instance_id, False):
+                        self._log_with_timestamp(f"🛑 GRACEFUL INTERRUPT: Flag detected while waiting for output (check #{self._wait_count[instance_id]})")
+                        # Don't set line, let the main flag check at top of loop handle the interrupt
+                        break  # Break out of readline logic to get to main flag check
                 except Exception as e:
-                    # Fallback to blocking read if select() fails (e.g., on Windows)
-                    self._log_with_timestamp(f"⚠️ STREAMING: select() failed, using blocking read: {e}")
-                    line = process.stdout.readline()
+                    self._log_with_timestamp(f"⚠️ STREAMING: asyncio readline failed: {e}")
+                    line = None
                 
                 if line:
                     line = line.strip()
@@ -582,7 +578,7 @@ class ClaudeCodeManager:
                     # Let the main flag check at top of loop handle it on next iteration
             
             # Wait for process to complete (async)
-            return_code = await asyncio.create_task(asyncio.to_thread(process.wait))
+            return_code = await process.wait()
             execution_time = int((time.time() - start_time) * 1000)
             
             # Remove this specific process from running processes
@@ -1438,7 +1434,7 @@ class ClaudeCodeManager:
             if instance_id in self.websockets:
                 del self.websockets[instance_id]
     
-    async def _monitor_ongoing_process(self, instance_id: str, process: subprocess.Popen):
+    async def _monitor_ongoing_process(self, instance_id: str, process):
         """Monitor an ongoing Claude CLI process and stream its output to newly connected WebSockets"""
         self._log_with_timestamp(f"🔍 Starting to monitor ongoing process for instance {instance_id}")
         
