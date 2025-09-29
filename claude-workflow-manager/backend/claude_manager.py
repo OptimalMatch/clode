@@ -61,30 +61,38 @@ class ClaudeCodeManager:
                 self._log_with_timestamp("⚠️ SSH keys directory /app/ssh_keys not found")
                 return
             
-            # Create .ssh directory in the working directory for this instance
+            # Create .ssh directory in the home directory (where Claude CLI expects it)
+            home_ssh_dir = Path.home() / ".ssh"
+            home_ssh_dir.mkdir(mode=0o700, exist_ok=True)
+            
+            # Also create .ssh directory in the working directory as backup
             instance_ssh_dir = Path(working_dir) / ".ssh"
             instance_ssh_dir.mkdir(mode=0o700, exist_ok=True)
             
-            # Copy SSH keys from /app/ssh_keys to instance .ssh directory
+            # Copy SSH keys from /app/ssh_keys to both home and working directories
             ssh_keys_copied = 0
             for key_file in ssh_keys_dir.glob("*"):
                 if key_file.is_file():
-                    dest_file = instance_ssh_dir / key_file.name
+                    # Copy to home directory (primary location)
+                    home_dest_file = home_ssh_dir / key_file.name
+                    shutil.copy2(key_file, home_dest_file)
                     
-                    # Copy the key file
-                    shutil.copy2(key_file, dest_file)
+                    # Copy to working directory (backup location)
+                    instance_dest_file = instance_ssh_dir / key_file.name
+                    shutil.copy2(key_file, instance_dest_file)
                     
-                    # Set proper permissions
-                    if key_file.name.endswith('.pub'):
-                        dest_file.chmod(0o644)  # Public key
-                    else:
-                        dest_file.chmod(0o600)  # Private key
+                    # Set proper permissions on both copies
+                    for dest_file in [home_dest_file, instance_dest_file]:
+                        if key_file.name.endswith('.pub'):
+                            dest_file.chmod(0o644)  # Public key
+                        else:
+                            dest_file.chmod(0o600)  # Private key
                     
                     ssh_keys_copied += 1
-                    self._log_with_timestamp(f"📋 Copied SSH key: {key_file.name}")
+                    self._log_with_timestamp(f"📋 Copied SSH key to home and working dirs: {key_file.name}")
             
             if ssh_keys_copied > 0:
-                # Create SSH config file to use the keys
+                # Create SSH config file to use the keys (in both locations)
                 ssh_config_content = """Host github.com
     HostName github.com
     User git
@@ -93,15 +101,20 @@ class ClaudeCodeManager:
     UserKnownHostsFile /dev/null"""
                 
                 # Add identity files for all private keys found
-                for key_file in instance_ssh_dir.glob("*"):
+                for key_file in home_ssh_dir.glob("*"):
                     if key_file.is_file() and not key_file.name.endswith('.pub'):
                         ssh_config_content += f"\n    IdentityFile ~/.ssh/{key_file.name}"
                 
-                ssh_config_file = instance_ssh_dir / "config"
-                ssh_config_file.write_text(ssh_config_content)
-                ssh_config_file.chmod(0o600)
+                # Create config in both home and working directories
+                home_ssh_config = home_ssh_dir / "config"
+                home_ssh_config.write_text(ssh_config_content)
+                home_ssh_config.chmod(0o600)
                 
-                self._log_with_timestamp(f"✅ SSH configuration created with {ssh_keys_copied} keys")
+                instance_ssh_config = instance_ssh_dir / "config"
+                instance_ssh_config.write_text(ssh_config_content)
+                instance_ssh_config.chmod(0o600)
+                
+                self._log_with_timestamp(f"✅ SSH configuration created in home and working dirs with {ssh_keys_copied} keys")
             else:
                 self._log_with_timestamp("⚠️ No SSH keys found in /app/ssh_keys")
                 

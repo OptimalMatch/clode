@@ -8,11 +8,13 @@ Claude Code instances now automatically receive SSH key configuration, eliminati
 
 When a Claude Code instance is spawned, the system automatically:
 
-1. **Copies SSH Keys**: All SSH keys from `/app/ssh_keys/` are copied to the instance's `~/.ssh/` directory
+1. **Copies SSH Keys**: All SSH keys from `/app/ssh_keys/` are copied to both:
+   - Home directory: `~/.ssh/` (primary location where Claude CLI looks)
+   - Working directory: `{working_dir}/.ssh/` (backup location)
 2. **Sets Proper Permissions**: 
    - Private keys: `600` (owner read/write only)
    - Public keys: `644` (owner read/write, others read)
-3. **Creates SSH Config**: Generates `~/.ssh/config` with GitHub configuration
+3. **Creates SSH Config**: Generates SSH config in both locations with GitHub configuration
 4. **Enables Git Operations**: Claude can immediately perform git clone, commit, and push operations
 
 ## SSH Configuration Generated
@@ -42,9 +44,9 @@ The system provides detailed logging during SSH setup:
 
 ```
 🔑 Setting up SSH keys for git operations...
-📋 Copied SSH key: claude-workflow-manager8
-📋 Copied SSH key: claude-workflow-manager8.pub
-✅ SSH configuration created with 2 keys
+📋 Copied SSH key to home and working dirs: claude-workflow-manager8
+📋 Copied SSH key to home and working dirs: claude-workflow-manager8.pub
+✅ SSH configuration created in home and working dirs with 2 keys
 ✅ SSH keys configured successfully for instance [id]
 ```
 
