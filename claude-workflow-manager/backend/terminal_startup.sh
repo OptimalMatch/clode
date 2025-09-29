@@ -9,14 +9,9 @@ echo "📁 Terminal Sessions Directory: ${TERMINAL_SESSIONS_DIR:-/app/terminal_s
 echo "🔧 Claude Max Plan Mode: ${USE_CLAUDE_MAX_PLAN:-false}"
 echo "🌐 Server Port: ${TERMINAL_SERVER_PORT:-8006}"
 
-# Ensure directories exist with proper permissions
+# Ensure directories exist (permissions already set in Dockerfile)
 mkdir -p "${CLAUDE_PROFILES_DIR:-/app/claude_profiles}"
 mkdir -p "${TERMINAL_SESSIONS_DIR:-/app/terminal_sessions}"
-
-# Set up permissions for claude user
-chown -R claude:claude "${CLAUDE_PROFILES_DIR:-/app/claude_profiles}"
-chown -R claude:claude "${TERMINAL_SESSIONS_DIR:-/app/terminal_sessions}"
-chown -R claude:claude /home/claude/.claude
 
 # Check if Claude CLI is available
 echo "🔍 Checking Claude CLI installation..."
@@ -79,5 +74,5 @@ export PYTHONPATH="/app:${PYTHONPATH}"
 echo "🖥️ Starting Terminal WebSocket Server..."
 cd /app
 
-# Run as claude user for better security
-exec su -c "python terminal_server.py" claude
+# Already running as claude user due to Dockerfile USER directive
+exec python terminal_server.py
