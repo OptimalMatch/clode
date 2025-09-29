@@ -31,6 +31,12 @@ class ClaudeCodeManager:
         # Project directory configuration - use project directory instead of temp dirs when available
         self.project_root_dir = os.getenv("PROJECT_ROOT_DIR", "/app/project")
         
+        # Log configuration for debugging
+        print(f"🔧 ClaudeCodeManager initialized:")
+        print(f"   Max plan mode: {self.use_max_plan}")
+        print(f"   Project root directory: {self.project_root_dir}")
+        print(f"   Project directory exists: {Path(self.project_root_dir).exists()}")
+        
         # CRITICAL: In max plan mode, forcibly remove API key environment variables
         # Claude CLI prioritizes API keys over credential files, so we must ensure they're not set
         if self.use_max_plan:
@@ -781,43 +787,66 @@ class ClaudeCodeManager:
             
             # Use project directory if available, otherwise create temporary directory
             project_root = Path(self.project_root_dir)
+            use_project_dir = False
+            
+            # Debug: Check project directory status
+            self._log_with_timestamp(f"🔍 DEBUG: Checking project directory: {project_root}")
+            self._log_with_timestamp(f"🔍 DEBUG: Directory exists: {project_root.exists()}")
+            self._log_with_timestamp(f"🔍 DEBUG: Is directory: {project_root.is_dir() if project_root.exists() else 'N/A'}")
+            
             if project_root.exists() and project_root.is_dir():
-                # Use the existing project directory
-                working_dir = str(project_root)
-                self._log_with_timestamp(f"📁 Using existing project directory: {working_dir}")
-                
-                # Verify it's a git repository
-                git_dir = project_root / ".git"
-                if not git_dir.exists():
-                    raise ValueError(f"Project directory {working_dir} is not a git repository")
-                    
-                # Check if the remote matches the expected repository
+                # Check if it has any contents
                 try:
-                    from main import get_git_env
-                    env = get_git_env()
-                    
-                    # Get current remote URL
-                    process = await asyncio.create_subprocess_exec(
-                        "git", "remote", "get-url", "origin",
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                        cwd=working_dir,
-                        env=env
-                    )
-                    stdout, stderr = await process.communicate()
-                    if process.returncode == 0:
-                        current_remote = stdout.decode().strip()
-                        if current_remote != instance.git_repo:
-                            self._log_with_timestamp(f"⚠️ Warning: Remote URL mismatch. Expected: {instance.git_repo}, Found: {current_remote}")
-                    else:
-                        self._log_with_timestamp(f"⚠️ Warning: Could not determine remote URL: {stderr.decode()}")
-                        
+                    contents = list(project_root.iterdir())
+                    self._log_with_timestamp(f"🔍 DEBUG: Directory contents count: {len(contents)}")
+                    if len(contents) > 0:
+                        self._log_with_timestamp(f"🔍 DEBUG: First few items: {[item.name for item in contents[:5]]}")
                 except Exception as e:
-                    self._log_with_timestamp(f"⚠️ Warning: Could not verify remote URL: {e}")
-            else:
+                    self._log_with_timestamp(f"🔍 DEBUG: Error reading directory contents: {e}")
+                
+                # Check for git repository
+                git_dir = project_root / ".git"
+                self._log_with_timestamp(f"🔍 DEBUG: Git directory (.git) exists: {git_dir.exists()}")
+                
+                if git_dir.exists():
+                    # Use the existing project directory
+                    working_dir = str(project_root)
+                    use_project_dir = True
+                    self._log_with_timestamp(f"📁 Using existing project directory: {working_dir}")
+                    
+                    # Check if the remote matches the expected repository (non-fatal)
+                    try:
+                        from main import get_git_env
+                        env = get_git_env()
+                        
+                        # Get current remote URL
+                        process = await asyncio.create_subprocess_exec(
+                            "git", "remote", "get-url", "origin",
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                            cwd=working_dir,
+                            env=env
+                        )
+                        stdout, stderr = await process.communicate()
+                        if process.returncode == 0:
+                            current_remote = stdout.decode().strip()
+                            if current_remote == instance.git_repo:
+                                self._log_with_timestamp(f"✅ Git remote matches expected repository: {current_remote}")
+                            else:
+                                self._log_with_timestamp(f"⚠️ Warning: Remote URL mismatch. Expected: {instance.git_repo}, Found: {current_remote}")
+                                self._log_with_timestamp(f"🔄 Will continue using project directory but with different remote")
+                        else:
+                            self._log_with_timestamp(f"⚠️ Warning: Could not determine remote URL: {stderr.decode()}")
+                            
+                    except Exception as e:
+                        self._log_with_timestamp(f"⚠️ Warning: Could not verify remote URL: {e}")
+                else:
+                    self._log_with_timestamp(f"⚠️ Project directory exists but is not a git repository (no .git directory)")
+            
+            if not use_project_dir:
                 # Fallback to temporary directory and clone
                 working_dir = tempfile.mkdtemp()
-                self._log_with_timestamp(f"📁 Project directory not found, using temporary directory: {working_dir}")
+                self._log_with_timestamp(f"📁 Using temporary directory and cloning repository: {working_dir}")
                 
                 # Clone the git repository with SSH support
                 from main import get_git_env
