@@ -24,6 +24,8 @@ Modified both the terminal server and Claude Code Manager to use the actual proj
 - Modified `spawn_instance()` method to use existing project directory when available
 - Added git repository verification to ensure the project directory contains the expected repository
 - Falls back to temporary directory cloning if project directory doesn't exist or isn't the right repository
+- **Added automatic SSH key setup**: Claude Code instances now automatically get SSH keys copied from `/app/ssh_keys`
+- **Added SSH config generation**: Automatically creates `~/.ssh/config` for seamless git operations
 - Updated all references from `temp_dir` to `working_dir` throughout the codebase
 
 ### 4. Backend Container Updates  
@@ -58,18 +60,19 @@ docker-compose up --build claude-terminal
 ## Benefits
 
 1. **Real Git Operations**: Claude can now perform actual git operations on the real repository
-2. **File Persistence**: Changes made by Claude persist in the actual project files
-3. **SSH Key Access**: Git operations can use the host's SSH keys for authentication
-4. **No Temporary Directories**: No more confusion with temporary directories that don't contain the real project
+2. **File Persistence**: Changes made by Claude persist in the actual project files  
+3. **Automatic SSH Key Setup**: SSH keys are automatically copied and configured for each Claude Code instance
+4. **Seamless Git Authentication**: No need to manually ask Claude to copy SSH keys - it's done automatically
+5. **No Temporary Directories**: No more confusion with temporary directories that don't contain the real project
 
 ## Testing
 
 After rebuilding and restarting the containers, Claude should now:
-- Start in the actual project directory (both terminal sessions and Claude Code instances)
-- Have access to the real git repository
-- Be able to push changes to origin (assuming proper SSH/auth setup)
+- **Automatically have SSH keys configured** for git operations (no manual setup required)
+- Have access to the real git repository (either project directory or cloned)
+- **Be able to push changes to origin automatically** - no more "Permission denied" errors
 - Work with actual project files instead of copies
-- Show working directory as `/app/project` instead of temporary directories like `/tmp/tmpXXXXXX`
+- Show seamless git operations without user intervention
 
 ## Troubleshooting
 
