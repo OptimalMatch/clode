@@ -10,7 +10,8 @@ Modified both the terminal server and Claude Code Manager to use the actual proj
 
 ### 1. Docker Compose Updates
 - Added `PROJECT_ROOT_DIR` environment variable to both `docker-compose.yml` and `docker-compose.dev.yml`
-- Added volume mount `${PWD}:/app/project` to mount the host project directory into the container
+- Added volume mount `${PWD}/..:/app/project` to mount the host project directory into the container
+- **Important**: Uses `${PWD}/..` because docker-compose runs from the `claude-workflow-manager` subdirectory, but the `.git` directory is at the repository root
 
 ### 2. Terminal Server Updates
 - Added `self.project_root_dir` configuration option (defaults to `/app/project`)
@@ -70,6 +71,63 @@ After rebuilding and restarting the containers, Claude should now:
 - Work with actual project files instead of copies
 - Show working directory as `/app/project` instead of temporary directories like `/tmp/tmpXXXXXX`
 
+## Troubleshooting
+
+### Issue: "Project directory /app/project is not a git repository"
+
+This error indicates that the volume mount isn't working correctly. Here are the debugging steps:
+
+1. **Check the containers are using the updated configuration:**
+   ```bash
+   docker-compose down
+   docker-compose up --build
+   ```
+
+2. **Verify the volume mount is working:**
+   ```bash
+   # Check if the project directory is mounted correctly
+   docker exec -it claude-workflow-backend ls -la /app/project
+   
+   # Should show your project files, not an empty directory
+   ```
+
+3. **Check the logs for debugging information:**
+   ```bash
+   docker logs claude-workflow-backend
+   ```
+   Look for lines like:
+   ```
+   🔧 ClaudeCodeManager initialized:
+      Project root directory: /app/project
+      Project directory exists: True
+   ```
+
+4. **Manual verification inside container:**
+   ```bash
+   docker exec -it claude-workflow-backend bash
+   ls -la /app/project
+   pwd
+   cd /app/project && git status
+   ```
+
+### Issue: Volume mount not working on Windows
+
+If you're on Windows, make sure:
+- Docker Desktop is running
+- The current directory (`${PWD}`) is being resolved correctly
+- Try using the full path instead of `${PWD}/..`:
+  ```yaml
+  volumes:
+    - C:/path/to/your/project:/app/project  # Point to the repository root, not claude-workflow-manager
+  ```
+
+### Issue: Wrong directory mounted
+
+If you see project files but no `.git` directory, check:
+- The volume mount should point to the repository root (where `.git` exists)
+- If running docker-compose from `claude-workflow-manager/`, use `${PWD}/..:/app/project`
+- If running from repository root, use `${PWD}:/app/project`
+
 ## Backward Compatibility
 
-The system still falls back to session-specific directories if the project root directory is not found, ensuring compatibility with existing deployments.
+The system still falls back to temporary directories and cloning if the project root directory is not found, ensuring compatibility with existing deployments.

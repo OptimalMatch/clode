@@ -48,7 +48,7 @@ services:
       - ${HOME}/.ssh:/root/.ssh:ro
       - ssh_known_hosts_dev:/root/.ssh_known_hosts
       - ssh_generated_keys_dev:/app/ssh_keys
-      - ${PWD}:/app/project  # Mount the actual project directory
+      - ${PWD}/..:/app/project  # Mount the actual project directory (parent of claude-workflow-manager)
     networks:
       - claude-network-dev
 
@@ -100,7 +100,7 @@ services:
       - claude_profiles_dev:/app/claude_profiles  # Isolated Claude profiles
       - terminal_sessions_dev:/app/terminal_sessions  # Session working directories
       - ~/.claude:/root/.claude  # Fallback to host Claude auth
-      - ${PWD}:/app/project  # Mount the actual project directory
+      - ${PWD}/..:/app/project  # Mount the actual project directory (parent of claude-workflow-manager)
     networks:
       - claude-network-dev
     depends_on:

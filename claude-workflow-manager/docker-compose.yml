@@ -47,7 +47,7 @@ services:
       - claude_profiles:/app/claude_profiles  # Isolated Claude profiles for multi-user
       - terminal_sessions:/app/terminal_sessions  # Isolated terminal sessions
       - ssh_generated_keys:/app/ssh_keys
-      - ${PWD}:/app/project  # Mount the actual project directory
+      - ${PWD}/..:/app/project  # Mount the actual project directory (parent of claude-workflow-manager)
     networks:
       - claude-network
 
@@ -100,7 +100,7 @@ services:
       - claude_profiles:/app/claude_profiles  # Isolated Claude profiles
       - terminal_sessions:/app/terminal_sessions  # Session working directories
       - ~/.claude:/root/.claude  # Fallback to host Claude auth
-      - ${PWD}:/app/project  # Mount the actual project directory
+      - ${PWD}/..:/app/project  # Mount the actual project directory (parent of claude-workflow-manager)
     networks:
       - claude-network
       - default  # Add default network for internet access
