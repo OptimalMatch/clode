@@ -110,6 +110,7 @@ class TerminalServer:
         # Environment configuration
         self.claude_profiles_dir = os.getenv('CLAUDE_PROFILES_DIR', '/app/claude_profiles')
         self.terminal_sessions_dir = os.getenv('TERMINAL_SESSIONS_DIR', '/app/terminal_sessions')
+        self.project_root_dir = os.getenv('PROJECT_ROOT_DIR', '/app/project')
         self.use_max_plan = os.getenv('USE_CLAUDE_MAX_PLAN', 'false').lower() == 'true'
         
         # Create directories
@@ -121,6 +122,7 @@ class TerminalServer:
         logger.info(f"🚀 Terminal server initialized")
         logger.info(f"📁 Profiles directory: {self.claude_profiles_dir}")
         logger.info(f"📁 Sessions directory: {self.terminal_sessions_dir}")
+        logger.info(f"📁 Project root directory: {self.project_root_dir}")
         logger.info(f"🎯 Max plan mode: {self.use_max_plan}")
     
     def _check_claude_cli_available(self) -> bool:
@@ -300,9 +302,18 @@ class TerminalServer:
     async def _initialize_terminal_session(self, session: TerminalSession):
         """Initialize environment and working directory for terminal session"""
         
-        # Create session working directory first
-        session.working_directory = Path(self.terminal_sessions_dir) / session.session_id
-        session.working_directory.mkdir(exist_ok=True, parents=True)
+        # Use project root directory instead of creating isolated session directories
+        # This allows Claude to work directly with the actual project files and git repo
+        project_root = Path(self.project_root_dir)
+        if project_root.exists() and project_root.is_dir():
+            session.working_directory = project_root
+            logger.info(f"📁 Using project root directory: {session.working_directory}")
+        else:
+            # Fallback to session-specific directory if project root doesn't exist
+            session.working_directory = Path(self.terminal_sessions_dir) / session.session_id
+            session.working_directory.mkdir(exist_ok=True, parents=True)
+            logger.warning(f"⚠️ Project root not found, using session directory: {session.working_directory}")
+        
         logger.info(f"📁 Session working directory: {session.working_directory}")
         
         # Get profile_id - either provided or get selected profile from backend
