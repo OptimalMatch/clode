@@ -6,6 +6,7 @@ from fastapi import WebSocket
 from claude_code_sdk import query
 import subprocess
 import tempfile
+import shutil
 from pathlib import Path
 from models import ClaudeInstance, InstanceStatus, PromptStep, Subagent, InstanceLog, LogType
 from database import Database
@@ -51,6 +52,62 @@ class ClaudeCodeManager:
         """Add timestamp to log messages"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Include milliseconds
         print(f"[{timestamp}] {message}")
+    
+    async def _setup_ssh_keys_for_instance(self, working_dir: str):
+        """Automatically set up SSH keys for git operations in Claude Code instances"""
+        try:
+            ssh_keys_dir = Path("/app/ssh_keys")
+            if not ssh_keys_dir.exists():
+                self._log_with_timestamp("⚠️ SSH keys directory /app/ssh_keys not found")
+                return
+            
+            # Create .ssh directory in the working directory for this instance
+            instance_ssh_dir = Path(working_dir) / ".ssh"
+            instance_ssh_dir.mkdir(mode=0o700, exist_ok=True)
+            
+            # Copy SSH keys from /app/ssh_keys to instance .ssh directory
+            ssh_keys_copied = 0
+            for key_file in ssh_keys_dir.glob("*"):
+                if key_file.is_file():
+                    dest_file = instance_ssh_dir / key_file.name
+                    
+                    # Copy the key file
+                    shutil.copy2(key_file, dest_file)
+                    
+                    # Set proper permissions
+                    if key_file.name.endswith('.pub'):
+                        dest_file.chmod(0o644)  # Public key
+                    else:
+                        dest_file.chmod(0o600)  # Private key
+                    
+                    ssh_keys_copied += 1
+                    self._log_with_timestamp(f"📋 Copied SSH key: {key_file.name}")
+            
+            if ssh_keys_copied > 0:
+                # Create SSH config file to use the keys
+                ssh_config_content = """Host github.com
+    HostName github.com
+    User git
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null"""
+                
+                # Add identity files for all private keys found
+                for key_file in instance_ssh_dir.glob("*"):
+                    if key_file.is_file() and not key_file.name.endswith('.pub'):
+                        ssh_config_content += f"\n    IdentityFile ~/.ssh/{key_file.name}"
+                
+                ssh_config_file = instance_ssh_dir / "config"
+                ssh_config_file.write_text(ssh_config_content)
+                ssh_config_file.chmod(0o600)
+                
+                self._log_with_timestamp(f"✅ SSH configuration created with {ssh_keys_copied} keys")
+            else:
+                self._log_with_timestamp("⚠️ No SSH keys found in /app/ssh_keys")
+                
+        except Exception as e:
+            self._log_with_timestamp(f"❌ Error setting up SSH keys: {e}")
+            raise
     
     async def _restore_claude_profile_for_instance(self, working_dir: str):
         """Restore the selected Claude profile credentials for an instance"""
@@ -876,6 +933,15 @@ class ClaudeCodeManager:
             except Exception as e:
                 self._log_with_timestamp(f"⚠️ Failed to restore Claude profile (will use default): {e}")
                 # Don't fail the instance spawn - continue with default auth
+            
+            # Automatically set up SSH keys for git operations
+            try:
+                self._log_with_timestamp(f"🔑 Setting up SSH keys for git operations...")
+                await self._setup_ssh_keys_for_instance(working_dir)
+                self._log_with_timestamp(f"✅ SSH keys configured successfully for instance {instance.id}")
+            except Exception as e:
+                self._log_with_timestamp(f"⚠️ Failed to setup SSH keys (git operations may fail): {e}")
+                # Don't fail the instance spawn - git operations might still work
             
             # Auto-discover agents from the repository before proceeding
             try:
