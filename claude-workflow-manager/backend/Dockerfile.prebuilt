@@ -1,18 +1,12 @@
-# Pre-built Dockerfile using a base image that already has common packages
-FROM node:18-slim
+# Ultra-fast prebuilt Dockerfile - uses image that already has Node.js + Python + Git
+FROM nikolaik/python-nodejs:python3.11-nodejs18
 
-# Install Python and essential packages in one layer
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-venv \
-    git \
-    curl \
-    openssh-client \
-    ca-certificates \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
-    && ln -s /usr/bin/python3 /usr/bin/python
+# This base image already includes:
+# - Python 3.11 with pip
+# - Node.js 18 with npm  
+# - Git, curl, openssh-client
+# - All common build tools
+# No apt-get update needed!
 
 WORKDIR /app
 

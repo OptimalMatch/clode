@@ -9,7 +9,7 @@ services:
   claude-terminal:
     build:
       context: ./backend
-      dockerfile: Dockerfile.prebuilt
+      dockerfile: Dockerfile.terminal.prebuilt
     image: claude-terminal:prebuilt
 
   mcp-server:
