@@ -28,23 +28,27 @@ fi
 BUILD_TIMEOUT=600  # 10 minutes max for any build
 
 if [ "$USE_PREBUILT" = "true" ]; then
-    echo "🏗️ Using optimized prebuilt strategy..."
-    echo "📦 Backend/MCP: nikolaik/python-nodejs (very fast)"
-    echo "🖥️ Terminal: Ubuntu 22.04 with all Claude Code requirements"
-    echo "🎨 Frontend: Node.js Alpine (cached build)"
-    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --parallel
+    echo "🏗️ Using unified Ubuntu 22.04 strategy (fast repos!)..."
+    echo "📦 Backend/MCP: Ubuntu 22.04 with Python + Node.js"
+    echo "🖥️ Terminal: Ubuntu 22.04 with Claude Code requirements"
+    echo "🎨 Frontend: Ubuntu 22.04 with Node.js"
+    
+    echo "🔄 All services: Fresh build (no cache) with Ubuntu 22.04 + Node.js 18"
+    echo "   - Frontend: MultiInstanceView component + Node.js 18"
+    echo "   - Terminal: Claude CLI fixes + all required packages"
+    echo "   - Backend: Python venv fixes + proper PATH"
+    echo "   - MCP: Fresh dependencies"
+    # Always build fresh - no cache to avoid issues
+    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --no-cache --parallel
 elif [ "$NO_UPDATE" = "true" ]; then
-    echo "🚀 Using no-update build (conditional apt-get update)..."
-    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.noupdate.yml build --parallel
+    echo "🚀 Using no-update build (fresh, no cache)..."
+    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.noupdate.yml build --no-cache --parallel
 elif [ "$USE_ULTRAFAST" = "true" ]; then
-    echo "⚡ Using ultra-fast build (Ubuntu base)..."
-    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.ultrafast.yml build --parallel
-elif [ "$USE_CACHE" = "true" ]; then
-    echo "📦 Using build cache for OS packages only..."
-    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.cache.yml build --parallel
+    echo "⚡ Using ultra-fast build (fresh, no cache)..."
+    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.ultrafast.yml build --no-cache --parallel
 else
-    echo "🔨 Building with OS package cache only..."
-    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD build --parallel
+    echo "🔨 Building fresh (no cache)..."
+    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD build --no-cache --parallel
 fi
 
 BUILD_EXIT_CODE=$?

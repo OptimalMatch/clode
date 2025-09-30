@@ -82,12 +82,13 @@ class TerminalSession:
             re.compile(r'https://[^\s\n\r]*oauth[^\s\n\r]*'),
         ]
         
-        # Authentication completion patterns
+        # Authentication completion patterns - made more specific to avoid false positives
         self.auth_success_patterns = [
-            re.compile(r'Login successful', re.IGNORECASE),
-            re.compile(r'Logged in as', re.IGNORECASE),
-            re.compile(r'Authentication successful', re.IGNORECASE),
-            re.compile(r'Welcome.*Claude', re.IGNORECASE),
+            re.compile(r'Login successful.*complete', re.IGNORECASE),
+            re.compile(r'Successfully logged in as.*@', re.IGNORECASE),
+            re.compile(r'Authentication successful.*ready', re.IGNORECASE),
+            re.compile(r'Welcome.*Claude.*authenticated', re.IGNORECASE),
+            re.compile(r'✅.*authentication.*complete', re.IGNORECASE),
         ]
         
         self.auth_failure_patterns = [
@@ -129,11 +130,27 @@ class TerminalServer:
         """Check if Claude CLI is available in the system"""
         try:
             import subprocess
+            # First check if claude command exists
             result = subprocess.run(['which', 'claude'], 
                                   capture_output=True, 
                                   text=True, 
                                   timeout=5)
-            return result.returncode == 0
+            if result.returncode != 0:
+                logger.warning("⚠️ Claude CLI not found in PATH")
+                return False
+                
+            # Try to run claude --version to verify it works
+            version_result = subprocess.run(['claude', '--version'], 
+                                          capture_output=True, 
+                                          text=True, 
+                                          timeout=10)
+            if version_result.returncode == 0:
+                logger.info(f"✅ Claude CLI available: {version_result.stdout.strip()}")
+                return True
+            else:
+                logger.warning(f"⚠️ Claude CLI found but not working: {version_result.stderr}")
+                return False
+                
         except Exception as e:
             logger.warning(f"⚠️ Failed to check Claude CLI availability: {e}")
             return False
@@ -302,17 +319,22 @@ class TerminalServer:
     async def _initialize_terminal_session(self, session: TerminalSession):
         """Initialize environment and working directory for terminal session"""
         
-        # Use project root directory instead of creating isolated session directories
-        # This allows Claude to work directly with the actual project files and git repo
-        project_root = Path(self.project_root_dir)
-        if project_root.exists() and project_root.is_dir():
-            session.working_directory = project_root
-            logger.info(f"📁 Using project root directory: {session.working_directory}")
+        # For login sessions, use claude user's home directory to avoid permission issues
+        if session.session_type == 'login':
+            session.working_directory = Path("/home/claude")
+            logger.info(f"🔐 Login session - using claude home directory: {session.working_directory}")
         else:
-            # Fallback to session-specific directory if project root doesn't exist
-            session.working_directory = Path(self.terminal_sessions_dir) / session.session_id
-            session.working_directory.mkdir(exist_ok=True, parents=True)
-            logger.warning(f"⚠️ Project root not found, using session directory: {session.working_directory}")
+            # Use project root directory for other sessions
+            # This allows Claude to work directly with the actual project files and git repo
+            project_root = Path(self.project_root_dir)
+            if project_root.exists() and project_root.is_dir():
+                session.working_directory = project_root
+                logger.info(f"📁 Using project root directory: {session.working_directory}")
+            else:
+                # Fallback to session-specific directory if project root doesn't exist
+                session.working_directory = Path(self.terminal_sessions_dir) / session.session_id
+                session.working_directory.mkdir(exist_ok=True, parents=True)
+                logger.warning(f"⚠️ Project root not found, using session directory: {session.working_directory}")
         
         logger.info(f"📁 Session working directory: {session.working_directory}")
         
@@ -375,8 +397,15 @@ class TerminalServer:
             # For login sessions, try to start Claude CLI
             if session.session_type == 'login':
                 if claude_available:
+                    # Use Claude CLI with proper flags for interactive mode
                     command = 'claude'
                     initial_input = '/login\n'
+                    # Set environment for Claude CLI
+                    session.environment.update({
+                        'TERM': 'xterm-256color',
+                        'COLUMNS': '80',
+                        'LINES': '24'
+                    })
                 else:
                     # Fallback to bash with helpful message
                     command = 'bash'
@@ -436,9 +465,9 @@ After installation, try: claude --version
                 # For bash sessions, send a welcome prompt
                 await self._send_output(session, "Terminal ready. Type 'claude --version' to check if Claude CLI is available.\n")
             
-            # Temporarily disable output monitoring to test WebSocket receive
-            # asyncio.create_task(self._monitor_process_output(session))
-            logger.info("⚠️ Output monitoring disabled for testing")
+            # Start output monitoring to relay process output to WebSocket
+            asyncio.create_task(self._monitor_process_output(session))
+            logger.info("✅ Output monitoring enabled for session")
             
         except Exception as e:
             logger.error(f"❌ Failed to start terminal process for {session.session_id}: {e}")
@@ -511,7 +540,8 @@ After installation, try: claude --version
                 if not session.is_authenticated:
                     session.is_authenticated = True
                     logger.info(f"✅ Authentication successful for session {session.session_id}")
-                    asyncio.create_task(self._send_auth_complete(session, True))
+                    # Add a 3-second delay before sending auth complete to give user time to see OAuth flow
+                    asyncio.create_task(self._send_auth_complete_delayed(session, True))
                 break
         
         # Check for failure patterns
@@ -834,6 +864,12 @@ After installation, try: claude --version
                 })
             except Exception as e:
                 logger.error(f"❌ Failed to send auth completion for session {session.session_id}: {e}")
+    
+    async def _send_auth_complete_delayed(self, session: TerminalSession, success: bool):
+        """Send authentication completion status with delay to give user time to see OAuth flow"""
+        logger.info(f"⏰ Delaying auth completion message for 5 seconds to allow user interaction...")
+        await asyncio.sleep(5)  # Give user 5 seconds to see and interact with OAuth flow
+        await self._send_auth_complete(session, success)
     
     async def _cleanup_session(self, session: TerminalSession):
         """Clean up terminal session resources"""

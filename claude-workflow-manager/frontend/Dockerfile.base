@@ -1,3 +1,5 @@
+# Frontend Base Image - Contains Node.js and npm dependencies
+# This image is built separately and cached for fast deployments
 FROM ubuntu:22.04
 
 # Set non-interactive mode
@@ -14,9 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy package files and install dependencies (this can be cached)
+# Copy package files and install dependencies (this layer will be cached)
 COPY package*.json ./
 RUN npm install
+
+# Install serve globally for production serving
+RUN npm install -g serve
 
 # Accept build arguments for environment variables
 ARG REACT_APP_API_URL
@@ -28,16 +33,7 @@ ENV REACT_APP_API_URL=$REACT_APP_API_URL
 ENV REACT_APP_WS_URL=$REACT_APP_WS_URL
 ENV REACT_APP_API_PORT=$REACT_APP_API_PORT
 
-# Copy source code (NEVER cache this - always get fresh source)
-COPY . .
-
-# Build for production (NEVER cache this - always rebuild with fresh source)
-RUN npm run build
-
-# Install serve to serve the production build
-RUN npm install -g serve
-
 EXPOSE 3000
 
-# Serve the production build instead of running dev server
+# Default command (will be overridden by deployment Dockerfile)
 CMD ["serve", "-s", "build", "-l", "3000"]

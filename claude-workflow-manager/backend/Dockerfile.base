@@ -1,4 +1,5 @@
-# Ultra-fast Ubuntu-based backend Dockerfile
+# Backend Base Image - Contains all OS packages and Python dependencies
+# This image is built separately and cached for fast deployments
 FROM ubuntu:22.04
 
 # Set non-interactive mode to avoid prompts
@@ -23,9 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
     && ln -s /usr/bin/python3 /usr/bin/python
 
-WORKDIR /app
-
-# Install Claude Code CLI globally (Node.js already available)
+# Install Claude Code CLI globally
 RUN npm config set registry https://registry.npmjs.org/ && \
     npm install -g @anthropic-ai/claude-code --timeout=60000 || \
     (echo "⚠️ Claude CLI installation failed, will retry at runtime" && exit 0)
@@ -46,26 +45,18 @@ RUN mkdir -p /home/claude/.ssh && \
     chmod 644 /home/claude/.ssh/known_hosts && \
     chown -R claude:claude /home/claude/.ssh
 
-# Copy and install Python dependencies in virtual environment
+# Install Python dependencies (copy requirements.txt for this step)
+WORKDIR /app
 COPY requirements.txt .
 RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Create necessary directories
+RUN mkdir -p /app/src /app/project /home/claude/.claude /app/ssh_keys && \
+    chown -R claude:claude /home/claude/.claude /app/ssh_keys
 
-# Create src and project directories for development volume mounting
-RUN mkdir -p /app/src /app/project
-
-# Change ownership of app directory to claude user
-RUN chown -R claude:claude /app
-
-# Create claude's .claude directory and SSH keys directory
-RUN mkdir -p /home/claude/.claude && \
-    mkdir -p /app/ssh_keys && \
-    chown -R claude:claude /home/claude/.claude && \
-    chown -R claude:claude /app/ssh_keys
-
-# Set Python path to include both /app and /app/src
+# Set Python path and ensure PATH includes venv
 ENV PYTHONPATH="/app:/app/src:${PYTHONPATH}"
+ENV PATH="/opt/venv/bin:/root/.local/bin:$PATH"
 
 # Switch to claude user for runtime
 USER claude
@@ -73,7 +64,8 @@ USER claude
 # Ensure PATH includes venv for claude user
 ENV PATH="/opt/venv/bin:/root/.local/bin:$PATH"
 
+WORKDIR /app
 EXPOSE 8000
 
-# Use the main module from the src directory for development
-CMD ["sh", "-c", "if [ -f /app/src/main.py ]; then cd /app/src && /opt/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload; else /opt/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload; fi"]
+# Default command (will be overridden by deployment Dockerfile)
+CMD ["/opt/venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

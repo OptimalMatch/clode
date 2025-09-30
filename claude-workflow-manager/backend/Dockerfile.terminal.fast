@@ -1,0 +1,21 @@
+# Fast Terminal Dockerfile - Uses pre-built base image
+ARG BASE_IMAGE=ghcr.io/your-org/claude-workflow-terminal-base:latest
+FROM ${BASE_IMAGE}
+
+# Switch to root to copy files
+USER root
+
+# Copy terminal server code (NEVER cached - always fresh)
+COPY terminal_server.py .
+COPY claude_profile_manager.py .
+COPY terminal_startup.sh /app/terminal_startup.sh
+RUN chmod +x /app/terminal_startup.sh
+
+# Ensure proper ownership
+RUN chown -R claude:claude /app
+
+# Switch to claude user for runtime
+USER claude
+
+# Start the terminal server
+CMD ["/app/terminal_startup.sh"]

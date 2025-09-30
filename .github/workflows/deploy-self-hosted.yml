@@ -176,18 +176,29 @@ jobs:
         echo "🔨 Building and starting services..."
         cd $DEPLOY_DIR/claude-workflow-manager
         
-        # Use the fast build script if available, otherwise use optimized docker-compose
-        if [ -f "fast-build.sh" ]; then
-          echo "📦 Using fast build script..."
-          chmod +x fast-build.sh
-          # Try prebuilt first (fastest), then fallbacks
-          USE_PREBUILT=true ./fast-build.sh || NO_UPDATE=true ./fast-build.sh || USE_ULTRAFAST=true ./fast-build.sh || USE_CACHE=true ./fast-build.sh
+        # Check if base images are available for fast deployment
+        echo "🔍 Checking for pre-built base images..."
+        BASE_IMAGES_AVAILABLE=true
+        
+        for service in backend-base terminal-base frontend-base; do
+          IMAGE="ghcr.io/${{ github.repository_owner }}/claude-workflow-$service:latest"
+          if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "❌ Base image not found: $IMAGE"
+            BASE_IMAGES_AVAILABLE=false
+            break
+          else
+            echo "✅ Base image found: $IMAGE"
+          fi
+        done
+        
+        if [ "$BASE_IMAGES_AVAILABLE" = "true" ]; then
+          echo "🚀 Using fast deployment with pre-built base images..."
+          export GITHUB_REPOSITORY_OWNER="${{ github.repository_owner }}"
+          docker compose -f docker-compose.yml -f docker-compose.fast.yml build --parallel
+          docker compose -f docker-compose.yml -f docker-compose.fast.yml up -d
         else
-          echo "🏗️ Using optimized Docker Compose build..."
-          # Build containers with optimizations - cache OS packages, never cache source
-          docker compose build --parallel
-          
-          # Start services
+          echo "🏗️ Base images not available, using full build..."
+          docker compose build --no-cache --parallel
           docker compose up -d
         fi
         

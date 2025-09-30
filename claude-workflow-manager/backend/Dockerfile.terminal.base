@@ -1,24 +1,47 @@
-# Claude Terminal Server Dockerfile
-# Specialized container for running Claude CLI with terminal interface
+# Terminal Base Image - Contains all OS packages and dependencies for Claude Terminal
+# This image is built separately and cached for fast deployments
+FROM ubuntu:22.04
 
-FROM python:3.11-slim
+# Set non-interactive mode to avoid prompts
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies for terminal and Claude CLI
-RUN apt-get update && apt-get install -y \
+# Install all required packages in one optimized layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Core system
+    ca-certificates \
     curl \
-    wget \
+    # Python stack
+    python3 \
+    python3-pip \
+    python3-venv \
+    # Development tools
     git \
+    wget \
     build-essential \
-    nodejs \
-    npm \
+    # Terminal essentials (REQUIRED for Claude Code)
     sudo \
     locales \
     tmux \
     screen \
     procps \
-    && rm -rf /var/lib/apt/lists/*
+    # Additional dependencies for Claude CLI
+    xvfb \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libxss1 \
+    libasound2 \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+    && ln -s /usr/bin/python3 /usr/bin/python
 
-# Set up locale for proper terminal display
+# Set up locale properly (REQUIRED for Claude Code text handling)
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
     locale-gen && \
     update-locale LANG=en_US.UTF-8
@@ -26,10 +49,17 @@ ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
 
-# Install Claude CLI using npm (more reliable)
-RUN npm install -g @anthropic-ai/claude-code || \
-    (curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null || \
+# Install Claude CLI (use the version compatible with Node.js 18)
+RUN echo "Installing Claude CLI..." && \
+    npm install -g @anthropic-ai/claude-code || \
+    (echo "NPM install failed, trying curl method..." && \
+     curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null || \
      echo "⚠️ Claude CLI installation failed, will install at runtime")
+
+# Verify Claude CLI installation
+RUN which claude || echo "Claude CLI not found in PATH"
+RUN claude --version || echo "Claude CLI version check failed"
+
 ENV PATH="/home/claude/.npm-global/bin:/home/claude/.local/bin:/usr/local/bin:$PATH"
 
 # Create app directory
@@ -49,10 +79,6 @@ RUN pip install --no-cache-dir \
     asyncio-mqtt \
     python-multipart
 
-# Copy terminal server code
-COPY terminal_server.py .
-COPY claude_profile_manager.py .
-
 # Create non-root user for better security
 RUN useradd -m -s /bin/bash claude
 
@@ -64,19 +90,15 @@ RUN mkdir -p /home/claude/.npm-global && \
     npm config set prefix '/home/claude/.npm-global' && \
     echo 'export PATH=/home/claude/.npm-global/bin:$PATH' >> /home/claude/.bashrc
 
-# Switch back to root to copy files and set permissions
+# Switch back to root for final setup
 USER root
-COPY terminal_startup.sh /app/terminal_startup.sh
-RUN chmod +x /app/terminal_startup.sh
+WORKDIR /app
 
-# Change ownership of app directory and create necessary directories
+# Change ownership of directories
 RUN chown -R claude:claude /app /home/claude && \
     mkdir -p /app/claude_profiles /app/terminal_sessions /app/project && \
     chown -R claude:claude /app/claude_profiles /app/terminal_sessions /app/project && \
     chmod 777 /app/project
-
-# Switch to claude user for runtime
-USER claude
 
 # Environment variables
 ENV PYTHONPATH=/app
@@ -92,5 +114,8 @@ EXPOSE 8007
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8007/health || exit 1
 
-# Start the terminal server
-CMD ["/app/terminal_startup.sh"]
+# Switch to claude user for runtime
+USER claude
+
+# Default command (will be overridden by deployment Dockerfile)
+CMD ["python", "terminal_server.py"]

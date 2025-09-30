@@ -1,0 +1,36 @@
+# Docker Compose override for fast deployments using pre-built base images
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.fast
+      args:
+        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-backend-base:latest
+    image: claude-backend:fast
+
+  claude-terminal:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.terminal.fast
+      args:
+        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-terminal-base:latest
+    image: claude-terminal:fast
+
+  mcp-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.fast
+      args:
+        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-backend-base:latest
+    image: claude-mcp:fast
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.fast
+      args:
+        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-frontend-base:latest
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8005}
+        REACT_APP_WS_URL: ${REACT_APP_WS_URL:-ws://localhost:8005}
+        REACT_APP_API_PORT: ${REACT_APP_API_PORT:-8005}
+    image: claude-frontend:fast
