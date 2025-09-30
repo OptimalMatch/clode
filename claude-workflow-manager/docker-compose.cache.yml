@@ -21,6 +21,17 @@ services:
         BUILDKIT_INLINE_CACHE: 1
     image: claude-terminal:cache
 
+  mcp-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      cache_from:
+        - python:3.11-slim
+      target: final
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: claude-mcp:cache
+
   frontend:
     build:
       context: ./frontend

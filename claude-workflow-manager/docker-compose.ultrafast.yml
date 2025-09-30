@@ -12,6 +12,12 @@ services:
       dockerfile: Dockerfile.ultrafast
     image: claude-terminal:ultrafast
 
+  mcp-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.ultrafast
+    image: claude-mcp:ultrafast
+
   frontend:
     build:
       context: ./frontend
