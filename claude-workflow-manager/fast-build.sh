@@ -28,8 +28,10 @@ fi
 BUILD_TIMEOUT=600  # 10 minutes max for any build
 
 if [ "$USE_PREBUILT" = "true" ]; then
-    echo "🏗️ Using ultra-fast pre-built base (nikolaik/python-nodejs)..."
-    echo "📦 This base image includes Python 3.11 + Node.js 18 + Git + build tools"
+    echo "🏗️ Using optimized prebuilt strategy..."
+    echo "📦 Backend/MCP: nikolaik/python-nodejs (very fast)"
+    echo "🖥️ Terminal: Ubuntu 22.04 with all Claude Code requirements"
+    echo "🎨 Frontend: Node.js Alpine (cached build)"
     timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --parallel
 elif [ "$NO_UPDATE" = "true" ]; then
     echo "🚀 Using no-update build (conditional apt-get update)..."
