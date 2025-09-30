@@ -1,12 +1,28 @@
-# Ultra-fast prebuilt Dockerfile - uses image that already has Node.js + Python + Git
-FROM nikolaik/python-nodejs:python3.11-nodejs18
+# Ultra-fast Ubuntu-based backend Dockerfile
+FROM ubuntu:22.04
 
-# This base image already includes:
-# - Python 3.11 with pip
-# - Node.js 18 with npm  
-# - Git, curl, openssh-client
-# - All common build tools
-# No apt-get update needed!
+# Set non-interactive mode to avoid prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install all required packages in one optimized layer (Ubuntu repos are fast!)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Core system
+    ca-certificates \
+    # Python stack
+    python3 \
+    python3-pip \
+    python3-venv \
+    # Node.js stack  
+    nodejs \
+    npm \
+    # Development tools
+    git \
+    curl \
+    openssh-client \
+    build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+    && ln -s /usr/bin/python3 /usr/bin/python
 
 WORKDIR /app
 

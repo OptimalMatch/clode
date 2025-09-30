@@ -176,10 +176,16 @@ jobs:
         echo "🔨 Building and starting services..."
         cd $DEPLOY_DIR/claude-workflow-manager
         
-        # Force rebuild frontend to include MultiInstanceView (remove cached frontend image)
-        echo "🔄 Removing cached frontend image to ensure fresh build..."
+        # Force rebuild all services to include latest fixes (remove cached images)
+        echo "🔄 Removing cached images to ensure fresh builds with latest fixes..."
         docker rmi claude-frontend:prebuilt 2>/dev/null || true
         docker rmi claude-workflow-manager-frontend 2>/dev/null || true
+        docker rmi claude-backend:prebuilt 2>/dev/null || true
+        docker rmi claude-workflow-manager-backend 2>/dev/null || true
+        docker rmi claude-terminal:prebuilt 2>/dev/null || true
+        docker rmi claude-workflow-manager-claude-terminal 2>/dev/null || true
+        docker rmi claude-mcp:prebuilt 2>/dev/null || true
+        docker rmi claude-workflow-manager-mcp-server 2>/dev/null || true
         
         # Use the fast build script if available, otherwise use optimized docker-compose
         if [ -f "fast-build.sh" ]; then

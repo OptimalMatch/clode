@@ -28,17 +28,20 @@ fi
 BUILD_TIMEOUT=600  # 10 minutes max for any build
 
 if [ "$USE_PREBUILT" = "true" ]; then
-    echo "🏗️ Using optimized prebuilt strategy..."
-    echo "📦 Backend/MCP: nikolaik/python-nodejs (very fast)"
-    echo "🖥️ Terminal: Ubuntu 22.04 with all Claude Code requirements"
+    echo "🏗️ Using unified Ubuntu 22.04 strategy (fast repos!)..."
+    echo "📦 Backend/MCP: Ubuntu 22.04 with Python + Node.js"
+    echo "🖥️ Terminal: Ubuntu 22.04 with Claude Code requirements"
+    echo "🎨 Frontend: Ubuntu 22.04 with Node.js"
     
     if [ "$FORCE_FRONTEND_REBUILD" = "true" ]; then
-        echo "🔄 Frontend: Forced rebuild (no cache) to include latest components"
-        # Build frontend without cache, others with cache
-        timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --no-cache frontend
-        timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build backend claude-terminal mcp-server
+        echo "🔄 All services: Forced rebuild (no cache) to include latest fixes"
+        echo "   - Frontend: MultiInstanceView component"
+        echo "   - Terminal: Claude CLI hanging fix"
+        echo "   - Backend: Latest optimizations"
+        # Build all services without cache to ensure latest code
+        timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --no-cache --parallel
     else
-        echo "🎨 Frontend: Node.js Alpine (cached build)"
+        echo "🎨 All services: Using cached builds"
         timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --parallel
     fi
 elif [ "$NO_UPDATE" = "true" ]; then
