@@ -184,7 +184,7 @@ jobs:
           USE_PREBUILT=true ./fast-build.sh || NO_UPDATE=true ./fast-build.sh || USE_ULTRAFAST=true ./fast-build.sh || USE_CACHE=true ./fast-build.sh
         else
           echo "🏗️ Using optimized Docker Compose build..."
-          # Build containers with optimizations (remove --no-cache for faster builds)
+          # Build containers with optimizations - cache OS packages, never cache source
           docker compose build --parallel
           
           # Start services

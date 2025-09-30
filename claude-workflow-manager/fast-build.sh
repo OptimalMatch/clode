@@ -9,6 +9,8 @@ echo "🚀 Starting optimized build process..."
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 
+# Note: Source code is NEVER cached - only OS package installations are cached
+
 # Detect Docker Compose command (new vs legacy)
 if docker compose version &> /dev/null; then
     DOCKER_COMPOSE_CMD="docker compose"
@@ -22,6 +24,7 @@ else
 fi
 
 # Choose build strategy based on environment variables
+# Only cache OS package installations, NEVER cache source code
 if [ "$USE_PREBUILT" = "true" ]; then
     echo "🏗️ Using pre-built base (Node.js + Python)..."
     $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --parallel
@@ -32,10 +35,10 @@ elif [ "$USE_ULTRAFAST" = "true" ]; then
     echo "⚡ Using ultra-fast build (Ubuntu base)..."
     $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.ultrafast.yml build --parallel
 elif [ "$USE_CACHE" = "true" ]; then
-    echo "📦 Using build cache..."
+    echo "📦 Using build cache for OS packages only..."
     $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.cache.yml build --parallel
 else
-    echo "🔨 Building without cache..."
+    echo "🔨 Building with OS package cache only..."
     $DOCKER_COMPOSE_CMD build --parallel
 fi
 

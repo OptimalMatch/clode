@@ -49,6 +49,7 @@ RUN mkdir -p /home/claude/.ssh && \
     chmod 644 /home/claude/.ssh/known_hosts && \
     chown -R claude:claude /home/claude/.ssh
 
+# Copy source code (NEVER cache this - always get fresh source)
 COPY . .
 
 # Create src and project directories for development volume mounting
