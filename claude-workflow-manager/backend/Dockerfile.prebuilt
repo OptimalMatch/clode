@@ -30,9 +30,9 @@ RUN npm config set registry https://registry.npmjs.org/ && \
     npm install -g @anthropic-ai/claude-code --timeout=60000 || \
     (echo "⚠️ Claude CLI installation failed, will retry at runtime" && exit 0)
 
-# Create Python virtual environment
+# Create Python virtual environment and ensure proper PATH
 RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:/root/.local/bin:$PATH"
 
 # Create non-root user for better security
 RUN useradd -m -s /bin/bash claude
@@ -46,9 +46,9 @@ RUN mkdir -p /home/claude/.ssh && \
     chmod 644 /home/claude/.ssh/known_hosts && \
     chown -R claude:claude /home/claude/.ssh
 
-# Copy and install Python dependencies
+# Copy and install Python dependencies in virtual environment
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
@@ -70,7 +70,10 @@ ENV PYTHONPATH="/app:/app/src:${PYTHONPATH}"
 # Switch to claude user for runtime
 USER claude
 
+# Ensure PATH includes venv for claude user
+ENV PATH="/opt/venv/bin:/root/.local/bin:$PATH"
+
 EXPOSE 8000
 
 # Use the main module from the src directory for development
-CMD ["sh", "-c", "if [ -f /app/src/main.py ]; then cd /app/src && uvicorn main:app --host 0.0.0.0 --port 8000 --reload; else uvicorn main:app --host 0.0.0.0 --port 8000 --reload; fi"]
+CMD ["sh", "-c", "if [ -f /app/src/main.py ]; then cd /app/src && /opt/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload; else /opt/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload; fi"]
