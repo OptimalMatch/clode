@@ -187,48 +187,7 @@ const MultiInstanceView: React.FC = () => {
     };
   }, [panels]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyPress = (event: KeyboardEvent) => {
-      // ESC to exit zoom mode
-      if (event.key === 'Escape' && hasZoomedPanel) {
-        event.preventDefault();
-        setPanels(prev => prev.map(panel => ({ ...panel, isZoomed: false })));
-      }
-      
-      // Number keys 1-4 to zoom specific panels
-      if (event.key >= '1' && event.key <= '4' && !event.ctrlKey && !event.altKey) {
-        const panelIndex = parseInt(event.key) - 1;
-        if (panels[panelIndex].instanceId) {
-          event.preventDefault();
-          handleZoomPanel(panelIndex);
-        }
-      }
-      
-      // Ctrl+R to refresh all instances
-      if (event.ctrlKey && event.key === 'r') {
-        event.preventDefault();
-        workflowQueries.refetch();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyPress);
-    return () => {
-      document.removeEventListener('keydown', handleKeyPress);
-    };
-  }, [hasZoomedPanel, panels, workflowQueries]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      wsConnections.current.forEach(ws => ws.close());
-      wsConnections.current.clear();
-      if (refreshInterval) {
-        clearInterval(refreshInterval);
-      }
-    };
-  }, [refreshInterval]);
-
+  // Handler functions
   const handleZoomPanel = (panelIndex: number) => {
     setPanels(prev => prev.map((panel, index) => ({
       ...panel,
@@ -318,6 +277,48 @@ const MultiInstanceView: React.FC = () => {
   // Check if any panel is zoomed
   const hasZoomedPanel = panels.some(p => p.isZoomed);
   const zoomedPanelIndex = panels.findIndex(p => p.isZoomed);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      // ESC to exit zoom mode
+      if (event.key === 'Escape' && hasZoomedPanel) {
+        event.preventDefault();
+        setPanels(prev => prev.map(panel => ({ ...panel, isZoomed: false })));
+      }
+      
+      // Number keys 1-4 to zoom specific panels
+      if (event.key >= '1' && event.key <= '4' && !event.ctrlKey && !event.altKey) {
+        const panelIndex = parseInt(event.key) - 1;
+        if (panels[panelIndex].instanceId) {
+          event.preventDefault();
+          handleZoomPanel(panelIndex);
+        }
+      }
+      
+      // Ctrl+R to refresh all instances
+      if (event.ctrlKey && event.key === 'r') {
+        event.preventDefault();
+        workflowQueries.refetch();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => {
+      document.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [hasZoomedPanel, panels, workflowQueries]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      wsConnections.current.forEach(ws => ws.close());
+      wsConnections.current.clear();
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+      }
+    };
+  }, [refreshInterval]);
 
   return (
     <Box sx={{ 
