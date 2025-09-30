@@ -72,7 +72,7 @@ RUN chmod +x /app/terminal_startup.sh
 # Change ownership of app directory and create necessary directories
 RUN chown -R claude:claude /app /home/claude && \
     mkdir -p /app/claude_profiles /app/terminal_sessions /app/project && \
-    chown -R claude:claude /app/claude_profiles /app/terminal_sessions && \
+    chown -R claude:claude /app/claude_profiles /app/terminal_sessions /app/project && \
     chmod 755 /app/project
 
 # Switch to claude user for runtime
