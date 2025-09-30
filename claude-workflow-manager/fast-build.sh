@@ -25,21 +25,33 @@ fi
 
 # Choose build strategy based on environment variables
 # Only cache OS package installations, NEVER cache source code
+BUILD_TIMEOUT=600  # 10 minutes max for any build
+
 if [ "$USE_PREBUILT" = "true" ]; then
-    echo "🏗️ Using pre-built base (Node.js + Python)..."
-    $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --parallel
+    echo "🏗️ Using ultra-fast pre-built base (nikolaik/python-nodejs)..."
+    echo "📦 This base image includes Python 3.11 + Node.js 18 + Git + build tools"
+    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --parallel
 elif [ "$NO_UPDATE" = "true" ]; then
     echo "🚀 Using no-update build (conditional apt-get update)..."
-    $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.noupdate.yml build --parallel
+    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.noupdate.yml build --parallel
 elif [ "$USE_ULTRAFAST" = "true" ]; then
     echo "⚡ Using ultra-fast build (Ubuntu base)..."
-    $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.ultrafast.yml build --parallel
+    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.ultrafast.yml build --parallel
 elif [ "$USE_CACHE" = "true" ]; then
     echo "📦 Using build cache for OS packages only..."
-    $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.cache.yml build --parallel
+    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.cache.yml build --parallel
 else
     echo "🔨 Building with OS package cache only..."
-    $DOCKER_COMPOSE_CMD build --parallel
+    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD build --parallel
+fi
+
+BUILD_EXIT_CODE=$?
+if [ $BUILD_EXIT_CODE -ne 0 ]; then
+    echo "❌ Build failed or timed out (exit code: $BUILD_EXIT_CODE)"
+    if [ $BUILD_EXIT_CODE -eq 124 ]; then
+        echo "⏰ Build timed out after $BUILD_TIMEOUT seconds"
+    fi
+    exit $BUILD_EXIT_CODE
 fi
 
 echo "🏃 Starting services..."
