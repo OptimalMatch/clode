@@ -536,5 +536,5 @@ Focus on:
 Also check out Reuven Cohen's claude-flow for hive orchestration with Claude Code at [https://github.com/ruvnet/claude-flow]
 
 
-Disclaimer
+## Disclaimer
 Claude and Claude Code are trademarks of Anthropic PBC. All other product names, logos, and brands are property of their respective owners. Use of these names is for identification purposes only and does not imply endorsement or affiliation.test
