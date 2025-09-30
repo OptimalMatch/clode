@@ -1,6 +1,4 @@
 # Docker Compose override for faster builds with cache
-version: '3.8'
-
 services:
   backend:
     build:

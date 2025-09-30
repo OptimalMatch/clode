@@ -9,26 +9,39 @@ echo "🚀 Starting optimized build process..."
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 
+# Detect Docker Compose command (new vs legacy)
+if docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker compose"
+    echo "✅ Using modern 'docker compose' command"
+elif command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+    echo "⚠️  Using legacy 'docker-compose' command"
+else
+    echo "❌ Neither 'docker compose' nor 'docker-compose' is available"
+    exit 1
+fi
+
 # Use build cache if available
 if [ "$USE_CACHE" = "true" ]; then
     echo "📦 Using build cache..."
-    docker-compose -f docker-compose.yml -f docker-compose.cache.yml build --parallel
+    $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.cache.yml build --parallel
 else
     echo "🔨 Building without cache..."
-    docker-compose build --parallel
+    $DOCKER_COMPOSE_CMD build --parallel
 fi
 
 echo "🏃 Starting services..."
-docker-compose up -d
+$DOCKER_COMPOSE_CMD up -d
 
 echo "⏳ Waiting for services to be ready..."
-timeout 120 bash -c 'until curl -f http://localhost:3000 >/dev/null 2>&1; do echo "Waiting for frontend..."; sleep 5; done'
+timeout 120 bash -c 'until curl -f http://localhost:3005 >/dev/null 2>&1; do echo "Waiting for frontend..."; sleep 5; done'
 timeout 120 bash -c 'until curl -f http://localhost:8005/health >/dev/null 2>&1; do echo "Waiting for backend..."; sleep 5; done'
 
 echo "✅ Build completed successfully!"
-echo "🌐 Frontend: http://localhost:3000"
+echo "🌐 Frontend: http://localhost:3005"
 echo "🔧 Backend: http://localhost:8005"
 echo "📊 Backend Health: http://localhost:8005/health"
+echo "🎯 Multi-Instance View: http://localhost:3005/multi-instance"
 
 # Show running containers
-docker-compose ps
+$DOCKER_COMPOSE_CMD ps
