@@ -1,0 +1,25 @@
+# Pre-built Docker Compose using Node.js base with Python added
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prebuilt
+    image: claude-backend:prebuilt
+
+  claude-terminal:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prebuilt
+    image: claude-terminal:prebuilt
+
+  mcp-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prebuilt
+    image: claude-mcp:prebuilt
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: claude-frontend:prebuilt

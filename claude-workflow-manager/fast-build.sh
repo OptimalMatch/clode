@@ -22,8 +22,11 @@ else
 fi
 
 # Choose build strategy based on environment variables
-if [ "$NO_UPDATE" = "true" ]; then
-    echo "🚀 Using no-update build (skips apt-get update)..."
+if [ "$USE_PREBUILT" = "true" ]; then
+    echo "🏗️ Using pre-built base (Node.js + Python)..."
+    $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --parallel
+elif [ "$NO_UPDATE" = "true" ]; then
+    echo "🚀 Using no-update build (conditional apt-get update)..."
     $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.noupdate.yml build --parallel
 elif [ "$USE_ULTRAFAST" = "true" ]; then
     echo "⚡ Using ultra-fast build (Ubuntu base)..."

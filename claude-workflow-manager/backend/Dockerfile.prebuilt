@@ -1,31 +1,29 @@
-# No-update Dockerfile - skips apt-get update for faster builds
-FROM python:3.11-slim
+# Pre-built Dockerfile using a base image that already has common packages
+FROM node:18-slim
+
+# Install Python and essential packages in one layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-venv \
+    git \
+    curl \
+    openssh-client \
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+    && ln -s /usr/bin/python3 /usr/bin/python
 
 WORKDIR /app
 
-# Install system dependencies with minimal update
-# Only update if packages are not available, then clean up immediately
-RUN (apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    openssh-client \
-    nodejs \
-    npm \
-    ca-certificates 2>/dev/null) || \
-    (apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    openssh-client \
-    nodejs \
-    npm \
-    ca-certificates) \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# Install Claude Code CLI globally
+# Install Claude Code CLI globally (Node.js already available)
 RUN npm config set registry https://registry.npmjs.org/ && \
     npm install -g @anthropic-ai/claude-code --timeout=60000 || \
     (echo "⚠️ Claude CLI installation failed, will retry at runtime" && exit 0)
+
+# Create Python virtual environment
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Create non-root user for better security
 RUN useradd -m -s /bin/bash claude

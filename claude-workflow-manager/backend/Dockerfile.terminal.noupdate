@@ -3,8 +3,9 @@
 
 FROM python:3.11-slim
 
-# Install system dependencies WITHOUT updating package lists
-RUN apt-get install -y --no-install-recommends \
+# Install system dependencies with minimal update
+# Only update if packages are not available, then clean up immediately
+RUN (apt-get install -y --no-install-recommends \
     curl \
     wget \
     git \
@@ -16,7 +17,20 @@ RUN apt-get install -y --no-install-recommends \
     tmux \
     screen \
     procps \
-    ca-certificates \
+    ca-certificates 2>/dev/null) || \
+    (apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    git \
+    build-essential \
+    nodejs \
+    npm \
+    sudo \
+    locales \
+    tmux \
+    screen \
+    procps \
+    ca-certificates) \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
