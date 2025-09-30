@@ -82,12 +82,13 @@ class TerminalSession:
             re.compile(r'https://[^\s\n\r]*oauth[^\s\n\r]*'),
         ]
         
-        # Authentication completion patterns
+        # Authentication completion patterns - made more specific to avoid false positives
         self.auth_success_patterns = [
-            re.compile(r'Login successful', re.IGNORECASE),
-            re.compile(r'Logged in as', re.IGNORECASE),
-            re.compile(r'Authentication successful', re.IGNORECASE),
-            re.compile(r'Welcome.*Claude', re.IGNORECASE),
+            re.compile(r'Login successful.*complete', re.IGNORECASE),
+            re.compile(r'Successfully logged in as.*@', re.IGNORECASE),
+            re.compile(r'Authentication successful.*ready', re.IGNORECASE),
+            re.compile(r'Welcome.*Claude.*authenticated', re.IGNORECASE),
+            re.compile(r'✅.*authentication.*complete', re.IGNORECASE),
         ]
         
         self.auth_failure_patterns = [
@@ -539,7 +540,8 @@ After installation, try: claude --version
                 if not session.is_authenticated:
                     session.is_authenticated = True
                     logger.info(f"✅ Authentication successful for session {session.session_id}")
-                    asyncio.create_task(self._send_auth_complete(session, True))
+                    # Add a 3-second delay before sending auth complete to give user time to see OAuth flow
+                    asyncio.create_task(self._send_auth_complete_delayed(session, True))
                 break
         
         # Check for failure patterns
@@ -862,6 +864,12 @@ After installation, try: claude --version
                 })
             except Exception as e:
                 logger.error(f"❌ Failed to send auth completion for session {session.session_id}: {e}")
+    
+    async def _send_auth_complete_delayed(self, session: TerminalSession, success: bool):
+        """Send authentication completion status with delay to give user time to see OAuth flow"""
+        logger.info(f"⏰ Delaying auth completion message for 5 seconds to allow user interaction...")
+        await asyncio.sleep(5)  # Give user 5 seconds to see and interact with OAuth flow
+        await self._send_auth_complete(session, success)
     
     async def _cleanup_session(self, session: TerminalSession):
         """Clean up terminal session resources"""
