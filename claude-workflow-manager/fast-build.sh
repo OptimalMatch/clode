@@ -21,8 +21,14 @@ else
     exit 1
 fi
 
-# Use build cache if available
-if [ "$USE_CACHE" = "true" ]; then
+# Choose build strategy based on environment variables
+if [ "$NO_UPDATE" = "true" ]; then
+    echo "🚀 Using no-update build (skips apt-get update)..."
+    $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.noupdate.yml build --parallel
+elif [ "$USE_ULTRAFAST" = "true" ]; then
+    echo "⚡ Using ultra-fast build (Ubuntu base)..."
+    $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.ultrafast.yml build --parallel
+elif [ "$USE_CACHE" = "true" ]; then
     echo "📦 Using build cache..."
     $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.cache.yml build --parallel
 else

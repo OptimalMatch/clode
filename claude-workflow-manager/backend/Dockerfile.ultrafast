@@ -1,0 +1,68 @@
+# Ultra-fast Dockerfile using Ubuntu with pre-installed packages
+FROM ubuntu:22.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install everything in one layer with optimized package selection
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-venv \
+    git \
+    curl \
+    openssh-client \
+    nodejs \
+    npm \
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+    && ln -s /usr/bin/python3 /usr/bin/python
+
+# Install Claude CLI globally
+RUN npm config set registry https://registry.npmjs.org/ && \
+    npm install -g @anthropic-ai/claude-code --timeout=60000
+
+WORKDIR /app
+
+# Create Python virtual environment
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Create non-root user
+RUN useradd -m -s /bin/bash claude
+
+# Set up SSH configuration for claude user
+RUN mkdir -p /home/claude/.ssh && \
+    chmod 700 /home/claude/.ssh && \
+    ssh-keyscan -H github.com >> /home/claude/.ssh/known_hosts && \
+    ssh-keyscan -H gitlab.com >> /home/claude/.ssh/known_hosts && \
+    ssh-keyscan -H bitbucket.org >> /home/claude/.ssh/known_hosts && \
+    chmod 644 /home/claude/.ssh/known_hosts && \
+    chown -R claude:claude /home/claude/.ssh
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p /app/src /app/project /app/ssh_keys && \
+    mkdir -p /home/claude/.claude && \
+    chown -R claude:claude /app /home/claude/.claude
+
+# Set environment variables
+ENV PYTHONPATH="/app:/app/src:${PYTHONPATH}"
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Switch to claude user
+USER claude
+
+EXPOSE 8000
+
+# Use the main module
+CMD ["sh", "-c", "if [ -f /app/src/main.py ]; then cd /app/src && uvicorn main:app --host 0.0.0.0 --port 8000 --reload; else uvicorn main:app --host 0.0.0.0 --port 8000 --reload; fi"]

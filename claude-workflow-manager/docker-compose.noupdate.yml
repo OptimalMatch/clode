@@ -1,0 +1,19 @@
+# No-update Docker Compose - skips apt-get update for fastest builds
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.noupdate
+    image: claude-backend:noupdate
+
+  claude-terminal:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.terminal.noupdate
+    image: claude-terminal:noupdate
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: claude-frontend:noupdate
