@@ -1,0 +1,19 @@
+# Ultra-fast Docker Compose using optimized Dockerfiles
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.ultrafast
+    image: claude-backend:ultrafast
+
+  claude-terminal:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.ultrafast
+    image: claude-terminal:ultrafast
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: claude-frontend:ultrafast

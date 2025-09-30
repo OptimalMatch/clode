@@ -1,6 +1,4 @@
 # Docker Compose override for faster builds with cache
-version: '3.8'
-
 services:
   backend:
     build:
@@ -8,9 +6,10 @@ services:
       dockerfile: Dockerfile
       cache_from:
         - python:3.11-slim
-        - ${DOCKER_REGISTRY:-}claude-backend:cache
       target: final
-    image: ${DOCKER_REGISTRY:-}claude-backend:latest
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: claude-backend:cache
 
   claude-terminal:
     build:
@@ -18,8 +17,9 @@ services:
       dockerfile: Dockerfile.terminal
       cache_from:
         - python:3.11-slim
-        - ${DOCKER_REGISTRY:-}claude-terminal:cache
-    image: ${DOCKER_REGISTRY:-}claude-terminal:latest
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: claude-terminal:cache
 
   frontend:
     build:
@@ -27,5 +27,6 @@ services:
       dockerfile: Dockerfile
       cache_from:
         - node:18-alpine
-        - ${DOCKER_REGISTRY:-}claude-frontend:cache
-    image: ${DOCKER_REGISTRY:-}claude-frontend:latest
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: claude-frontend:cache
