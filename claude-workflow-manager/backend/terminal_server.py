@@ -650,13 +650,19 @@ After installation, try: claude --version
                     
                     try:
                         message = json.loads(data)
+                        logger.info(f"🔍 Parsed message: {message}")
                         if message.get('type') == 'input':
                             # Handle both 'data' and 'content' field names for compatibility
                             input_data = message.get('data', message.get('content', ''))
+                            logger.info(f"🎯 Extracted input data: '{repr(input_data)}'")
                             if session.child_process and session.child_process.isalive():
                                 # Send input exactly as received (no automatic newline)
                                 session.child_process.send(input_data)
                                 logger.info(f"📤 Sent to terminal: '{repr(input_data)}'")
+                            else:
+                                logger.warning(f"⚠️ Child process not alive or missing")
+                        else:
+                            logger.info(f"🔍 Non-input message type: {message.get('type')}")
                     except json.JSONDecodeError as e:
                         logger.error(f"❌ JSON decode error: {e}")
                         
