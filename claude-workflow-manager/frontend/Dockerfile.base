@@ -1,0 +1,39 @@
+# Frontend Base Image - Contains Node.js and npm dependencies
+# This image is built separately and cached for fast deployments
+FROM ubuntu:22.04
+
+# Set non-interactive mode
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Node.js 18 from NodeSource (Ubuntu's default Node.js is too old)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+WORKDIR /app
+
+# Copy package files and install dependencies (this layer will be cached)
+COPY package*.json ./
+RUN npm install
+
+# Install serve globally for production serving
+RUN npm install -g serve
+
+# Accept build arguments for environment variables
+ARG REACT_APP_API_URL
+ARG REACT_APP_WS_URL
+ARG REACT_APP_API_PORT
+
+# Set environment variables for build
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
+ENV REACT_APP_WS_URL=$REACT_APP_WS_URL
+ENV REACT_APP_API_PORT=$REACT_APP_API_PORT
+
+EXPOSE 3000
+
+# Default command (will be overridden by deployment Dockerfile)
+CMD ["serve", "-s", "build", "-l", "3000"]

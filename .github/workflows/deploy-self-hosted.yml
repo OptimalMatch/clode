@@ -176,11 +176,31 @@ jobs:
         echo "🔨 Building and starting services..."
         cd $DEPLOY_DIR/claude-workflow-manager
         
-        # Build containers
-        docker compose build --no-cache
+        # Check if base images are available for fast deployment
+        echo "🔍 Checking for pre-built base images..."
+        BASE_IMAGES_AVAILABLE=true
         
-        # Start services
-        docker compose up -d
+        for service in backend-base terminal-base frontend-base; do
+          IMAGE="ghcr.io/${{ github.repository_owner }}/claude-workflow-$service:latest"
+          if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "❌ Base image not found: $IMAGE"
+            BASE_IMAGES_AVAILABLE=false
+            break
+          else
+            echo "✅ Base image found: $IMAGE"
+          fi
+        done
+        
+        if [ "$BASE_IMAGES_AVAILABLE" = "true" ]; then
+          echo "🚀 Using fast deployment with pre-built base images..."
+          export GITHUB_REPOSITORY_OWNER="${{ github.repository_owner }}"
+          docker compose -f docker-compose.yml -f docker-compose.fast.yml build --parallel
+          docker compose -f docker-compose.yml -f docker-compose.fast.yml up -d
+        else
+          echo "🏗️ Base images not available, using full build..."
+          docker compose build --no-cache --parallel
+          docker compose up -d
+        fi
         
         echo "✅ Services started successfully"
 

@@ -1,0 +1,121 @@
+# Terminal Base Image - Contains all OS packages and dependencies for Claude Terminal
+# This image is built separately and cached for fast deployments
+FROM ubuntu:22.04
+
+# Set non-interactive mode to avoid prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install all required packages in one optimized layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Core system
+    ca-certificates \
+    curl \
+    # Python stack
+    python3 \
+    python3-pip \
+    python3-venv \
+    # Development tools
+    git \
+    wget \
+    build-essential \
+    # Terminal essentials (REQUIRED for Claude Code)
+    sudo \
+    locales \
+    tmux \
+    screen \
+    procps \
+    # Additional dependencies for Claude CLI
+    xvfb \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libxss1 \
+    libasound2 \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+    && ln -s /usr/bin/python3 /usr/bin/python
+
+# Set up locale properly (REQUIRED for Claude Code text handling)
+RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
+    locale-gen && \
+    update-locale LANG=en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
+
+# Install Claude CLI (use the version compatible with Node.js 18)
+RUN echo "Installing Claude CLI..." && \
+    npm install -g @anthropic-ai/claude-code || \
+    (echo "NPM install failed, trying curl method..." && \
+     curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null || \
+     echo "⚠️ Claude CLI installation failed, will install at runtime")
+
+# Verify Claude CLI installation
+RUN which claude || echo "Claude CLI not found in PATH"
+RUN claude --version || echo "Claude CLI version check failed"
+
+ENV PATH="/home/claude/.npm-global/bin:/home/claude/.local/bin:/usr/local/bin:$PATH"
+
+# Create app directory
+WORKDIR /app
+
+# Create directories for profiles, sessions, and project
+RUN mkdir -p /app/claude_profiles /app/terminal_sessions /app/project
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional dependencies for terminal server
+RUN pip install --no-cache-dir \
+    pexpect \
+    ptyprocess \
+    asyncio-mqtt \
+    python-multipart
+
+# Create non-root user for better security
+RUN useradd -m -s /bin/bash claude
+
+# Set up npm global directory for claude user
+USER claude
+WORKDIR /home/claude
+RUN mkdir -p /home/claude/.npm-global && \
+    mkdir -p /home/claude/.claude && \
+    npm config set prefix '/home/claude/.npm-global' && \
+    echo 'export PATH=/home/claude/.npm-global/bin:$PATH' >> /home/claude/.bashrc
+
+# Switch back to root for final setup
+USER root
+WORKDIR /app
+
+# Change ownership of directories
+RUN chown -R claude:claude /app /home/claude && \
+    mkdir -p /app/claude_profiles /app/terminal_sessions /app/project && \
+    chown -R claude:claude /app/claude_profiles /app/terminal_sessions /app/project && \
+    chmod 777 /app/project
+
+# Environment variables
+ENV PYTHONPATH=/app
+ENV CLAUDE_HOME=/home/claude/.claude
+ENV TERMINAL_SERVER_PORT=8006
+ENV WEBSOCKET_HOST=0.0.0.0
+
+# Expose the terminal server port and health port
+EXPOSE 8006
+EXPOSE 8007
+
+# Health check for terminal server using dedicated health port
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8007/health || exit 1
+
+# Switch to claude user for runtime
+USER claude
+
+# Default command (will be overridden by deployment Dockerfile)
+CMD ["python", "terminal_server.py"]

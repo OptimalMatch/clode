@@ -1,0 +1,12 @@
+# Fast Frontend Dockerfile - Uses pre-built base image
+ARG BASE_IMAGE=ghcr.io/your-org/claude-workflow-frontend-base:latest
+FROM ${BASE_IMAGE}
+
+# Copy source code (NEVER cached - always fresh)
+COPY . .
+
+# Build for production with environment variables
+RUN npm run build
+
+# Serve the production build
+CMD ["serve", "-s", "build", "-l", "3000"]

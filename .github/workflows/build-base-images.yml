@@ -1,0 +1,152 @@
+name: Build Base Docker Images
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild all base images'
+        required: false
+        default: 'false'
+        type: boolean
+  
+  # Trigger on changes to Dockerfiles or dependencies
+  push:
+    paths:
+      - 'claude-workflow-manager/backend/Dockerfile*'
+      - 'claude-workflow-manager/frontend/Dockerfile*'
+      - 'claude-workflow-manager/backend/requirements.txt'
+      - 'claude-workflow-manager/frontend/package*.json'
+      - '.github/workflows/build-base-images.yml'
+    branches:
+      - main
+      - develop
+
+  # Weekly rebuild to get latest security updates
+  schedule:
+    - cron: '0 2 * * 0'  # Every Sunday at 2 AM UTC
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/claude-workflow
+
+jobs:
+  build-base-images:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
+    
+    strategy:
+      matrix:
+        service:
+          - name: "backend-base"
+            dockerfile: "claude-workflow-manager/backend/Dockerfile.base"
+            context: "claude-workflow-manager/backend"
+          - name: "terminal-base" 
+            dockerfile: "claude-workflow-manager/backend/Dockerfile.terminal.base"
+            context: "claude-workflow-manager/backend"
+          - name: "frontend-base"
+            dockerfile: "claude-workflow-manager/frontend/Dockerfile.base"
+            context: "claude-workflow-manager/frontend"
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        driver-opts: |
+          network=host
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+          type=raw,value={{date 'YYYYMMDD-HHmmss'}}
+
+    - name: Check if base image needs rebuild
+      id: check
+      run: |
+        FORCE_REBUILD="${{ github.event.inputs.force_rebuild }}"
+        IMAGE_NAME="${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:latest"
+        
+        if [ "$FORCE_REBUILD" = "true" ]; then
+          echo "🔄 Force rebuild requested"
+          echo "needs_build=true" >> $GITHUB_OUTPUT
+        elif docker manifest inspect "$IMAGE_NAME" > /dev/null 2>&1; then
+          echo "📦 Base image exists, checking if dependencies changed..."
+          
+          # Check if Dockerfile or dependencies changed in last commit
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          if echo "$CHANGED_FILES" | grep -E "(Dockerfile|requirements\.txt|package.*\.json)" > /dev/null; then
+            echo "📝 Dependencies changed, rebuild needed"
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ No dependency changes, skipping build"
+            echo "needs_build=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "🆕 Base image doesn't exist, build needed"
+          echo "needs_build=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build and push base image
+      if: steps.check.outputs.needs_build == 'true'
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ matrix.service.context }}
+        file: ${{ matrix.service.dockerfile }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+
+    - name: Image build summary
+      run: |
+        if [ "${{ steps.check.outputs.needs_build }}" = "true" ]; then
+          echo "✅ Built and pushed: ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}"
+          echo "🏷️ Tags: ${{ steps.meta.outputs.tags }}"
+        else
+          echo "⏭️ Skipped: ${{ matrix.service.name }} (no changes)"
+        fi
+
+  cleanup-old-images:
+    runs-on: self-hosted
+    needs: build-base-images
+    if: always()
+    steps:
+    - name: Clean up old base images
+      run: |
+        echo "🧹 Cleaning up old base images..."
+        
+        # Keep last 5 versions of each base image
+        for service in backend-base terminal-base frontend-base; do
+          echo "Cleaning $service images..."
+          docker images --format "table {{.Repository}}:{{.Tag}}\t{{.CreatedAt}}" \
+            | grep "claude-workflow-$service" \
+            | tail -n +6 \
+            | awk '{print $1}' \
+            | xargs -r docker rmi || true
+        done
+        
+        # Clean up build cache
+        docker builder prune -f --filter until=168h  # Keep 1 week
+        
+        echo "✅ Cleanup completed"

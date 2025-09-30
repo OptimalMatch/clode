@@ -318,17 +318,22 @@ class TerminalServer:
     async def _initialize_terminal_session(self, session: TerminalSession):
         """Initialize environment and working directory for terminal session"""
         
-        # Use project root directory instead of creating isolated session directories
-        # This allows Claude to work directly with the actual project files and git repo
-        project_root = Path(self.project_root_dir)
-        if project_root.exists() and project_root.is_dir():
-            session.working_directory = project_root
-            logger.info(f"📁 Using project root directory: {session.working_directory}")
+        # For login sessions, use claude user's home directory to avoid permission issues
+        if session.session_type == 'login':
+            session.working_directory = Path("/home/claude")
+            logger.info(f"🔐 Login session - using claude home directory: {session.working_directory}")
         else:
-            # Fallback to session-specific directory if project root doesn't exist
-            session.working_directory = Path(self.terminal_sessions_dir) / session.session_id
-            session.working_directory.mkdir(exist_ok=True, parents=True)
-            logger.warning(f"⚠️ Project root not found, using session directory: {session.working_directory}")
+            # Use project root directory for other sessions
+            # This allows Claude to work directly with the actual project files and git repo
+            project_root = Path(self.project_root_dir)
+            if project_root.exists() and project_root.is_dir():
+                session.working_directory = project_root
+                logger.info(f"📁 Using project root directory: {session.working_directory}")
+            else:
+                # Fallback to session-specific directory if project root doesn't exist
+                session.working_directory = Path(self.terminal_sessions_dir) / session.session_id
+                session.working_directory.mkdir(exist_ok=True, parents=True)
+                logger.warning(f"⚠️ Project root not found, using session directory: {session.working_directory}")
         
         logger.info(f"📁 Session working directory: {session.working_directory}")
         
