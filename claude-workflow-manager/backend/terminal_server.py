@@ -129,11 +129,27 @@ class TerminalServer:
         """Check if Claude CLI is available in the system"""
         try:
             import subprocess
+            # First check if claude command exists
             result = subprocess.run(['which', 'claude'], 
                                   capture_output=True, 
                                   text=True, 
                                   timeout=5)
-            return result.returncode == 0
+            if result.returncode != 0:
+                logger.warning("⚠️ Claude CLI not found in PATH")
+                return False
+                
+            # Try to run claude --version to verify it works
+            version_result = subprocess.run(['claude', '--version'], 
+                                          capture_output=True, 
+                                          text=True, 
+                                          timeout=10)
+            if version_result.returncode == 0:
+                logger.info(f"✅ Claude CLI available: {version_result.stdout.strip()}")
+                return True
+            else:
+                logger.warning(f"⚠️ Claude CLI found but not working: {version_result.stderr}")
+                return False
+                
         except Exception as e:
             logger.warning(f"⚠️ Failed to check Claude CLI availability: {e}")
             return False
@@ -375,8 +391,15 @@ class TerminalServer:
             # For login sessions, try to start Claude CLI
             if session.session_type == 'login':
                 if claude_available:
+                    # Use Claude CLI with proper flags for interactive mode
                     command = 'claude'
                     initial_input = '/login\n'
+                    # Set environment for Claude CLI
+                    session.environment.update({
+                        'TERM': 'xterm-256color',
+                        'COLUMNS': '80',
+                        'LINES': '24'
+                    })
                 else:
                     # Fallback to bash with helpful message
                     command = 'bash'
@@ -436,9 +459,9 @@ After installation, try: claude --version
                 # For bash sessions, send a welcome prompt
                 await self._send_output(session, "Terminal ready. Type 'claude --version' to check if Claude CLI is available.\n")
             
-            # Temporarily disable output monitoring to test WebSocket receive
-            # asyncio.create_task(self._monitor_process_output(session))
-            logger.info("⚠️ Output monitoring disabled for testing")
+            # Start output monitoring to relay process output to WebSocket
+            asyncio.create_task(self._monitor_process_output(session))
+            logger.info("✅ Output monitoring enabled for session")
             
         except Exception as e:
             logger.error(f"❌ Failed to start terminal process for {session.session_id}: {e}")

@@ -27,6 +27,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux \
     screen \
     procps \
+    # Additional dependencies for Claude CLI
+    xvfb \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libxss1 \
+    libasound2 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
     && ln -s /usr/bin/python3 /usr/bin/python
@@ -39,10 +50,21 @@ ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
 
-# Install Claude CLI using npm (more reliable)
-RUN npm install -g @anthropic-ai/claude-code || \
-    (curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null || \
+# Install Claude CLI with proper dependencies
+# First ensure we have the latest npm and node versions
+RUN npm install -g npm@latest
+
+# Install Claude CLI with verbose logging to debug issues
+RUN echo "Installing Claude CLI..." && \
+    npm install -g @anthropic-ai/claude-code --verbose || \
+    (echo "NPM install failed, trying curl method..." && \
+     curl -fsSL https://claude.ai/cli/install.sh | bash -s -- --verbose 2>&1 || \
      echo "⚠️ Claude CLI installation failed, will install at runtime")
+
+# Verify Claude CLI installation
+RUN which claude || echo "Claude CLI not found in PATH"
+RUN claude --version || echo "Claude CLI version check failed"
+
 ENV PATH="/home/claude/.npm-global/bin:/home/claude/.local/bin:/usr/local/bin:$PATH"
 
 # Create app directory
