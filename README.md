@@ -4,6 +4,18 @@ A full-stack application for managing Claude Code instances in Git workflows wit
 
 [![Watch the demo video](docs/images/demo1-screen.png)](https://youtu.be/X_xzj3vHSeM?hd=1 "Demo")
 
+## Why would I use this?
+
+At minimum, if I was interested in trying out another way of interacting with Claude Code from a web page instead of in a terminal instance.  We love the linux terminal where we tmux 3 panels per terminal window and customize our terminal experience with resuming a tmux session.  But sometimes, we can't spin up a terminal because our internet is spotty and we are on the move where we are putting our laptop/tablets in suspend-mode and thereby closing working sessions.  The web interface keeps the terminal agents running so you can transition to your phone when you're on the move.  That's the minimum user experience.
+
+This system is built for the power users of claude code.  The people who want claude code to run long running asynchronous work.  Like huge prompts that have alot of TODOs to accomplish in an autonomous way without user input (headless).  And being able to spawn several of these AGENTS to do work asynchronously that doesn't impact each other.  Basically act a coding team of agents; complete with a tech lead agent. 
+This system envisions a user experience to make this process easier.  It includes dynamic prompt creations and a system to write specifications, strategies, designs, and tests that can drive long running work successfully much like human development teams do.  
+
+You now have the power to spin up your own dev team to build whatever you want.  And you now have the power for your AI agents to also spin up their own dev teams to get work done.  Imagine autonomous agents spinning up software dev teams to make changes to code in a git repo and doing work all day, 24/7.  Over night, on weekends.  This power is here and we are using it with this tool.  That's why we use it.  And we hope you will too!  Just spin up the docker containers via docker compose on your laptop or server and you'll be on your way there!  
+
+In the near future, an interactive demo.  In the meantime, feel free to click on the screenshot above to see it in action.
+
+
 ## Features
 
 - **Workflow Management**: Create and manage workflows for different Git repositories
