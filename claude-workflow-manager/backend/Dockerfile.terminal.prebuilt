@@ -9,15 +9,23 @@ FROM nikolaik/python-nodejs:python3.11-nodejs18
 # - All common development tools
 # No apt-get update needed!
 
-# Install only the additional packages we need that aren't in the base image
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Try to install additional packages without update first, fallback to update if needed
+RUN (apt-get install -y --no-install-recommends \
     sudo \
     locales \
     tmux \
     screen \
     procps \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*) || \
+    (apt-get update && apt-get install -y --no-install-recommends \
+    sudo \
+    locales \
+    tmux \
+    screen \
+    procps \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*)
 
 # Set up locale for proper terminal display
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
