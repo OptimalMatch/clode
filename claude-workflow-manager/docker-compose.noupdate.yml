@@ -12,6 +12,12 @@ services:
       dockerfile: Dockerfile.terminal.noupdate
     image: claude-terminal:noupdate
 
+  mcp-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.noupdate
+    image: claude-mcp:noupdate
+
   frontend:
     build:
       context: ./frontend
