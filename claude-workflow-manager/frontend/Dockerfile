@@ -3,11 +3,12 @@ FROM ubuntu:22.04
 # Set non-interactive mode
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Node.js and npm (Ubuntu repos are fast!)
+# Install Node.js 18 from NodeSource (Ubuntu's default Node.js is too old)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    nodejs \
-    npm \
+    curl \
     ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
