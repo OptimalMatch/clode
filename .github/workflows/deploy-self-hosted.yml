@@ -171,6 +171,12 @@ jobs:
         echo "✅ Environment file created with HOST_IP=$FINAL_HOST_IP"
         echo "🤖 Claude mode set to: $CLAUDE_MODE"
 
+    - name: Log in to Container Registry
+      run: |
+        echo "🔐 Logging in to GitHub Container Registry..."
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        echo "✅ Successfully logged in to ghcr.io"
+
     - name: Build and start services
       run: |
         echo "🔨 Building and starting services..."
