@@ -3,12 +3,8 @@
 
 FROM python:3.11-slim
 
-# Use faster mirrors and optimize package installation
-RUN echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian trixie-updates main" >> /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian-security trixie-security main" >> /etc/apt/sources.list && \
-    apt-get update --fix-missing && \
-    apt-get install -y --no-install-recommends \
+# Install system dependencies for terminal and Claude CLI
+RUN apt-get update && apt-get install -y \
     curl \
     wget \
     git \
@@ -20,9 +16,7 @@ RUN echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list 
     tmux \
     screen \
     procps \
-    ca-certificates \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    && rm -rf /var/lib/apt/lists/*
 
 # Set up locale for proper terminal display
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
