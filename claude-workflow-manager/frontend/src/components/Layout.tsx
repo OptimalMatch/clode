@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, Box, IconButton, Tooltip } from '@mui/material';
-import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle, Menu, ChevronLeft } from '@mui/icons-material';
+import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle, Menu, ChevronLeft, ViewModule } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import clodeBlueLogo from '../assets/clode-blue.png';
 import clodeLogo from '../assets/clode.png';
@@ -88,6 +88,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const menuItems = [
     { text: 'Workflows', icon: <WorkOutline />, path: '/workflows' },
+    { text: 'Multi-Instance', icon: <ViewModule />, path: '/multi-instance' },
     { text: 'Design', icon: <DesignServices />, path: '/design' },
     { text: 'Prompts', icon: <Description />, path: '/prompts' },
     { text: 'Subagents', icon: <SmartToy />, path: '/subagents' },
