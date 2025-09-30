@@ -1,5 +1,4 @@
-name: Deploy to pop-os-1
-
+name: Fast Build and Deploy to pop-os-1
 on:
   push:
     branches: [ main, develop ]
@@ -30,9 +29,9 @@ env:
   COMPOSE_DOCKER_CLI_BUILD: 1
 
 jobs:
-  deploy:
+  fast-deploy:
     runs-on: [self-hosted, pop-os-1]
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -77,7 +76,6 @@ jobs:
     - name: Create deployment directory
       run: |
         echo "📁 Setting up deployment directory..."
-        # Use home directory instead of /opt to avoid sudo requirements
         DEPLOY_DIR="$HOME/claude-workflow-manager-deploy"
         mkdir -p $DEPLOY_DIR
         echo "DEPLOY_DIR=$DEPLOY_DIR" >> $GITHUB_ENV
@@ -101,8 +99,8 @@ jobs:
           rm -rf claude-workflow-manager || true
         fi
         
-        # Clean up unused Docker resources
-        docker system prune -f || true
+        # Clean up unused Docker resources but keep cache
+        docker system prune -f --volumes || true
 
     - name: Deploy new version
       run: |
@@ -149,8 +147,6 @@ jobs:
         MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }}
 
         # Claude API Configuration (conditional based on mode)
-        # In max-plan mode, leave API key empty so Claude CLI uses credential files
-        # In API key mode, use the provided API key
         CLAUDE_API_KEY=$(if [ "$CLAUDE_MODE" = "true" ]; then echo ""; else echo "${{ secrets.CLAUDE_API_KEY }}"; fi)
         USE_CLAUDE_MAX_PLAN=$CLAUDE_MODE
 
@@ -171,16 +167,22 @@ jobs:
         echo "✅ Environment file created with HOST_IP=$FINAL_HOST_IP"
         echo "🤖 Claude mode set to: $CLAUDE_MODE"
 
-    - name: Build and start services
+    - name: 🚀 Fast build and start services
       run: |
-        echo "🔨 Building and starting services..."
+        echo "🔨 Building and starting services with optimizations..."
         cd $DEPLOY_DIR/claude-workflow-manager
         
-        # Build containers with optimizations (remove --no-cache for faster builds)
-        docker compose build --parallel
-        
-        # Start services
-        docker compose up -d
+        # Use the fast build script if available, otherwise use optimized docker-compose
+        if [ -f "fast-build.sh" ]; then
+          echo "📦 Using fast build script..."
+          chmod +x fast-build.sh
+          USE_CACHE=true ./fast-build.sh
+        else
+          echo "🏗️ Using optimized Docker Compose build..."
+          # Build with cache and parallel builds
+          docker compose build --parallel
+          docker compose up -d
+        fi
         
         echo "✅ Services started successfully"
 
@@ -214,10 +216,10 @@ jobs:
 
     - name: Verify deployment
       run: |
-        echo "✅ Deployment verification complete"
-        echo "🎉 Claude Workflow Manager services are running"
+        echo "✅ Fast deployment verification complete"
+        echo "🎉 Claude Workflow Manager services are running with optimizations"
 
-    - name: Display service status
+    - name: Display service status and performance
       run: |
         echo "📊 Service Status:"
         cd $DEPLOY_DIR/claude-workflow-manager
@@ -225,19 +227,25 @@ jobs:
         
         echo ""
         echo "🔗 Service URLs:"
-        # Get the HOST_IP from the .env file
         HOST_IP_FROM_ENV=$(grep "HOST_IP=" .env | cut -d'=' -f2)
         echo "Frontend: http://${HOST_IP_FROM_ENV}:3005"
         echo "Backend API: http://${HOST_IP_FROM_ENV}:8005"
+        echo "Multi-Instance View: http://${HOST_IP_FROM_ENV}:3005/multi-instance"
         echo "MongoDB: ${HOST_IP_FROM_ENV}:27018"
         echo "Redis: ${HOST_IP_FROM_ENV}:6379"
+        
+        echo ""
+        echo "📈 Build Performance:"
+        echo "Build completed at: $(date)"
+        echo "Docker images:"
+        docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}" | head -10
 
     - name: Send deployment notification
       if: always()
       run: |
         if [ "${{ job.status }}" == "success" ]; then
-          echo "✅ Deployment completed successfully!"
-          echo "🎉 Claude Workflow Manager is now running on self-hosted runner"
+          echo "✅ Fast deployment completed successfully!"
+          echo "🚀 Claude Workflow Manager is now running on pop-os-1 with optimizations"
           echo "📅 Deployed: $DEPLOYMENT_TIME"
           echo "🌿 Branch: $BRANCH_NAME"
           echo "📝 Commit: $GIT_SHA"
@@ -247,8 +255,9 @@ jobs:
           else
             echo "🔑 Claude Mode: API Key"
           fi
+          echo "🎯 New Feature: Multi-Instance View available!"
         else
-          echo "❌ Deployment failed!"
+          echo "❌ Fast deployment failed!"
           echo "📅 Failed at: $(date -u)"
           echo "🌿 Branch: $BRANCH_NAME"
           echo "📝 Commit: $GIT_SHA"
@@ -272,4 +281,4 @@ jobs:
           cd ..
         fi
         
-        echo "❌ Deployment failed - manual intervention may be required"
+        echo "❌ Fast deployment failed - manual intervention may be required"
