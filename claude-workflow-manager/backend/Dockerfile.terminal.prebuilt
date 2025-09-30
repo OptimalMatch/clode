@@ -50,14 +50,13 @@ ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
 
 # Install Claude CLI with proper dependencies
-# First ensure we have the latest npm and node versions
-RUN npm install -g npm@latest
+# Node.js 18 comes with compatible npm, no need to upgrade
 
-# Install Claude CLI with verbose logging to debug issues
+# Install Claude CLI (use the version compatible with Node.js 18)
 RUN echo "Installing Claude CLI..." && \
-    npm install -g @anthropic-ai/claude-code --verbose || \
+    npm install -g @anthropic-ai/claude-code || \
     (echo "NPM install failed, trying curl method..." && \
-     curl -fsSL https://claude.ai/cli/install.sh | bash -s -- --verbose 2>&1 || \
+     curl -fsSL https://claude.ai/cli/install.sh | bash 2>/dev/null || \
      echo "⚠️ Claude CLI installation failed, will install at runtime")
 
 # Verify Claude CLI installation
