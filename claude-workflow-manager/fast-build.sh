@@ -31,8 +31,16 @@ if [ "$USE_PREBUILT" = "true" ]; then
     echo "🏗️ Using optimized prebuilt strategy..."
     echo "📦 Backend/MCP: nikolaik/python-nodejs (very fast)"
     echo "🖥️ Terminal: Ubuntu 22.04 with all Claude Code requirements"
-    echo "🎨 Frontend: Node.js Alpine (cached build)"
-    timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --parallel
+    
+    if [ "$FORCE_FRONTEND_REBUILD" = "true" ]; then
+        echo "🔄 Frontend: Forced rebuild (no cache) to include latest components"
+        # Build frontend without cache, others with cache
+        timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --no-cache frontend
+        timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build backend claude-terminal mcp-server
+    else
+        echo "🎨 Frontend: Node.js Alpine (cached build)"
+        timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.prebuilt.yml build --parallel
+    fi
 elif [ "$NO_UPDATE" = "true" ]; then
     echo "🚀 Using no-update build (conditional apt-get update)..."
     timeout $BUILD_TIMEOUT $DOCKER_COMPOSE_CMD -f docker-compose.yml -f docker-compose.noupdate.yml build --parallel
