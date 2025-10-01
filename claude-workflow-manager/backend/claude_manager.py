@@ -2191,18 +2191,64 @@ class ClaudeCodeManager:
         # Handle Claude CLI tool names
         if tool_name == 'Write':
             file_path = tool_input.get('file_path', 'unknown')
+            content = tool_input.get('content', '')
+            # Count lines in new content
+            if content:
+                line_count = len(content.split('\n'))
+                return f"✍️  **Writing file:** `{file_path}` (+{line_count} lines)"
             return f"✍️  **Writing file:** `{file_path}`"
         elif tool_name == 'Read':
             file_path = tool_input.get('file_path', 'unknown')
             return f"📖 **Reading file:** `{file_path}`"
         elif tool_name == 'Edit':
             file_path = tool_input.get('file_path', 'unknown')
+            old_string = tool_input.get('old_string', '')
+            new_string = tool_input.get('new_string', '')
+            
+            # Calculate line changes
+            if old_string and new_string:
+                old_lines = len(old_string.split('\n'))
+                new_lines = len(new_string.split('\n'))
+                
+                if new_lines > old_lines:
+                    added = new_lines - old_lines
+                    return f"🔄 **Editing file:** `{file_path}` (+{added} lines)"
+                elif old_lines > new_lines:
+                    removed = old_lines - new_lines
+                    return f"🔄 **Editing file:** `{file_path}` (-{removed} lines)"
+                else:
+                    return f"🔄 **Editing file:** `{file_path}` (~{old_lines} lines changed)"
+            elif new_string:
+                new_lines = len(new_string.split('\n'))
+                return f"🔄 **Editing file:** `{file_path}` (+{new_lines} lines)"
+            elif old_string:
+                old_lines = len(old_string.split('\n'))
+                return f"🔄 **Editing file:** `{file_path}` (-{old_lines} lines)"
+            
             return f"🔄 **Editing file:** `{file_path}`"
         elif tool_name == 'MultiEdit':
             file_path = tool_input.get('file_path', 'unknown')
             edits = tool_input.get('edits', [])
             edit_count = len(edits) if isinstance(edits, list) else 0
-            return f"🔄 **Multi-editing file:** `{file_path}` ({edit_count} edits)"
+            
+            # Calculate total line changes across all edits
+            total_added = 0
+            total_removed = 0
+            if isinstance(edits, list):
+                for edit in edits:
+                    if isinstance(edit, dict):
+                        old_str = edit.get('old_string', '')
+                        new_str = edit.get('new_string', '')
+                        if old_str:
+                            total_removed += len(old_str.split('\n'))
+                        if new_str:
+                            total_added += len(new_str.split('\n'))
+            
+            stats = f" (+{total_added}" if total_added > 0 else ""
+            stats += f" -{total_removed}" if total_removed > 0 else ""
+            stats += " lines)" if stats else ""
+            
+            return f"🔄 **Multi-editing file:** `{file_path}` ({edit_count} edits{stats})"
         elif tool_name == 'TodoWrite':
             todos = tool_input.get('todos', [])
             if isinstance(todos, list) and todos:
