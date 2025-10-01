@@ -20,9 +20,11 @@ RUN (apt-get install -y --no-install-recommends \
     screen \
     procps \
     ca-certificates \
-    default-jdk \
+    openjdk-8-jdk \
+    openjdk-11-jdk \
+    openjdk-17-jdk \
+    openjdk-21-jdk \
     maven \
-    gradle \
     python3-pip \
     python3-venv \
     make \
@@ -44,9 +46,11 @@ RUN (apt-get install -y --no-install-recommends \
     screen \
     procps \
     ca-certificates \
-    default-jdk \
+    openjdk-8-jdk \
+    openjdk-11-jdk \
+    openjdk-17-jdk \
+    openjdk-21-jdk \
     maven \
-    gradle \
     python3-pip \
     python3-venv \
     make \
@@ -55,6 +59,21 @@ RUN (apt-get install -y --no-install-recommends \
     nano) \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Set Java 17 as default (most compatible with modern Spring Boot)
+RUN update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java && \
+    update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+# Install Gradle 8.5
+RUN curl -L https://services.gradle.org/distributions/gradle-8.5-bin.zip -o /tmp/gradle.zip && \
+    unzip -q /tmp/gradle.zip -d /opt && \
+    rm /tmp/gradle.zip && \
+    ln -s /opt/gradle-8.5/bin/gradle /usr/local/bin/gradle
+
+# Set environment variables
+ENV GRADLE_HOME=/opt/gradle-8.5
+ENV PATH="${GRADLE_HOME}/bin:${PATH}"
 
 # Set up locale for proper terminal display
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \

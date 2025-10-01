@@ -855,17 +855,121 @@ After installation, try: claude --version
                 logger.error(f"❌ Message handling error for session {session.session_id}: {e}")
                 break
     
+    def _format_claude_output(self, data: str) -> str:
+        """Format Claude CLI output for better readability"""
+        # Don't process if too short
+        if len(data) < 20:
+            return data
+            
+        formatted = data
+        
+        # Format tool result blocks - make them collapsible/expandable
+        # Match tool results with various formats
+        tool_result_pattern = r'🔧 \*\*Tool result received\*\* \(ID: (toolu_[\w]+)\) - (.*?)(?=\n(?:💬|💻|🔧|📖|🔄|🏓|---)|$)'
+        
+        def format_tool_result(match):
+            tool_id = match.group(1)
+            result_content = match.group(2).strip()
+            
+            # Truncate very long results but show them in a code block
+            if len(result_content) > 200:
+                # Find a good truncation point (end of line)
+                truncate_at = 200
+                newline_pos = result_content.find('\n', 150, 250)
+                if newline_pos != -1:
+                    truncate_at = newline_pos
+                    
+                preview = result_content[:truncate_at]
+                remaining_lines = result_content[truncate_at:].count('\n')
+                
+                # Add expandable section hint
+                return f"""
+
+🔧 **Tool result** `{tool_id[-8:]}` *(truncated, ~{remaining_lines} more lines)*
+
+<details>
+<summary>📋 Click to expand result</summary>
+
+```
+{preview}
+...
+```
+
+</details>
+
+"""
+            elif len(result_content) > 50:
+                # Medium results - show in a code block with some spacing
+                return f"""
+
+🔧 **Tool result** `{tool_id[-8:]}`
+```
+{result_content}
+```
+
+"""
+            else:
+                # Very short results - inline is fine
+                return f"🔧 **Result** `{tool_id[-8:]}`: `{result_content}`\n"
+        
+        formatted = re.sub(tool_result_pattern, format_tool_result, formatted, flags=re.DOTALL)
+        
+        # Format command execution to be more prominent
+        command_pattern = r'💻 \*\*Running command:\*\* `([^`]+)`'
+        
+        def format_command(match):
+            command = match.group(1)
+            return f"""
+
+💻 **Running command**
+```bash
+{command}
+```
+"""
+        
+        formatted = re.sub(command_pattern, format_command, formatted)
+        
+        # Format file reading to be cleaner
+        file_read_pattern = r'📖 \*\*Reading file:\*\* `([^`]+)`'
+        
+        def format_file_read(match):
+            filepath = match.group(1)
+            return f"\n📖 **Reading** `{filepath}`\n"
+        
+        formatted = re.sub(file_read_pattern, format_file_read, formatted)
+        
+        # Format file editing to be cleaner
+        file_edit_pattern = r'🔄 \*\*Editing file:\*\* `([^`]+)` \(~(\d+) lines changed\)'
+        
+        def format_file_edit(match):
+            filepath = match.group(1)
+            lines = match.group(2)
+            return f"\n✏️ **Edited** `{filepath}` *({lines} lines)*\n"
+        
+        formatted = re.sub(file_edit_pattern, format_file_edit, formatted)
+        
+        # Add visual separator before thinking messages for clarity
+        formatted = re.sub(r'\n(💬 )', r'\n\n---\n\n\1', formatted)
+        
+        # Clean up excessive blank lines (more than 2 in a row)
+        formatted = re.sub(r'\n{4,}', '\n\n\n', formatted)
+        
+        return formatted
+    
     async def _send_output(self, session: TerminalSession, data: str):
         """Send terminal output to WebSocket"""
         if session.websocket:
             try:
+                # Format the output for better readability
+                formatted_data = self._format_claude_output(data)
+                
                 message = {
                     "type": "output",
-                    "data": data,
+                    "data": formatted_data,
                     "timestamp": str(asyncio.get_event_loop().time())
                 }
                 await session.websocket.send_json(message)
-                logger.info(f"📤 Sent output to WebSocket for session {session.session_id}: '{data[:50]}...' (len={len(data)})")
+                logger.info(f"📤 Sent output to WebSocket for session {session.session_id}: '{formatted_data[:50]}...' (len={len(formatted_data)})")
             except Exception as e:
                 logger.error(f"❌ Failed to send output for session {session.session_id}: {e}")
         else:

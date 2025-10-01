@@ -30,16 +30,22 @@ chmod 0440 /etc/sudoers.d/claude
 #### 2. Pre-installed Common Development Tools
 Added common development tools to all Docker images to reduce runtime installation needs:
 
-- **Java Development**: `default-jdk`, `maven`, `gradle`
+- **Java Development**: 
+  - Multiple Java versions: `openjdk-8-jdk`, `openjdk-11-jdk`, `openjdk-17-jdk`, `openjdk-21-jdk`
+  - Java 17 set as default (most compatible with modern Spring Boot)
+  - Maven 3.x
+  - Gradle 8.5 (latest stable)
 - **Build Tools**: `make`, `cmake`
 - **Python Tools**: `python3-pip`, `python3-venv`
 - **Archive Tools**: `wget`, `unzip`, `zip`
 - **Editors**: `vim`, `nano`
 
 **Benefits:**
-- ⚡ Faster workflow execution (no need to install Java, Maven, etc. at runtime)
-- 📦 Common tools readily available
+- ⚡ Faster workflow execution (no need to install Java, Maven, Gradle at runtime)
+- 📦 Multiple Java versions available for compatibility
+- 🔄 Easy Java version switching with `update-alternatives`
 - 🎯 Reduces the need for sudo operations
+- 🚀 Gradle 8.5 (modern version, not outdated system gradle)
 
 ### Files Updated
 
@@ -66,9 +72,16 @@ sudo apt-get install <package>
 sudo npm install -g <package>
 sudo pip install <package>
 
-# Java and Maven should already be available
-java --version
-mvn --version
+# Multiple Java versions pre-installed
+java --version              # Java 17 (default)
+mvn --version              # Maven 3.x
+gradle --version           # Gradle 8.5
+
+# Switch Java versions if needed
+update-alternatives --list java
+export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64   # For Java 8
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64  # For Java 11
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64  # For Java 21
 ```
 
 ### Deployment Steps
@@ -93,7 +106,10 @@ mvn --version
 
 3. **Test in terminal UI**:
    - Open an instance terminal
-   - Run `java --version` (should show Java 11 or later)
+   - Run `java --version` (should show Java 17)
+   - Run `gradle --version` (should show Gradle 8.5)
+   - Run `mvn --version` (should show Maven 3.x)
+   - List available Java versions: `update-alternatives --list java`
    - Try installing a package: `sudo apt-get install htop`
    - Verify no password prompts or permission errors
 
