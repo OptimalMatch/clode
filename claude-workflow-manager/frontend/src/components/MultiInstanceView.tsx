@@ -303,7 +303,8 @@ const MultiInstanceView: React.FC = () => {
         lastActivity: null, 
         status: 'empty',
         terminalContent: '',
-        lastMessage: ''
+        lastMessage: '',
+        fileChanges: []
       } : p
     ));
   };
