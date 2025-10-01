@@ -1339,6 +1339,72 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
               '& [contenteditable]': {
                 overflow: 'auto !important',
                 maxHeight: '100% !important',
+              },
+              // Enhanced styling for tool outputs
+              '& pre': {
+                backgroundColor: '#1e1e1e',
+                padding: '12px',
+                borderRadius: '6px',
+                border: '1px solid #404040',
+                overflowX: 'auto',
+                margin: '8px 0',
+                fontSize: '13px',
+                lineHeight: '1.5',
+              },
+              '& code': {
+                fontFamily: '"Fira Code", "Consolas", "Monaco", monospace',
+                backgroundColor: '#2d2d2d',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                fontSize: '13px',
+              },
+              '& details': {
+                backgroundColor: '#252525',
+                border: '1px solid #404040',
+                borderRadius: '6px',
+                padding: '8px',
+                margin: '8px 0',
+                cursor: 'pointer',
+              },
+              '& details summary': {
+                fontWeight: 'bold',
+                padding: '4px',
+                userSelect: 'none',
+                '&:hover': {
+                  backgroundColor: '#2d2d2d',
+                  borderRadius: '4px',
+                }
+              },
+              '& details[open] summary': {
+                marginBottom: '8px',
+                borderBottom: '1px solid #404040',
+                paddingBottom: '8px',
+              },
+              // Add spacing between different message types
+              '& p': {
+                margin: '4px 0',
+                '&:has(> strong)': {
+                  marginTop: '12px',
+                }
+              },
+              // Style horizontal rules as visual separators
+              '& hr': {
+                border: 'none',
+                borderTop: '1px solid #404040',
+                margin: '16px 0',
+              },
+              // Make strong text stand out
+              '& strong': {
+                color: '#4FC3F7',
+                fontWeight: 600,
+              },
+              // Better inline code styling
+              '& :not(pre) > code': {
+                backgroundColor: '#2d2d2d',
+                color: '#a8e6cf',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                fontSize: '0.9em',
               }
             }}
           >
