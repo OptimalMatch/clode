@@ -28,11 +28,12 @@ chmod 0440 /etc/sudoers.d/claude
 - ✅ No password prompts for package installation
 
 #### 2. Pre-installed Common Development Tools
-Added common development tools to all terminal Docker images to reduce runtime installation needs:
+Added common development tools to all Docker images to reduce runtime installation needs:
 
 - **Java Development**: `default-jdk`, `maven`, `gradle`
 - **Build Tools**: `make`, `cmake`
 - **Python Tools**: `python3-pip`, `python3-venv`
+- **Archive Tools**: `wget`, `unzip`, `zip`
 - **Editors**: `vim`, `nano`
 
 **Benefits:**
@@ -42,13 +43,18 @@ Added common development tools to all terminal Docker images to reduce runtime i
 
 ### Files Updated
 
-All terminal Dockerfile variants have been updated:
+All backend and terminal Dockerfile variants have been updated:
 
-1. `Dockerfile.terminal` - Main terminal Dockerfile
-2. `Dockerfile.terminal.base` - Base image with OS packages
-3. `Dockerfile.terminal.prebuilt` - Prebuilt variant
-4. `Dockerfile.terminal.noupdate` - No-update variant
-5. `Dockerfile.terminal.fast` - Uses base image (no direct changes needed)
+**Terminal Dockerfiles:**
+1. `backend/Dockerfile.terminal` - Main terminal Dockerfile
+2. `backend/Dockerfile.terminal.base` - Terminal base image with OS packages
+3. `backend/Dockerfile.terminal.prebuilt` - Terminal prebuilt variant
+4. `backend/Dockerfile.terminal.noupdate` - Terminal no-update variant
+5. `backend/Dockerfile.terminal.fast` - Uses base image (no direct changes needed)
+
+**Backend Dockerfiles:**
+6. `backend/Dockerfile.base` - Backend base image with OS packages
+7. `backend/Dockerfile.prebuilt` - Backend prebuilt variant
 
 ### Testing the Fix
 
@@ -67,11 +73,16 @@ mvn --version
 
 ### Deployment Steps
 
-1. **Rebuild Docker images**:
+1. **Rebuild Docker images** (both backend and terminal):
    ```bash
+   # Rebuild all containers
+   docker-compose build
+   
+   # Or rebuild only terminal:
    docker-compose build terminal
+   
    # Or for fast builds:
-   docker-compose -f docker-compose.fast.yml build terminal
+   docker-compose -f docker-compose.fast.yml build
    ```
 
 2. **Restart containers**:
