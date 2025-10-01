@@ -65,6 +65,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [wsReadyState, setWsReadyState] = useState<number | null>(null);
   const [terminalContent, setTerminalContent] = useState<string>('');
   const [copySuccess, setCopySuccess] = useState(false);
+  const [contentVersion, setContentVersion] = useState(0); // Track content updates for Lexical re-renders
   const lexicalRef = useRef<HTMLDivElement>(null);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
@@ -167,8 +168,9 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       return prev + separator + content;
     });
     
-    // Note: Removed forceUpdate to prevent jarring re-renders
-    // The Lexical editor will update naturally when terminalContent changes
+    // Increment version counter to trigger controlled Lexical re-renders
+    // The key uses floor division by 3, so editor remounts every 3 content updates
+    setContentVersion(prev => prev + 1);
   }, []);
 
   // Function to check if content is a TODO message that should be filtered from terminal
@@ -710,7 +712,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     };
   }, [instanceId]);
 
-  // Smart auto-scroll effect - only scrolls if user is already at the bottom
+  // Smart auto-scroll effect - scrolls to bottom on initial load and when user is at bottom
   useEffect(() => {
     if (!terminalContent) return;
 
@@ -725,25 +727,31 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
           lexicalRef.current.firstElementChild;
         
         if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
-          // Check if user is near the bottom (within 100px threshold)
-          const isNearBottom = 
-            scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 100;
+          // Check if user is near the bottom (within 100px threshold) OR at the very top (initial load)
+          const scrollTop = scrollContainer.scrollTop;
+          const scrollHeight = scrollContainer.scrollHeight;
+          const clientHeight = scrollContainer.clientHeight;
+          const isAtTop = scrollTop === 0;
+          const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
           
-          // Only auto-scroll if user hasn't manually scrolled up
-          if (isNearBottom) {
-            scrollContainer.scrollTop = scrollContainer.scrollHeight;
-            console.log('📜 Auto-scrolled to bottom (user was at bottom)');
+          // Auto-scroll if at top (initial load) or near bottom (following updates)
+          if (isAtTop || isNearBottom) {
+            scrollContainer.scrollTop = scrollHeight;
+            console.log(`📜 Auto-scrolled to bottom (${isAtTop ? 'initial load' : 'user was at bottom'})`);
           } else {
             console.log('📜 Skipped auto-scroll (user scrolled up to read)');
           }
         } else {
           // Fallback: check and scroll the outer container
-          const isNearBottom = 
-            lexicalRef.current.scrollHeight - lexicalRef.current.scrollTop - lexicalRef.current.clientHeight < 100;
+          const scrollTop = lexicalRef.current.scrollTop;
+          const scrollHeight = lexicalRef.current.scrollHeight;
+          const clientHeight = lexicalRef.current.clientHeight;
+          const isAtTop = scrollTop === 0;
+          const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
           
-          if (isNearBottom) {
-            lexicalRef.current.scrollTop = lexicalRef.current.scrollHeight;
-            console.log('📜 Auto-scrolled outer container (user was at bottom)');
+          if (isAtTop || isNearBottom) {
+            lexicalRef.current.scrollTop = scrollHeight;
+            console.log(`📜 Auto-scrolled outer container (${isAtTop ? 'initial load' : 'user was at bottom'})`);
           }
         }
       }
@@ -1335,7 +1343,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             }}
           >
             <LexicalEditor
-              key={`terminal-${instanceId}`} // Stable key per instance - prevents jarring remounts
+              key={`terminal-${instanceId}-v${Math.floor(contentVersion / 3)}`} // Remounts every 3 updates
               value={terminalContent}
               onChange={() => {}} // Read-only, no changes needed
               placeholder="Terminal output will appear here..."
