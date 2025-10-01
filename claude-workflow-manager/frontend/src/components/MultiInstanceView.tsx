@@ -60,6 +60,23 @@ const pulse = keyframes`
   }
 `;
 
+// Helper function to format relative time
+const getRelativeTime = (timestamp: string): string => {
+  const now = new Date().getTime();
+  const then = new Date(timestamp).getTime();
+  const diffMs = now - then;
+  
+  const seconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (seconds < 60) return `${seconds} second${seconds !== 1 ? 's' : ''} ago`;
+  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+  if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+  return `${days} day${days !== 1 ? 's' : ''} ago`;
+};
+
 interface InstancePanel {
   instanceId: string | null;
   workflowId: string | null;
@@ -114,7 +131,12 @@ const MultiInstanceView: React.FC = () => {
     refetchInterval: 3000, // Refresh every 3 seconds
   });
 
-  const runningInstances = workflowQueries.data || [];
+  // Sort instances by created_at (most recent first)
+  const runningInstances = (workflowQueries.data || []).sort((a: ClaudeInstance, b: ClaudeInstance) => {
+    const dateA = new Date(a.created_at).getTime();
+    const dateB = new Date(b.created_at).getTime();
+    return dateB - dateA; // Most recent first
+  });
 
   // WebSocket connections for monitoring instance activity
   const wsConnections = useRef<Map<string, WebSocket>>(new Map());
@@ -471,6 +493,12 @@ const MultiInstanceView: React.FC = () => {
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Repo: {instance.git_repo}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontSize: '0.75rem' }}>
+                        Created: {new Date(instance.created_at).toLocaleString()}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem', fontStyle: 'italic' }}>
+                        ({getRelativeTime(instance.created_at)})
                       </Typography>
                       <Box sx={{ mt: 1 }}>
                         <Chip 
