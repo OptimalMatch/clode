@@ -65,7 +65,6 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   const [wsReadyState, setWsReadyState] = useState<number | null>(null);
   const [terminalContent, setTerminalContent] = useState<string>('');
   const [copySuccess, setCopySuccess] = useState(false);
-  const [forceUpdate, setForceUpdate] = useState(0);
   const lexicalRef = useRef<HTMLDivElement>(null);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
@@ -168,10 +167,8 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
       return prev + separator + content;
     });
     
-    // Debounce force updates to reduce re-renders
-    setTimeout(() => {
-      setForceUpdate(prev => prev + 1);
-    }, 50); // Small delay to batch multiple rapid updates
+    // Note: Removed forceUpdate to prevent jarring re-renders
+    // The Lexical editor will update naturally when terminalContent changes
   }, []);
 
   // Function to check if content is a TODO message that should be filtered from terminal
@@ -714,42 +711,45 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     };
   }, [instanceId]);
 
-  // Debounced auto-scroll effect when terminal content changes
+  // Smart auto-scroll effect - only scrolls if user is already at the bottom
   useEffect(() => {
     if (!terminalContent) return;
 
-    // Debounce scroll operations to avoid excessive scrolling during rapid updates
-    const scrollTimeout = setTimeout(() => {
-      // Use requestAnimationFrame for smooth scrolling
-      requestAnimationFrame(() => {
-        if (lexicalRef.current) {
-          // Try multiple selectors to find the scrollable container
-          const scrollContainer = 
-            lexicalRef.current.querySelector('[data-lexical-editor="true"]') ||
-            lexicalRef.current.querySelector('.editor-paragraph')?.parentElement ||
-            lexicalRef.current.querySelector('[contenteditable]') ||
-            lexicalRef.current.firstElementChild;
+    // Use requestAnimationFrame to batch DOM operations
+    requestAnimationFrame(() => {
+      if (lexicalRef.current) {
+        // Try multiple selectors to find the scrollable container
+        const scrollContainer = 
+          lexicalRef.current.querySelector('[data-lexical-editor="true"]') ||
+          lexicalRef.current.querySelector('.editor-paragraph')?.parentElement ||
+          lexicalRef.current.querySelector('[contenteditable]') ||
+          lexicalRef.current.firstElementChild;
+        
+        if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+          // Check if user is near the bottom (within 100px threshold)
+          const isNearBottom = 
+            scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 100;
           
-          if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
-            scrollContainer.scrollTo({
-              top: scrollContainer.scrollHeight,
-              behavior: 'smooth'
-            });
-            console.log('📜 Smooth auto-scrolled to bottom');
+          // Only auto-scroll if user hasn't manually scrolled up
+          if (isNearBottom) {
+            scrollContainer.scrollTop = scrollContainer.scrollHeight;
+            console.log('📜 Auto-scrolled to bottom (user was at bottom)');
           } else {
-            // Fallback: scroll the outer container
-            lexicalRef.current.scrollTo({
-              top: lexicalRef.current.scrollHeight,
-              behavior: 'smooth'
-            });
-            console.log('📜 Smooth auto-scrolled outer container');
+            console.log('📜 Skipped auto-scroll (user scrolled up to read)');
+          }
+        } else {
+          // Fallback: check and scroll the outer container
+          const isNearBottom = 
+            lexicalRef.current.scrollHeight - lexicalRef.current.scrollTop - lexicalRef.current.clientHeight < 100;
+          
+          if (isNearBottom) {
+            lexicalRef.current.scrollTop = lexicalRef.current.scrollHeight;
+            console.log('📜 Auto-scrolled outer container (user was at bottom)');
           }
         }
-      });
-    }, 200); // Longer delay to batch scroll operations
-
-    return () => clearTimeout(scrollTimeout);
-  }, [terminalContent]); // Remove forceUpdate dependency to reduce triggers
+      }
+    });
+  }, [terminalContent]); // Triggers only when content changes
 
   // ESC key handler for cancellation
   useEffect(() => {
@@ -1336,7 +1336,7 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
             }}
           >
             <LexicalEditor
-              key={`terminal-${Math.floor(forceUpdate / 3)}`} // Less frequent re-renders (every 3 updates)
+              key={`terminal-${instanceId}`} // Stable key per instance - prevents jarring remounts
               value={terminalContent}
               onChange={() => {}} // Read-only, no changes needed
               placeholder="Terminal output will appear here..."
