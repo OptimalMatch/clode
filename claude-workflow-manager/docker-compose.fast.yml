@@ -5,7 +5,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.fast
       args:
-        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-backend-base:latest
+        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-backend-base:${BASE_IMAGE_TAG:-latest}
     image: claude-backend:fast
 
   claude-terminal:
@@ -13,7 +13,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.terminal.fast
       args:
-        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-terminal-base:latest
+        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-terminal-base:${BASE_IMAGE_TAG:-latest}
     image: claude-terminal:fast
 
   mcp-server:
@@ -21,7 +21,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.fast
       args:
-        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-backend-base:latest
+        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-backend-base:${BASE_IMAGE_TAG:-latest}
     image: claude-mcp:fast
 
   frontend:
@@ -29,7 +29,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.fast
       args:
-        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-frontend-base:latest
+        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-frontend-base:${BASE_IMAGE_TAG:-latest}
         REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8005}
         REACT_APP_WS_URL: ${REACT_APP_WS_URL:-ws://localhost:8005}
         REACT_APP_API_PORT: ${REACT_APP_API_PORT:-8005}

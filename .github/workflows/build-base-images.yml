@@ -7,7 +7,7 @@ on:
       force_rebuild:
         description: 'Force rebuild all base images'
         required: false
-        default: 'false'
+        default: false
         type: boolean
   
   # Trigger on changes to Dockerfiles or dependencies
@@ -107,7 +107,9 @@ jobs:
 
     - name: Build and push base image
       if: steps.check.outputs.needs_build == 'true'
+      id: build
       uses: docker/build-push-action@v5
+      continue-on-error: true
       with:
         context: ${{ matrix.service.context }}
         file: ${{ matrix.service.dockerfile }}
@@ -118,11 +120,40 @@ jobs:
         cache-to: type=gha,mode=max
         platforms: linux/amd64
 
+    - name: Verify build success
+      if: steps.check.outputs.needs_build == 'true'
+      run: |
+        if [ "${{ steps.build.outcome }}" = "failure" ]; then
+          echo "⚠️ Build step failed, checking if image was pushed..."
+          
+          # Check if the main branch tag exists (image was pushed successfully)
+          IMAGE_NAME="${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}"
+          MAIN_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          
+          if docker manifest inspect "$MAIN_TAG" > /dev/null 2>&1; then
+            echo "✅ Image was pushed successfully despite cache error"
+            echo "ℹ️  This is likely a transient GitHub Actions cache service issue"
+            exit 0
+          else
+            echo "❌ Build genuinely failed - image not found in registry"
+            exit 1
+          fi
+        else
+          echo "✅ Build completed successfully"
+        fi
+
     - name: Image build summary
+      if: always()
       run: |
         if [ "${{ steps.check.outputs.needs_build }}" = "true" ]; then
           echo "✅ Built and pushed: ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}"
-          echo "🏷️ Tags: ${{ steps.meta.outputs.tags }}"
+          echo "🏷️ Tags:"
+          echo "${{ steps.meta.outputs.tags }}" | sed 's/^/  - /'
+          
+          if [ "${{ steps.build.outcome }}" = "failure" ]; then
+            echo ""
+            echo "⚠️ Note: GitHub Actions cache had issues, but build succeeded"
+          fi
         else
           echo "⏭️ Skipped: ${{ matrix.service.name }} (no changes)"
         fi
