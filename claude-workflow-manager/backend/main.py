@@ -952,7 +952,7 @@ async def debug_pids():
         active_pids = []
         finished_pids = []
         for p in processes:
-            if p.poll() is None:
+            if p.returncode is None:
                 active_pids.append({"pid": p.pid, "status": "running"})
             else:
                 finished_pids.append({"pid": p.pid, "status": "finished", "exit_code": p.returncode})

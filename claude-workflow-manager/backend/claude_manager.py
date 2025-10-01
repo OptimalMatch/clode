@@ -333,7 +333,7 @@ class ClaudeCodeManager:
             active_pids = []
             finished_pids = []
             for p in processes:
-                if p.poll() is None:
+                if p.returncode is None:
                     active_pids.append(p.pid)
                 else:
                     finished_pids.append(f"{p.pid}(exit:{p.returncode})")
@@ -1328,7 +1328,7 @@ class ClaudeCodeManager:
             # Check if there are running Claude CLI processes for this instance
             if instance_id in self.running_processes and self.running_processes[instance_id]:
                 processes = self.running_processes[instance_id].copy()  # Copy to avoid modification during iteration
-                process_pids = [p.pid for p in processes if p.poll() is None]
+                process_pids = [p.pid for p in processes if p.returncode is None]
                 self._log_with_timestamp(f"🔥 INTERRUPT: Found {len(processes)} Claude CLI processes for instance {instance_id}")
                 self._log_with_timestamp(f"📝 INTERRUPT: Active PIDs: {process_pids}")
                 
@@ -1340,7 +1340,7 @@ class ClaudeCodeManager:
                 
                 # Collect all processes and their children
                 for process in processes:
-                    if process.poll() is None:  # Process is still running
+                    if process.returncode is None:  # Process is still running
                         self._log_with_timestamp(f"🔍 INTERRUPT: Analyzing Claude CLI process (PID: {process.pid})")
                         try:
                             # Get process and all its children using psutil
@@ -1379,7 +1379,7 @@ class ClaudeCodeManager:
                             
                             # Wait for all processes to terminate
                             for process in processes:
-                                if process.poll() is None:
+                                if process.returncode is None:
                                     try:
                                         await asyncio.wait_for(
                                             asyncio.create_task(asyncio.to_thread(process.wait)), 
@@ -1404,7 +1404,7 @@ class ClaudeCodeManager:
                             # Step 2: Wait for graceful termination
                             all_terminated = True
                             for process in processes:
-                                if process.poll() is None:
+                                if process.returncode is None:
                                     try:
                                         await asyncio.wait_for(
                                             asyncio.create_task(asyncio.to_thread(process.wait)), 
@@ -1429,7 +1429,7 @@ class ClaudeCodeManager:
                                 
                                 # Step 4: Final wait
                                 for process in processes:
-                                    if process.poll() is None:
+                                    if process.returncode is None:
                                         try:
                                             await asyncio.wait_for(
                                                 asyncio.create_task(asyncio.to_thread(process.wait)), 
@@ -1444,7 +1444,7 @@ class ClaudeCodeManager:
                         self._log_with_timestamp(f"⚠️ INTERRUPT: Error during enhanced termination: {e}")
                         # Fallback to basic kill for all processes
                         for process in processes:
-                            if process.poll() is None:
+                            if process.returncode is None:
                                 try:
                                     process.kill()
                                     await asyncio.wait_for(
@@ -1552,7 +1552,7 @@ class ClaudeCodeManager:
                 
                 # Check if there are ongoing Claude CLI processes for this instance
                 if instance_id in self.running_processes and self.running_processes[instance_id]:
-                    active_processes = [p for p in self.running_processes[instance_id] if p.poll() is None]
+                    active_processes = [p for p in self.running_processes[instance_id] if p.returncode is None]
                     if active_processes:
                         latest_process = active_processes[-1]  # Use the most recent process
                         self._log_with_timestamp(f"🔄 Found {len(active_processes)} ongoing Claude CLI processes for instance {instance_id}, latest PID: {latest_process.pid}")
@@ -1595,7 +1595,7 @@ class ClaudeCodeManager:
         
         try:
             # Read any remaining output from the running process
-            while process.poll() is None:  # Process is still running
+            while process.returncode is None:  # Process is still running
                 # Try to read a line with a short timeout
                 try:
                     # Check if there's output available
@@ -1661,7 +1661,7 @@ class ClaudeCodeManager:
                     break
             
             # Process has finished
-            if process.poll() is not None:
+            if process.returncode is not None:
                 execution_time = 0  # We don't have start time for ongoing processes
                 return_code = process.returncode
                 
@@ -1750,7 +1750,7 @@ class ClaudeCodeManager:
         if instance_id in self.running_processes:
             processes = self.running_processes[instance_id]
             for process in processes:
-                if process.poll() is None:  # Process is still running
+                if process.returncode is None:  # Process is still running
                     self._log_with_timestamp(f"🛑 Terminating running Claude CLI process (PID: {process.pid}) for instance {instance_id}")
                     process.terminate()
                     try:
