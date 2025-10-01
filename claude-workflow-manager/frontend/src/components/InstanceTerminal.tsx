@@ -241,7 +241,6 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
     console.log('🧹 Clearing terminal content');
     setTerminalContent('');
     setCopySuccess(false);
-    setForceUpdate(prev => prev + 1);
   };
 
   // Direct HTTP cancel function for the dedicated cancel button
