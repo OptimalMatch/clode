@@ -465,9 +465,8 @@ After installation, try: claude --version
                 # For bash sessions, send a welcome prompt
                 await self._send_output(session, "Terminal ready. Type 'claude --version' to check if Claude CLI is available.\n")
             
-            # Start output monitoring to relay process output to WebSocket
-            asyncio.create_task(self._monitor_process_output(session))
-            logger.info("✅ Output monitoring enabled for session")
+            # Note: Output monitoring is now handled by _improved_websocket_handler
+            logger.info("✅ Terminal process started, output will be handled by WebSocket handler")
             
         except Exception as e:
             logger.error(f"❌ Failed to start terminal process for {session.session_id}: {e}")
@@ -630,63 +629,116 @@ After installation, try: claude --version
         async def handle_input():
             """Handle WebSocket input messages"""
             logger.info(f"🎧 Starting input handler for session {session.session_id}")
-            while True:
-                try:
-                    data = await session.websocket.receive_text()
-                    logger.info(f"📥 Received input: {data}")
-                    
+            try:
+                while True:
                     try:
-                        message = json.loads(data)
-                        logger.info(f"🔍 Parsed message: {message}")
-                        if message.get('type') == 'input':
-                            input_data = message.get('data', message.get('content', ''))
-                            logger.info(f"🎯 Extracted input data: '{repr(input_data)}'")
-                            if session.child_process and session.child_process.isalive():
-                                session.child_process.send(input_data)
-                                logger.info(f"📤 Sent to terminal: '{repr(input_data)}'")
-                            else:
-                                logger.warning(f"⚠️ Child process not alive or missing")
-                        else:
-                            logger.info(f"🔍 Non-input message type: {message.get('type')}")
-                    except json.JSONDecodeError as e:
-                        logger.error(f"❌ JSON decode error: {e}")
+                        data = await session.websocket.receive_text()
+                        logger.info(f"📥 Received raw input: {repr(data)} (len={len(data)})")
                         
-                except WebSocketDisconnect:
-                    logger.info(f"🔌 Input handler: WebSocket disconnected")
-                    break
-                except Exception as e:
-                    logger.error(f"❌ Input handler error: {e}")
-                    break
+                        try:
+                            message = json.loads(data)
+                            logger.info(f"🔍 Parsed message: {message}")
+                            
+                            if message.get('type') == 'input':
+                                input_data = message.get('data', message.get('content', ''))
+                                logger.info(f"🎯 Extracted input data: {repr(input_data)} (len={len(input_data)})")
+                                
+                                if session.child_process and session.child_process.isalive():
+                                    session.child_process.send(input_data)
+                                    logger.info(f"✅ Successfully sent to terminal: {repr(input_data)}")
+                                else:
+                                    logger.error(f"❌ Child process not alive or missing")
+                                    logger.error(f"   - child_process exists: {session.child_process is not None}")
+                                    if session.child_process:
+                                        logger.error(f"   - isalive: {session.child_process.isalive()}")
+                            elif message.get('type') == 'resize':
+                                # Handle terminal resize
+                                if session.child_process and session.child_process.isalive():
+                                    rows = message.get('rows', 24)
+                                    cols = message.get('cols', 80)
+                                    session.child_process.setwinsize(rows, cols)
+                                    logger.info(f"📐 Resized terminal: {rows}x{cols}")
+                            elif message.get('type') == 'ping':
+                                # Respond to ping
+                                await session.websocket.send_json({"type": "pong", "data": "alive"})
+                                logger.debug(f"🏓 Responded to ping")
+                            else:
+                                logger.info(f"🔍 Non-input message type: {message.get('type')}")
+                        except json.JSONDecodeError as e:
+                            logger.error(f"❌ JSON decode error: {e}")
+                            logger.error(f"   Raw data: {repr(data)}")
+                            
+                    except WebSocketDisconnect:
+                        logger.info(f"🔌 Input handler: WebSocket disconnected")
+                        break
+                    except Exception as e:
+                        logger.error(f"❌ Input handler receive error: {e}")
+                        import traceback
+                        logger.error(f"   Traceback: {traceback.format_exc()}")
+                        break
+            except Exception as e:
+                logger.error(f"❌ Input handler fatal error: {e}")
+                import traceback
+                logger.error(f"   Traceback: {traceback.format_exc()}")
         
         async def handle_output():
             """Handle terminal output"""
             logger.info(f"📺 Starting output handler for session {session.session_id}")
-            while True:
-                try:
-                    if session.child_process and session.child_process.isalive():
-                        try:
-                            output = session.child_process.read_nonblocking(size=1024, timeout=0.1)
-                            if output:
-                                logger.info(f"📤 Terminal output: '{output}' (len={len(output)})")
-                                await self._send_output(session, output)
-                        except Exception:
-                            pass  # No output available, continue
-                    
-                    await asyncio.sleep(0.05)  # Small delay to prevent busy waiting
-                    
-                except Exception as e:
-                    logger.error(f"❌ Output handler error: {e}")
-                    break
+            try:
+                while True:
+                    try:
+                        if session.child_process and session.child_process.isalive():
+                            try:
+                                output = session.child_process.read_nonblocking(size=1024, timeout=0.1)
+                                if output:
+                                    logger.info(f"📤 Terminal output: '{output}' (len={len(output)})")
+                                    await self._send_output(session, output)
+                                    
+                                    # Check for OAuth URLs and auth status
+                                    self._check_for_oauth_urls(session, output)
+                                    self._check_authentication_status(session, output)
+                            except pexpect.TIMEOUT:
+                                pass  # No output available
+                            except pexpect.EOF:
+                                logger.info(f"📤 Process ended (EOF)")
+                                break
+                            except Exception as e:
+                                logger.debug(f"Output read exception: {e}")
+                                pass
+                        
+                        await asyncio.sleep(0.05)  # Small delay to prevent busy waiting
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Output handler loop error: {e}")
+                        import traceback
+                        logger.error(f"   Traceback: {traceback.format_exc()}")
+                        break
+            except Exception as e:
+                logger.error(f"❌ Output handler fatal error: {e}")
+                import traceback
+                logger.error(f"   Traceback: {traceback.format_exc()}")
         
         # Run input and output handlers concurrently
+        logger.info(f"🔄 Starting input and output handlers concurrently for session {session.session_id}")
         try:
-            await asyncio.gather(
+            # Use gather with return_exceptions to see what fails
+            results = await asyncio.gather(
                 handle_input(),
                 handle_output(),
                 return_exceptions=True
             )
+            
+            # Log any exceptions that occurred
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    handler_name = ["input", "output"][i]
+                    logger.error(f"❌ {handler_name} handler failed with exception: {result}")
+                    import traceback
+                    logger.error(f"   Traceback: {''.join(traceback.format_exception(type(result), result, result.__traceback__))}")
         except Exception as e:
             logger.error(f"❌ Improved handler error: {e}")
+            import traceback
+            logger.error(f"   Traceback: {traceback.format_exc()}")
 
     async def _simple_websocket_handler(self, session: TerminalSession):
         """Integrated WebSocket handler with output monitoring"""
