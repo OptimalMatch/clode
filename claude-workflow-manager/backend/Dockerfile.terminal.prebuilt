@@ -35,6 +35,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 \
     libxss1 \
     libasound2 \
+    # Common development tools often needed by projects
+    default-jdk \
+    maven \
+    gradle \
+    make \
+    cmake \
+    vim \
+    nano \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
@@ -87,7 +95,10 @@ COPY terminal_server.py .
 COPY claude_profile_manager.py .
 
 # Create non-root user for better security
-RUN useradd -m -s /bin/bash claude
+RUN useradd -m -s /bin/bash claude && \
+    # Add passwordless sudo ONLY for package managers (doesn't interfere with Claude autonomous mode)
+    echo "claude ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt, /usr/bin/dpkg, /usr/bin/npm, /usr/bin/pip, /usr/bin/pip3" > /etc/sudoers.d/claude && \
+    chmod 0440 /etc/sudoers.d/claude
 
 # Set up npm global directory for claude user
 USER claude
