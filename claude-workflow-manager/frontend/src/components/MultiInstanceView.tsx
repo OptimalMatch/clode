@@ -77,6 +77,33 @@ const getRelativeTime = (timestamp: string): string => {
   return `${days} day${days !== 1 ? 's' : ''} ago`;
 };
 
+// Helper function to extract file operations from message content
+const extractFileOperation = (content: string): { filePath: string; operation: 'write' | 'edit' | 'read' | 'multiedit' } | null => {
+  // Match patterns like: ✍️ **Writing file:** `path/to/file.js`
+  const writeMatch = content.match(/✍️\s+\*\*Writing file:\*\*\s+`([^`]+)`/);
+  if (writeMatch) return { filePath: writeMatch[1], operation: 'write' };
+  
+  // Match patterns like: 🔄 **Editing file:** `path/to/file.js`
+  const editMatch = content.match(/🔄\s+\*\*Editing file:\*\*\s+`([^`]+)`/);
+  if (editMatch) return { filePath: editMatch[1], operation: 'edit' };
+  
+  // Match patterns like: 🔄 **Multi-editing file:** `path/to/file.js`
+  const multiEditMatch = content.match(/🔄\s+\*\*Multi-editing file:\*\*\s+`([^`]+)`/);
+  if (multiEditMatch) return { filePath: multiEditMatch[1], operation: 'multiedit' };
+  
+  // Match patterns like: 📖 **Reading file:** `path/to/file.js` (we can track reads too)
+  const readMatch = content.match(/📖\s+\*\*Reading file:\*\*\s+`([^`]+)`/);
+  if (readMatch) return { filePath: readMatch[1], operation: 'read' };
+  
+  return null;
+};
+
+interface FileChange {
+  filePath: string;
+  operation: 'write' | 'edit' | 'read' | 'multiedit';
+  timestamp: Date;
+}
+
 interface InstancePanel {
   instanceId: string | null;
   workflowId: string | null;
@@ -87,15 +114,16 @@ interface InstancePanel {
   status: string;
   terminalContent: string;
   lastMessage: string;
+  fileChanges: FileChange[];
 }
 
 const MultiInstanceView: React.FC = () => {
   // State for 4 panels
   const [panels, setPanels] = useState<InstancePanel[]>([
-    { instanceId: null, workflowId: null, isZoomed: false, isVisible: true, wsConnection: null, lastActivity: null, status: 'empty', terminalContent: '', lastMessage: '' },
-    { instanceId: null, workflowId: null, isZoomed: false, isVisible: true, wsConnection: null, lastActivity: null, status: 'empty', terminalContent: '', lastMessage: '' },
-    { instanceId: null, workflowId: null, isZoomed: false, isVisible: true, wsConnection: null, lastActivity: null, status: 'empty', terminalContent: '', lastMessage: '' },
-    { instanceId: null, workflowId: null, isZoomed: false, isVisible: true, wsConnection: null, lastActivity: null, status: 'empty', terminalContent: '', lastMessage: '' },
+    { instanceId: null, workflowId: null, isZoomed: false, isVisible: true, wsConnection: null, lastActivity: null, status: 'empty', terminalContent: '', lastMessage: '', fileChanges: [] },
+    { instanceId: null, workflowId: null, isZoomed: false, isVisible: true, wsConnection: null, lastActivity: null, status: 'empty', terminalContent: '', lastMessage: '', fileChanges: [] },
+    { instanceId: null, workflowId: null, isZoomed: false, isVisible: true, wsConnection: null, lastActivity: null, status: 'empty', terminalContent: '', lastMessage: '', fileChanges: [] },
+    { instanceId: null, workflowId: null, isZoomed: false, isVisible: true, wsConnection: null, lastActivity: null, status: 'empty', terminalContent: '', lastMessage: '', fileChanges: [] },
   ]);
 
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null);
@@ -165,15 +193,36 @@ const MultiInstanceView: React.FC = () => {
             const content = message.data || message.content || '';
             const displayContent = content.length > 100 ? content.substring(0, 100) + '...' : content;
             
-            setPanels(prev => prev.map((p, i) => 
-              i === index ? { 
-                ...p, 
-                lastActivity: new Date(), 
-                status: message.type || 'active',
-                terminalContent: p.terminalContent + '\n' + displayContent,
-                lastMessage: displayContent
-              } : p
-            ));
+            // Check for file operations in the message
+            const fileOp = extractFileOperation(content);
+            
+            setPanels(prev => prev.map((p, i) => {
+              if (i === index) {
+                const updatedPanel = { 
+                  ...p, 
+                  lastActivity: new Date(), 
+                  status: message.type || 'active',
+                  terminalContent: p.terminalContent + '\n' + displayContent,
+                  lastMessage: displayContent
+                };
+                
+                // Add file operation to tracking if detected
+                if (fileOp && (fileOp.operation === 'write' || fileOp.operation === 'edit' || fileOp.operation === 'multiedit')) {
+                  const newFileChange: FileChange = {
+                    filePath: fileOp.filePath,
+                    operation: fileOp.operation,
+                    timestamp: new Date()
+                  };
+                  
+                  // Keep only the last 20 file changes to avoid memory issues
+                  const updatedFileChanges = [...p.fileChanges, newFileChange].slice(-20);
+                  updatedPanel.fileChanges = updatedFileChanges;
+                }
+                
+                return updatedPanel;
+              }
+              return p;
+            }));
           };
 
           ws.onclose = () => {
@@ -749,6 +798,64 @@ const InstancePanel: React.FC<InstancePanelProps> = ({
                 </Typography>
               )}
             </Box>
+            
+            {/* File Changes Section */}
+            {panel.fileChanges.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  📝 Recent Code Changes ({panel.fileChanges.length})
+                </Typography>
+                <Box sx={{ 
+                  maxHeight: isZoomed ? '200px' : '120px', 
+                  overflow: 'auto',
+                  backgroundColor: '#f5f5f5',
+                  borderRadius: 1,
+                  p: 1
+                }}>
+                  {panel.fileChanges.slice().reverse().map((change, idx) => (
+                    <Box 
+                      key={idx} 
+                      sx={{ 
+                        mb: 0.5, 
+                        p: 0.5, 
+                        borderLeft: '3px solid',
+                        borderColor: change.operation === 'write' ? '#4caf50' : 
+                                    change.operation === 'edit' ? '#2196f3' : 
+                                    change.operation === 'multiedit' ? '#9c27b0' : '#ff9800',
+                        backgroundColor: 'white',
+                        borderRadius: '0 4px 4px 0',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.3 }}>
+                        <Chip 
+                          label={change.operation.toUpperCase()} 
+                          size="small"
+                          color={change.operation === 'write' ? 'success' : 
+                                change.operation === 'edit' ? 'primary' : 
+                                change.operation === 'multiedit' ? 'secondary' : 'warning'}
+                          sx={{ height: '18px', fontSize: '0.65rem', fontWeight: 'bold' }}
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {change.timestamp.toLocaleTimeString()}
+                        </Typography>
+                      </Box>
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          fontFamily: 'monospace',
+                          wordBreak: 'break-all',
+                          color: 'text.primary',
+                          fontWeight: 500
+                        }}
+                      >
+                        {change.filePath}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
           </Box>
         ) : (
           <Box sx={{ textAlign: 'center' }}>
