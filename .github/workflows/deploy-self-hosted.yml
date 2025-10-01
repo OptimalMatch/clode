@@ -3,8 +3,6 @@ name: Deploy to pop-os-1
 on:
   push:
     branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
     inputs:
       environment:
