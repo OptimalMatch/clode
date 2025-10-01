@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core system
     ca-certificates \
     curl \
+    wget \
+    unzip \
+    zip \
+    sudo \
     # Python stack
     python3 \
     python3-pip \
@@ -18,6 +22,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     openssh-client \
     build-essential \
+    # Common development tools often needed by projects
+    default-jdk \
+    maven \
+    gradle \
+    make \
+    cmake \
+    vim \
+    nano \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
@@ -34,7 +46,10 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:/root/.local/bin:$PATH"
 
 # Create non-root user for better security
-RUN useradd -m -s /bin/bash claude
+RUN useradd -m -s /bin/bash claude && \
+    # Add passwordless sudo ONLY for package managers (doesn't interfere with Claude autonomous mode)
+    echo "claude ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt, /usr/bin/dpkg, /usr/bin/npm, /usr/bin/pip, /usr/bin/pip3" > /etc/sudoers.d/claude && \
+    chmod 0440 /etc/sudoers.d/claude
 
 # Set up SSH configuration for claude user
 RUN mkdir -p /home/claude/.ssh && \
