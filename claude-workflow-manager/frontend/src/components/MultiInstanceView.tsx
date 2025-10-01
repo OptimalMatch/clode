@@ -78,18 +78,40 @@ const getRelativeTime = (timestamp: string): string => {
 };
 
 // Helper function to extract file operations from message content
-const extractFileOperation = (content: string): { filePath: string; operation: 'write' | 'edit' | 'read' | 'multiedit' } | null => {
-  // Match patterns like: ✍️ **Writing file:** `path/to/file.js`
-  const writeMatch = content.match(/✍️\s+\*\*Writing file:\*\*\s+`([^`]+)`/);
-  if (writeMatch) return { filePath: writeMatch[1], operation: 'write' };
+const extractFileOperation = (content: string): { filePath: string; operation: 'write' | 'edit' | 'read' | 'multiedit'; linesAdded?: number; linesRemoved?: number } | null => {
+  // Match patterns like: ✍️ **Writing file:** `path/to/file.js` (+50 lines)
+  const writeMatch = content.match(/✍️\s+\*\*Writing file:\*\*\s+`([^`]+)`(?:\s+\(\+(\d+)\s+lines\))?/);
+  if (writeMatch) {
+    return { 
+      filePath: writeMatch[1], 
+      operation: 'write',
+      linesAdded: writeMatch[2] ? parseInt(writeMatch[2]) : undefined
+    };
+  }
   
-  // Match patterns like: 🔄 **Editing file:** `path/to/file.js`
-  const editMatch = content.match(/🔄\s+\*\*Editing file:\*\*\s+`([^`]+)`/);
-  if (editMatch) return { filePath: editMatch[1], operation: 'edit' };
+  // Match patterns like: 🔄 **Editing file:** `path/to/file.js` (+10 lines) or (-5 lines) or (~20 lines changed)
+  const editMatch = content.match(/🔄\s+\*\*Editing file:\*\*\s+`([^`]+)`(?:\s+\(([+\-~])(\d+)\s+lines(?:\s+changed)?\))?/);
+  if (editMatch) {
+    const sign = editMatch[2];
+    const count = editMatch[3] ? parseInt(editMatch[3]) : undefined;
+    return { 
+      filePath: editMatch[1], 
+      operation: 'edit',
+      linesAdded: sign === '+' && count ? count : undefined,
+      linesRemoved: sign === '-' && count ? count : undefined
+    };
+  }
   
-  // Match patterns like: 🔄 **Multi-editing file:** `path/to/file.js`
-  const multiEditMatch = content.match(/🔄\s+\*\*Multi-editing file:\*\*\s+`([^`]+)`/);
-  if (multiEditMatch) return { filePath: multiEditMatch[1], operation: 'multiedit' };
+  // Match patterns like: 🔄 **Multi-editing file:** `path/to/file.js` (3 edits +15 -8 lines)
+  const multiEditMatch = content.match(/🔄\s+\*\*Multi-editing file:\*\*\s+`([^`]+)`.*?\(\d+\s+edits(?:\s+\+(\d+))?(?:\s+-(\d+))?/);
+  if (multiEditMatch) {
+    return { 
+      filePath: multiEditMatch[1], 
+      operation: 'multiedit',
+      linesAdded: multiEditMatch[2] ? parseInt(multiEditMatch[2]) : undefined,
+      linesRemoved: multiEditMatch[3] ? parseInt(multiEditMatch[3]) : undefined
+    };
+  }
   
   // Match patterns like: 📖 **Reading file:** `path/to/file.js` (we can track reads too)
   const readMatch = content.match(/📖\s+\*\*Reading file:\*\*\s+`([^`]+)`/);
@@ -102,6 +124,8 @@ interface FileChange {
   filePath: string;
   operation: 'write' | 'edit' | 'read' | 'multiedit';
   timestamp: Date;
+  linesAdded?: number;
+  linesRemoved?: number;
 }
 
 interface InstancePanel {
@@ -211,7 +235,9 @@ const MultiInstanceView: React.FC = () => {
                   const newFileChange: FileChange = {
                     filePath: fileOp.filePath,
                     operation: fileOp.operation,
-                    timestamp: new Date()
+                    timestamp: new Date(),
+                    linesAdded: fileOp.linesAdded,
+                    linesRemoved: fileOp.linesRemoved
                   };
                   
                   // Keep only the last 20 file changes to avoid memory issues
@@ -803,15 +829,16 @@ const InstancePanel: React.FC<InstancePanelProps> = ({
             {/* File Changes Section */}
             {panel.fileChanges.length > 0 && (
               <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#e0e0e0' }}>
                   📝 Recent Code Changes ({panel.fileChanges.length})
                 </Typography>
                 <Box sx={{ 
                   maxHeight: isZoomed ? '200px' : '120px', 
                   overflow: 'auto',
-                  backgroundColor: '#f5f5f5',
+                  backgroundColor: '#1a1a1a',
                   borderRadius: 1,
-                  p: 1
+                  p: 1,
+                  border: '1px solid #333'
                 }}>
                   {panel.fileChanges.slice().reverse().map((change, idx) => (
                     <Box 
@@ -820,24 +847,39 @@ const InstancePanel: React.FC<InstancePanelProps> = ({
                         mb: 0.5, 
                         p: 0.5, 
                         borderLeft: '3px solid',
-                        borderColor: change.operation === 'write' ? '#4caf50' : 
-                                    change.operation === 'edit' ? '#2196f3' : 
-                                    change.operation === 'multiedit' ? '#9c27b0' : '#ff9800',
-                        backgroundColor: 'white',
+                        borderColor: change.operation === 'write' ? '#66bb6a' : 
+                                    change.operation === 'edit' ? '#42a5f5' : 
+                                    change.operation === 'multiedit' ? '#ab47bc' : '#ffa726',
+                        backgroundColor: '#252525',
                         borderRadius: '0 4px 4px 0',
                         fontSize: '0.75rem'
                       }}
                     >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.3 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.3, flexWrap: 'wrap' }}>
                         <Chip 
                           label={change.operation.toUpperCase()} 
                           size="small"
-                          color={change.operation === 'write' ? 'success' : 
-                                change.operation === 'edit' ? 'primary' : 
-                                change.operation === 'multiedit' ? 'secondary' : 'warning'}
-                          sx={{ height: '18px', fontSize: '0.65rem', fontWeight: 'bold' }}
+                          sx={{ 
+                            height: '18px', 
+                            fontSize: '0.65rem', 
+                            fontWeight: 'bold',
+                            backgroundColor: change.operation === 'write' ? '#66bb6a' : 
+                                          change.operation === 'edit' ? '#42a5f5' : 
+                                          change.operation === 'multiedit' ? '#ab47bc' : '#ffa726',
+                            color: '#000',
+                          }}
                         />
-                        <Typography variant="caption" color="text.secondary">
+                        {change.linesAdded !== undefined && change.linesAdded > 0 && (
+                          <Typography variant="caption" sx={{ color: '#66bb6a', fontWeight: 'bold', fontFamily: 'monospace' }}>
+                            +{change.linesAdded}
+                          </Typography>
+                        )}
+                        {change.linesRemoved !== undefined && change.linesRemoved > 0 && (
+                          <Typography variant="caption" sx={{ color: '#f44336', fontWeight: 'bold', fontFamily: 'monospace' }}>
+                            -{change.linesRemoved}
+                          </Typography>
+                        )}
+                        <Typography variant="caption" sx={{ color: '#999' }}>
                           {change.timestamp.toLocaleTimeString()}
                         </Typography>
                       </Box>
@@ -846,7 +888,7 @@ const InstancePanel: React.FC<InstancePanelProps> = ({
                         sx={{ 
                           fontFamily: 'monospace',
                           wordBreak: 'break-all',
-                          color: 'text.primary',
+                          color: '#e0e0e0',
                           fontWeight: 500
                         }}
                       >
