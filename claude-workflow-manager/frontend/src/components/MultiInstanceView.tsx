@@ -207,8 +207,9 @@ const MultiInstanceView: React.FC = () => {
           
           ws.onopen = () => {
             console.log(`WebSocket connected for panel ${index}, instance ${panel.instanceId}`);
-            setPanels(prev => prev.map((p, i) => 
-              i === index ? { ...p, wsConnection: ws, status: 'connected' } : p
+            const currentInstanceId = panel.instanceId;
+            setPanels(prev => prev.map((p) => 
+              p.instanceId === currentInstanceId ? { ...p, wsConnection: ws, status: 'connected' } : p
             ));
           };
 
@@ -220,8 +221,12 @@ const MultiInstanceView: React.FC = () => {
             // Check for file operations in the message
             const fileOp = extractFileOperation(content);
             
-            setPanels(prev => prev.map((p, i) => {
-              if (i === index) {
+            // Use instanceId to match the correct panel instead of index
+            const currentInstanceId = panel.instanceId;
+            
+            setPanels(prev => prev.map((p) => {
+              // Match by instanceId instead of index for reliability
+              if (p.instanceId === currentInstanceId) {
                 const updatedPanel = { 
                   ...p, 
                   lastActivity: new Date(), 
@@ -253,16 +258,18 @@ const MultiInstanceView: React.FC = () => {
 
           ws.onclose = () => {
             console.log(`WebSocket closed for panel ${index}, instance ${panel.instanceId}`);
-            setPanels(prev => prev.map((p, i) => 
-              i === index ? { ...p, wsConnection: null, status: 'disconnected' } : p
+            const currentInstanceId = panel.instanceId;
+            setPanels(prev => prev.map((p) => 
+              p.instanceId === currentInstanceId ? { ...p, wsConnection: null, status: 'disconnected' } : p
             ));
             wsConnections.current.delete(panel.instanceId!);
           };
 
           ws.onerror = (error) => {
             console.error(`WebSocket error for panel ${index}:`, error);
-            setPanels(prev => prev.map((p, i) => 
-              i === index ? { ...p, status: 'error' } : p
+            const currentInstanceId = panel.instanceId;
+            setPanels(prev => prev.map((p) => 
+              p.instanceId === currentInstanceId ? { ...p, status: 'error' } : p
             ));
           };
 
