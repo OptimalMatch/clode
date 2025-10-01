@@ -306,7 +306,7 @@ class TerminalServer:
             await self._start_terminal_process(session)
             
             # Try a simpler WebSocket handling approach
-            await self._simple_websocket_handler(session)
+            await self._improved_websocket_handler(session)
             
         except WebSocketDisconnect:
             logger.info(f"🔌 WebSocket disconnected: {session_id}")
@@ -623,6 +623,71 @@ After installation, try: claude --version
                 logger.error(f"❌ Traceback: {traceback.format_exc()}")
                 break
     
+    async def _improved_websocket_handler(self, session: TerminalSession):
+        """Improved WebSocket handler with separate input and output tasks"""
+        logger.info(f"🚀 Starting improved WebSocket handler for session {session.session_id}")
+        
+        async def handle_input():
+            """Handle WebSocket input messages"""
+            logger.info(f"🎧 Starting input handler for session {session.session_id}")
+            while True:
+                try:
+                    data = await session.websocket.receive_text()
+                    logger.info(f"📥 Received input: {data}")
+                    
+                    try:
+                        message = json.loads(data)
+                        logger.info(f"🔍 Parsed message: {message}")
+                        if message.get('type') == 'input':
+                            input_data = message.get('data', message.get('content', ''))
+                            logger.info(f"🎯 Extracted input data: '{repr(input_data)}'")
+                            if session.child_process and session.child_process.isalive():
+                                session.child_process.send(input_data)
+                                logger.info(f"📤 Sent to terminal: '{repr(input_data)}'")
+                            else:
+                                logger.warning(f"⚠️ Child process not alive or missing")
+                        else:
+                            logger.info(f"🔍 Non-input message type: {message.get('type')}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"❌ JSON decode error: {e}")
+                        
+                except WebSocketDisconnect:
+                    logger.info(f"🔌 Input handler: WebSocket disconnected")
+                    break
+                except Exception as e:
+                    logger.error(f"❌ Input handler error: {e}")
+                    break
+        
+        async def handle_output():
+            """Handle terminal output"""
+            logger.info(f"📺 Starting output handler for session {session.session_id}")
+            while True:
+                try:
+                    if session.child_process and session.child_process.isalive():
+                        try:
+                            output = session.child_process.read_nonblocking(size=1024, timeout=0.1)
+                            if output:
+                                logger.info(f"📤 Terminal output: '{output}' (len={len(output)})")
+                                await self._send_output(session, output)
+                        except Exception:
+                            pass  # No output available, continue
+                    
+                    await asyncio.sleep(0.05)  # Small delay to prevent busy waiting
+                    
+                except Exception as e:
+                    logger.error(f"❌ Output handler error: {e}")
+                    break
+        
+        # Run input and output handlers concurrently
+        try:
+            await asyncio.gather(
+                handle_input(),
+                handle_output(),
+                return_exceptions=True
+            )
+        except Exception as e:
+            logger.error(f"❌ Improved handler error: {e}")
+
     async def _simple_websocket_handler(self, session: TerminalSession):
         """Integrated WebSocket handler with output monitoring"""
         
@@ -640,23 +705,30 @@ After installation, try: claude --version
                     except Exception:
                         pass  # No output available, continue
                 
-                # Try to receive WebSocket message with short timeout
+                # Try to receive WebSocket message with longer timeout for debugging
                 try:
+                    logger.debug(f"🔍 Attempting to receive WebSocket message...")
                     data = await asyncio.wait_for(
                         session.websocket.receive_text(),
-                        timeout=0.1  # Short timeout to allow output checking
+                        timeout=0.5  # Longer timeout for debugging
                     )
                     logger.info(f"📥 Received input: {data}")
                     
                     try:
                         message = json.loads(data)
+                        logger.info(f"🔍 Parsed message: {message}")
                         if message.get('type') == 'input':
                             # Handle both 'data' and 'content' field names for compatibility
                             input_data = message.get('data', message.get('content', ''))
+                            logger.info(f"🎯 Extracted input data: '{repr(input_data)}'")
                             if session.child_process and session.child_process.isalive():
                                 # Send input exactly as received (no automatic newline)
                                 session.child_process.send(input_data)
                                 logger.info(f"📤 Sent to terminal: '{repr(input_data)}'")
+                            else:
+                                logger.warning(f"⚠️ Child process not alive or missing")
+                        else:
+                            logger.info(f"🔍 Non-input message type: {message.get('type')}")
                     except json.JSONDecodeError as e:
                         logger.error(f"❌ JSON decode error: {e}")
                         
