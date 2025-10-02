@@ -89,8 +89,8 @@ RUN mkdir -p /etc/docker && \
 
 # Create Docker startup script
 RUN echo '#!/bin/bash\n\
-# Start Docker daemon in background\n\
-dockerd --host=unix:///var/run/docker.sock --storage-driver=overlay2 &\n\
+# Start Docker daemon in background (configuration from /etc/docker/daemon.json)\n\
+dockerd &\n\
 DOCKER_PID=$!\n\
 \n\
 # Wait for Docker to be ready\n\
