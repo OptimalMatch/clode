@@ -25,7 +25,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile.base
     container_name: claude-workflow-backend
-    user: claude
+    # Note: No 'user: claude' here - the entrypoint script starts as root to run dockerd,
+    # then switches to claude user for the application
     restart: always
     privileged: true  # Required for Docker-in-Docker
     ports:
@@ -86,8 +87,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile.terminal
     container_name: claude-workflow-terminal
-    user: claude
+    # Note: No 'user: claude' here - the entrypoint script starts as root to run dockerd,
+    # then switches to claude user for the application
     restart: always
+    privileged: true  # Required for Docker-in-Docker
     ports:
       - "8006:8006"  # Terminal WebSocket server
       - "8007:8007"  # Health check server
@@ -119,7 +122,7 @@ services:
   mcp-server:
     build: ./backend
     container_name: claude-workflow-mcp
-    user: claude
+    # Note: No 'user: claude' here - let the Dockerfile handle user management
     restart: always
     environment:
       BACKEND_URL: http://backend:8000

@@ -23,6 +23,7 @@ services:
       dockerfile: Dockerfile
     container_name: claude-workflow-backend-dev
     restart: always
+    privileged: true  # Required for Docker-in-Docker
     ports:
       - "8000:8000"
     cpus: 4.0                # Cap to 4 CPU cores
@@ -83,6 +84,7 @@ services:
       dockerfile: Dockerfile.terminal
     container_name: claude-workflow-terminal
     restart: always
+    privileged: true  # Required for Docker-in-Docker
     ports:
       - "8006:8006"  # Terminal WebSocket server
     cpus: 2.0

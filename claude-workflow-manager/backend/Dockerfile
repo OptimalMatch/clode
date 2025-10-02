@@ -59,29 +59,46 @@ ENV PYTHONPATH="/app:/app/src:${PYTHONPATH}"
 
 # Create Docker-in-Docker startup script as root
 RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
 # Start Docker daemon in background if not already running\n\
 if ! pgrep dockerd > /dev/null; then\n\
-    sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2376 --tlsverify --tlscacert=/certs/ca/ca.pem --tlscert=/certs/server/cert.pem --tlskey=/certs/server/key.pem &\n\
-fi\n\
-# Wait for Docker daemon to be ready\n\
-while ! docker info > /dev/null 2>&1; do\n\
-    echo "Waiting for Docker daemon to start..."\n\
-    sleep 2\n\
-done\n\
-echo "Docker daemon is ready"\n\
-# Start the main application\n\
-if [ -f /app/src/main.py ]; then\n\
-    cd /app/src && uvicorn main:app --host 0.0.0.0 --port 8000 --reload\n\
+    echo "Starting Docker daemon..."\n\
+    dockerd --host=unix:///var/run/docker.sock &\n\
+    DOCKER_PID=$!\n\
+    \n\
+    # Wait for Docker daemon to be ready\n\
+    timeout=30\n\
+    while [ $timeout -gt 0 ]; do\n\
+        if docker info > /dev/null 2>&1; then\n\
+            echo "Docker daemon is ready"\n\
+            break\n\
+        fi\n\
+        timeout=$((timeout - 1))\n\
+        sleep 1\n\
+    done\n\
+    \n\
+    if [ $timeout -eq 0 ]; then\n\
+        echo "Docker daemon failed to start"\n\
+        exit 1\n\
+    fi\n\
 else\n\
-    uvicorn main:app --host 0.0.0.0 --port 8000 --reload\n\
+    echo "Docker daemon already running"\n\
+fi\n\
+\n\
+# Switch to claude user and start the main application\n\
+echo "Switching to claude user and starting application..."\n\
+if [ -f /app/src/main.py ]; then\n\
+    exec su -c "cd /app/src && exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload" claude\n\
+else\n\
+    exec su -c "cd /app && exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload" claude\n\
 fi' > /app/start.sh && chmod +x /app/start.sh
 
-# Install sudo and configure passwordless sudo for claude user for Docker daemon
-RUN apt-get update && apt-get install -y sudo && rm -rf /var/lib/apt/lists/* && \
-    echo 'claude ALL=(ALL) NOPASSWD: /usr/bin/dockerd' >> /etc/sudoers
+# Install sudo (but claude user will NOT have sudo access - dockerd runs as root via entrypoint)
+RUN apt-get update && apt-get install -y sudo && rm -rf /var/lib/apt/lists/*
 
-# Switch to claude user for runtime
-USER claude
+# Note: We DON'T switch to USER claude here because the startup script
+# needs to run as root to start dockerd, then it switches to claude user
 
 EXPOSE 8000
 
