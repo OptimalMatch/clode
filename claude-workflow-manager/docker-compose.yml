@@ -21,10 +21,13 @@ services:
       - claude-network
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.base
     container_name: claude-workflow-backend
     user: claude
     restart: always
+    privileged: true  # Required for Docker-in-Docker
     ports:
       - "8005:8000"
     cpus: 4.0                # Cap to 4 CPU cores
@@ -39,6 +42,7 @@ services:
       CLAUDE_AGENTS_FOLDER: ${CLAUDE_AGENTS_FOLDER:-.claude/agents}
       USE_CLAUDE_MAX_PLAN: ${USE_CLAUDE_MAX_PLAN:-false}
       PROJECT_ROOT_DIR: ${PROJECT_ROOT_DIR:-/app/project}
+      DOCKER_TLS_CERTDIR: /certs  # Docker-in-Docker TLS certificates
     depends_on:
       - mongodb
       - redis
@@ -48,6 +52,8 @@ services:
       - terminal_sessions:/app/terminal_sessions  # Isolated terminal sessions
       - ssh_generated_keys:/app/ssh_keys
       - ${PWD}/..:/app/project  # Mount the actual project directory (parent of claude-workflow-manager)
+      - docker-certs-ca:/certs/ca  # Docker-in-Docker CA certificates
+      - docker-certs-client:/certs/client  # Docker-in-Docker client certificates
     networks:
       - claude-network
 
@@ -144,6 +150,8 @@ volumes:
   ssh_generated_keys:
   claude_profiles:    # Named volume for isolated Claude authentication profiles
   terminal_sessions:  # Named volume for isolated terminal working directories
+  docker-certs-ca:    # Docker-in-Docker CA certificates
+  docker-certs-client: # Docker-in-Docker client certificates
 
 networks:
   claude-network:
