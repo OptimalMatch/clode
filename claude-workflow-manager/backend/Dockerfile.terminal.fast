@@ -14,8 +14,8 @@ RUN chmod +x /app/terminal_startup.sh
 # Ensure proper ownership
 RUN chown -R claude:claude /app
 
-# Switch to claude user for runtime
-USER claude
+# Note: We DON'T switch back to USER claude here because the entrypoint script
+# needs to run as root to start dockerd, then it switches to claude user
 
-# Start the terminal server
-CMD ["/app/terminal_startup.sh"]
+# The base image ENTRYPOINT will handle dockerd startup and user switching
+CMD ["python", "terminal_server.py"]
