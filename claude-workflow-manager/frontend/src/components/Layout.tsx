@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, Box, IconButton, Tooltip } from '@mui/material';
-import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle, Menu, ChevronLeft, ViewModule } from '@mui/icons-material';
+import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, Box, IconButton, Tooltip, Menu as MenuComponent, MenuItem, Avatar, Divider } from '@mui/material';
+import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle, Menu, ChevronLeft, ViewModule, Logout, Person } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import clodeBlueLogo from '../assets/clode-blue.png';
 import clodeLogo from '../assets/clode.png';
 import clodeYellowLogo from '../assets/clode-yellow.png';
@@ -20,9 +21,33 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, isAuthenticated, logout } = useAuth();
   
   // Navigation collapse state
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
+  
+  // User menu state
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const isUserMenuOpen = Boolean(anchorEl);
+
+  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleUserMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = async () => {
+    handleUserMenuClose();
+    await logout();
+    navigate('/login');
+  };
+
+  const handleProfile = () => {
+    handleUserMenuClose();
+    navigate('/profile');
+  };
 
   // Logo cycling animation with disappearing intervals (skip white logo to prevent invisibility)
   const logoSequence = [clodeBlueLogo, clodeLogo, clodeYellowLogo]; // Removed clodeWhiteLogo
@@ -109,7 +134,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           >
             {isNavCollapsed ? <Menu /> : <ChevronLeft />}
           </IconButton>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
             {/* Character animation - either static logo or running sprite */}
             <Box sx={{ 
               display: 'flex', 
@@ -157,6 +182,57 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               CLode
             </Typography>
           </Box>
+
+          {/* User menu */}
+          {isAuthenticated ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="body2" sx={{ mr: 1 }}>
+                {user?.username}
+              </Typography>
+              <Tooltip title="Account">
+                <IconButton
+                  onClick={handleUserMenuOpen}
+                  size="small"
+                  sx={{ ml: 2 }}
+                  aria-controls={isUserMenuOpen ? 'account-menu' : undefined}
+                  aria-haspopup="true"
+                  aria-expanded={isUserMenuOpen ? 'true' : undefined}
+                >
+                  <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+                    {user?.username?.charAt(0).toUpperCase()}
+                  </Avatar>
+                </IconButton>
+              </Tooltip>
+              <MenuComponent
+                anchorEl={anchorEl}
+                id="account-menu"
+                open={isUserMenuOpen}
+                onClose={handleUserMenuClose}
+                onClick={handleUserMenuClose}
+                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+              >
+                <MenuItem disabled>
+                  <Typography variant="body2" color="text.secondary">
+                    {user?.email}
+                  </Typography>
+                </MenuItem>
+                <Divider />
+                <MenuItem onClick={handleProfile}>
+                  <ListItemIcon>
+                    <Person fontSize="small" />
+                  </ListItemIcon>
+                  Profile
+                </MenuItem>
+                <MenuItem onClick={handleLogout}>
+                  <ListItemIcon>
+                    <Logout fontSize="small" />
+                  </ListItemIcon>
+                  Logout
+                </MenuItem>
+              </MenuComponent>
+            </Box>
+          ) : null}
         </Toolbar>
       </AppBar>
       <Drawer

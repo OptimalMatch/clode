@@ -53,6 +53,32 @@ const api = axios.create({
   },
 });
 
+// Add auth token to all requests if available
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle 401 errors globally
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid, clear auth data
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('user');
+      // Optionally redirect to login
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const workflowApi = {
   create: async (workflow: Workflow) => {
     const response = await api.post('/api/workflows', workflow);
@@ -344,6 +370,53 @@ export const sshApi = {
   
   deleteKey: async (keyName: string) => {
     const response = await api.delete(`/api/ssh/keys/${keyName}`);
+    return response.data;
+  },
+};
+
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+  full_name?: string;
+  is_active: boolean;
+  is_admin: boolean;
+  created_at: string;
+  last_login?: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
+export const authApi = {
+  register: async (username: string, email: string, password: string, fullName?: string): Promise<AuthResponse> => {
+    const response = await api.post('/api/auth/register', {
+      username,
+      email,
+      password,
+      full_name: fullName,
+    });
+    return response.data;
+  },
+
+  login: async (usernameOrEmail: string, password: string): Promise<AuthResponse> => {
+    const response = await api.post('/api/auth/login', {
+      username_or_email: usernameOrEmail,
+      password,
+    });
+    return response.data;
+  },
+
+  getCurrentUser: async (): Promise<User> => {
+    const response = await api.get('/api/auth/me');
+    return response.data;
+  },
+
+  logout: async () => {
+    const response = await api.post('/api/auth/logout');
     return response.data;
   },
 };

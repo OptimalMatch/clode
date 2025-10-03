@@ -1,9 +1,13 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
+import LoginPage from './components/LoginPage';
+import RegisterPage from './components/RegisterPage';
+import ProfilePage from './components/ProfilePage';
 import WorkflowsPage from './components/WorkflowsPage';
 import DesignPage from './components/DesignPage';
 import PromptsPage from './components/PromptsPage';
@@ -37,19 +41,25 @@ function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <Router future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-          <Layout>
+          <AuthProvider>
             <Routes>
-              <Route path="/" element={<WorkflowsPage />} />
-              <Route path="/workflows" element={<WorkflowsPage />} />
-              <Route path="/design" element={<DesignPage />} />
-              <Route path="/prompts" element={<PromptsPage />} />
-              <Route path="/subagents" element={<SubagentsPage />} />
-              <Route path="/claude-auth" element={<ClaudeAuthPage />} />
-              <Route path="/ssh-keys" element={<SSHKeysPage />} />
-              <Route path="/instances/:workflowId" element={<InstancesPage />} />
-              <Route path="/multi-instance" element={<MultiInstanceView />} />
+              {/* Public routes (no layout) */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              
+              {/* Protected routes (with layout) */}
+              <Route path="/" element={<Layout><WorkflowsPage /></Layout>} />
+              <Route path="/workflows" element={<Layout><WorkflowsPage /></Layout>} />
+              <Route path="/profile" element={<Layout><ProfilePage /></Layout>} />
+              <Route path="/design" element={<Layout><DesignPage /></Layout>} />
+              <Route path="/prompts" element={<Layout><PromptsPage /></Layout>} />
+              <Route path="/subagents" element={<Layout><SubagentsPage /></Layout>} />
+              <Route path="/claude-auth" element={<Layout><ClaudeAuthPage /></Layout>} />
+              <Route path="/ssh-keys" element={<Layout><SSHKeysPage /></Layout>} />
+              <Route path="/instances/:workflowId" element={<Layout><InstancesPage /></Layout>} />
+              <Route path="/multi-instance" element={<Layout><MultiInstanceView /></Layout>} />
             </Routes>
-          </Layout>
+          </AuthProvider>
         </Router>
       </ThemeProvider>
     </QueryClientProvider>
