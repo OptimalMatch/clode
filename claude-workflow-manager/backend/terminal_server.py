@@ -886,17 +886,21 @@ After installation, try: claude --version
                 logger.error(f"   Traceback: {traceback.format_exc()}")
         
         async def handle_output():
-            """Handle terminal output"""
+            """Handle terminal output with buffering to improve network performance"""
             logger.info(f"📺 Starting output handler for session {session.session_id}")
+            output_buffer = ""
+            last_send_time = asyncio.get_event_loop().time()
+            BUFFER_INTERVAL = 0.1  # Send buffered output every 100ms
+            
             try:
                 while True:
                     try:
                         if session.child_process and session.child_process.isalive():
                             try:
-                                output = session.child_process.read_nonblocking(size=1024, timeout=0.1)
+                                # Read available output
+                                output = session.child_process.read_nonblocking(size=4096, timeout=0.05)
                                 if output:
-                                    logger.info(f"📤 Terminal output: '{output}' (len={len(output)})")
-                                    await self._send_output(session, output)
+                                    output_buffer += output
                                     
                                     # Check for OAuth URLs and auth status
                                     self._check_for_oauth_urls(session, output)
@@ -905,12 +909,27 @@ After installation, try: claude --version
                                 pass  # No output available
                             except pexpect.EOF:
                                 logger.info(f"📤 Process ended (EOF)")
+                                # Send any remaining buffered output
+                                if output_buffer:
+                                    logger.info(f"📤 Final buffered output: (len={len(output_buffer)})")
+                                    await self._send_output(session, output_buffer)
                                 break
                             except Exception as e:
                                 logger.debug(f"Output read exception: {e}")
                                 pass
+                            
+                            # Send buffered output if interval elapsed or buffer is large
+                            current_time = asyncio.get_event_loop().time()
+                            if output_buffer and (
+                                (current_time - last_send_time) >= BUFFER_INTERVAL or 
+                                len(output_buffer) > 2048
+                            ):
+                                logger.info(f"📤 Buffered output: (len={len(output_buffer)})")
+                                await self._send_output(session, output_buffer)
+                                output_buffer = ""
+                                last_send_time = current_time
                         
-                        await asyncio.sleep(0.05)  # Small delay to prevent busy waiting
+                        await asyncio.sleep(0.02)  # Faster polling for better responsiveness
                         
                     except Exception as e:
                         logger.error(f"❌ Output handler loop error: {e}")
