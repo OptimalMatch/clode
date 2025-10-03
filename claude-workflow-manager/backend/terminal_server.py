@@ -214,9 +214,9 @@ class TerminalServer:
                 # Claude stores project history in ~/.claude/projects/{escaped_path}/
                 # Try multiple possible locations for .claude directory
                 possible_claude_dirs = [
-                    Path("/home/claude/.claude"),  # Terminal container user
-                    Path.home() / ".claude",  # Current process user
-                    Path("/root/.claude"),  # Root user
+                    Path(self.project_root_dir) / ".claude",  # Project directory (most likely!)
+                    Path("/home/claude/.claude"),  # Terminal container user home
+                    Path.home() / ".claude",  # Current process user home
                 ]
                 
                 # Add session-specific directories if they exist
@@ -497,37 +497,65 @@ class TerminalServer:
             # Check if Claude CLI is available
             claude_available = self._check_claude_cli_available()
             
-            # For instance sessions, connect to a bash shell in the project directory
+            # For instance sessions, connect to the backend container via docker exec
             if session.session_type == 'instance':
-                # Instances run in the backend container, not separate containers
-                # We'll start a bash shell in the project directory
-                # Check if project directory exists and has content
-                project_path = Path(self.project_root_dir)
+                # Use docker exec to connect to the backend container where instances actually run
+                backend_container = "claude-workflow-backend"
                 
                 await self._send_status(session, 
-                    f"🔍 Checking project directory: {project_path}")
+                    f"🔗 Connecting to backend container: {backend_container}")
                 
-                if project_path.exists() and project_path.is_dir():
-                    # Check if there's a git repo
-                    git_dir = project_path / ".git"
-                    if git_dir.exists():
-                        await self._send_status(session, 
-                            f"✅ Found git repository in project directory")
-                    else:
-                        await self._send_status(session, 
-                            f"⚠️ No git repository found in {project_path}")
+                import subprocess
+                try:
+                    # Check if the backend container is running
+                    check_cmd = ['docker', 'inspect', '-f', '{{.State.Running}}', backend_container]
+                    result = subprocess.run(check_cmd, capture_output=True, text=True, timeout=5)
                     
-                    await self._send_status(session, 
-                        f"📁 Starting terminal in project directory...")
-                else:
-                    await self._send_error(session, 
-                        f"❌ Project directory not found: {project_path}")
-                    await self._send_status(session, 
-                        "⚠️ Git repo files may not be accessible in this terminal")
-                
-                # Start bash in the project directory
-                command = 'bash'
-                initial_input = None
+                    if result.returncode == 0 and result.stdout.strip() == 'true':
+                        # Container is running, use docker exec
+                        await self._send_status(session, 
+                            f"✅ Backend container is running, establishing connection...")
+                        
+                        # Start an interactive bash session in the backend container
+                        session.child_process = pexpect.spawn(
+                            'docker',
+                            ['exec', '-it', backend_container, 'bash'],
+                            encoding='utf-8',
+                            codec_errors='ignore'
+                        )
+                        
+                        session.child_process.setwinsize(24, 80)
+                        
+                        logger.info(f"🐳 Connected to backend container via docker exec")
+                        await self._send_status(session, f"🐳 Connected to backend container!")
+                        await self._send_status(session, f"📁 You now have access to instance working directories")
+                        
+                        # Send commands to show where we are
+                        session.child_process.send('cd /tmp 2>/dev/null || cd /app\n')
+                        await asyncio.sleep(0.5)
+                        session.child_process.send('echo "Instance working dirs are in /tmp/tmp* directories"\n')
+                        await asyncio.sleep(0.5)
+                        session.child_process.send('ls -la /tmp/ | grep "^d" | tail -5\n')
+                        
+                        return  # Exit early, we've already set up the process
+                        
+                    else:
+                        # Container not running
+                        await self._send_error(session, 
+                            f"❌ Backend container is not running: {backend_container}")
+                        raise Exception(f"Backend container not running")
+                        
+                except subprocess.TimeoutExpired:
+                    await self._send_error(session, "⏱️ Timeout checking for backend container")
+                    raise
+                except Exception as e:
+                    logger.error(f"❌ Failed to connect to backend container: {e}")
+                    await self._send_error(session, f"❌ Failed to connect to backend: {str(e)}")
+                    
+                    # Fallback: Start a local bash session
+                    await self._send_status(session, "📁 Falling back to local terminal session...")
+                    command = 'bash'
+                    initial_input = None
                 
             # For login sessions, try to start Claude CLI
             elif session.session_type == 'login':
