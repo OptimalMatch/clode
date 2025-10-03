@@ -11,12 +11,13 @@ import ProfilePage from './components/ProfilePage';
 import WorkflowsPage from './components/WorkflowsPage';
 import DesignPage from './components/DesignPage';
 import PromptsPage from './components/PromptsPage';
-import AgentsPage from './components/AgentsPage';
+import InstancesPage from './components/InstancesPage';
 import SubagentsPage from './components/SubagentsPage';
 import SSHKeysPage from './components/SSHKeysPage';
 import ClaudeAuthPage from './components/ClaudeAuthPage';
-import MultiAgentView from './components/MultiAgentView';
+import MultiInstanceView from './components/MultiInstanceView';
 import SettingsPage from './components/SettingsPage';
+import AgentOrchestrationPage from './components/AgentOrchestrationPage';
 
 const queryClient = new QueryClient();
 
@@ -58,8 +59,9 @@ function App() {
               <Route path="/claude-auth" element={<Layout><ClaudeAuthPage /></Layout>} />
               <Route path="/ssh-keys" element={<Layout><SSHKeysPage /></Layout>} />
               <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
-              <Route path="/agents/:workflowId" element={<Layout><AgentsPage /></Layout>} />
-              <Route path="/multi-agent" element={<Layout><MultiAgentView /></Layout>} />
+              <Route path="/orchestration" element={<Layout><AgentOrchestrationPage /></Layout>} />
+              <Route path="/instances/:workflowId" element={<Layout><InstancesPage /></Layout>} />
+              <Route path="/multi-instance" element={<Layout><MultiInstanceView /></Layout>} />
             </Routes>
           </AuthProvider>
         </Router>

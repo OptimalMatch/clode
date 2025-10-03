@@ -421,5 +421,88 @@ export const authApi = {
   },
 };
 
+// Agent Orchestration API
+export interface OrchestrationAgent {
+  name: string;
+  system_prompt: string;
+  role: 'manager' | 'worker' | 'specialist' | 'moderator';
+}
+
+export interface SequentialPipelineRequest {
+  task: string;
+  agents: OrchestrationAgent[];
+  agent_sequence: string[];
+  model?: string;
+}
+
+export interface DebateRequest {
+  topic: string;
+  agents: OrchestrationAgent[];
+  participant_names: string[];
+  rounds: number;
+  model?: string;
+}
+
+export interface HierarchicalRequest {
+  task: string;
+  manager: OrchestrationAgent;
+  workers: OrchestrationAgent[];
+  worker_names: string[];
+  model?: string;
+}
+
+export interface ParallelAggregateRequest {
+  task: string;
+  agents: OrchestrationAgent[];
+  agent_names: string[];
+  aggregator?: OrchestrationAgent | null;
+  aggregator_name?: string | null;
+  model?: string;
+}
+
+export interface DynamicRoutingRequest {
+  task: string;
+  router: OrchestrationAgent;
+  specialists: OrchestrationAgent[];
+  specialist_names: string[];
+  model?: string;
+}
+
+export interface OrchestrationResult {
+  pattern: string;
+  execution_id: string;
+  status: string;
+  result: any;
+  duration_ms: number;
+  created_at: string;
+}
+
+export const orchestrationApi = {
+  executeSequential: async (request: SequentialPipelineRequest): Promise<OrchestrationResult> => {
+    const response = await api.post('/api/orchestration/sequential', request);
+    return response.data;
+  },
+
+  executeDebate: async (request: DebateRequest): Promise<OrchestrationResult> => {
+    const response = await api.post('/api/orchestration/debate', request);
+    return response.data;
+  },
+
+  executeHierarchical: async (request: HierarchicalRequest): Promise<OrchestrationResult> => {
+    const response = await api.post('/api/orchestration/hierarchical', request);
+    return response.data;
+  },
+
+  executeParallel: async (request: ParallelAggregateRequest): Promise<OrchestrationResult> => {
+    const response = await api.post('/api/orchestration/parallel', request);
+    return response.data;
+  },
+
+  executeRouting: async (request: DynamicRoutingRequest): Promise<OrchestrationResult> => {
+    const response = await api.post('/api/orchestration/routing', request);
+    return response.data;
+  },
+};
+
 // Export the base axios instance as default for direct API calls
 export default api;

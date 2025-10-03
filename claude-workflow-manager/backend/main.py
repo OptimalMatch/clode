@@ -32,7 +32,10 @@ from models import (
     ClaudeProfileSelection, ClaudeProfileSelectionRequest,
     ClaudeProfileSelectionResponse, User, UserCreate, UserLogin, 
     UserResponse, TokenResponse, ModelInfo, AvailableModelsResponse,
-    ModelSettingsRequest, ModelSettingsResponse
+    ModelSettingsRequest, ModelSettingsResponse, OrchestrationPattern,
+    AgentRole, OrchestrationAgent, SequentialPipelineRequest,
+    DebateRequest, HierarchicalRequest, ParallelAggregateRequest,
+    DynamicRoutingRequest, OrchestrationResult
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -40,6 +43,7 @@ from prompt_file_manager import PromptFileManager
 from agent_discovery import AgentDiscovery
 from auth_utils import hash_password, verify_password, create_access_token, decode_access_token
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from agent_orchestrator import MultiAgentOrchestrator, AgentRole as OrchestratorAgentRole
 
 # Ensure ANTHROPIC_API_KEY is set for claude-cli
 claude_api_key = os.getenv("CLAUDE_API_KEY")
@@ -2532,6 +2536,256 @@ async def set_default_model_setting(request: ModelSettingsRequest):
             raise HTTPException(status_code=500, detail="Failed to update default model")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to set default model: {str(e)}")
+
+# Agent Orchestration Endpoints
+@app.post(
+    "/api/orchestration/sequential",
+    response_model=OrchestrationResult,
+    summary="Execute Sequential Pipeline",
+    description="Execute a task through a sequential pipeline of agents where each agent's output becomes the next agent's input.",
+    tags=["Agent Orchestration"]
+)
+async def execute_sequential_pipeline(request: SequentialPipelineRequest):
+    """Execute sequential pipeline orchestration pattern."""
+    try:
+        # Get API key and model
+        api_key = os.getenv("CLAUDE_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="CLAUDE_API_KEY not configured")
+        
+        model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+        
+        # Create orchestrator
+        orchestrator = MultiAgentOrchestrator(api_key=api_key, model=model)
+        
+        # Add agents
+        for agent in request.agents:
+            orchestrator.add_agent(
+                name=agent.name,
+                system_prompt=agent.system_prompt,
+                role=OrchestratorAgentRole(agent.role.value)
+            )
+        
+        # Execute pipeline
+        start_time = datetime.now()
+        result = orchestrator.sequential_pipeline(request.task, request.agent_sequence)
+        end_time = datetime.now()
+        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        execution_id = str(uuid.uuid4())
+        
+        return OrchestrationResult(
+            pattern="sequential",
+            execution_id=execution_id,
+            status="completed",
+            result=result,
+            duration_ms=duration_ms,
+            created_at=start_time
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sequential pipeline execution failed: {str(e)}")
+
+@app.post(
+    "/api/orchestration/debate",
+    response_model=OrchestrationResult,
+    summary="Execute Debate Pattern",
+    description="Execute a debate where agents discuss and argue different perspectives on a topic.",
+    tags=["Agent Orchestration"]
+)
+async def execute_debate(request: DebateRequest):
+    """Execute debate orchestration pattern."""
+    try:
+        api_key = os.getenv("CLAUDE_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="CLAUDE_API_KEY not configured")
+        
+        model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+        
+        orchestrator = MultiAgentOrchestrator(api_key=api_key, model=model)
+        
+        # Add agents
+        for agent in request.agents:
+            orchestrator.add_agent(
+                name=agent.name,
+                system_prompt=agent.system_prompt,
+                role=OrchestratorAgentRole(agent.role.value)
+            )
+        
+        # Execute debate
+        start_time = datetime.now()
+        result = orchestrator.debate(request.topic, request.participant_names, request.rounds)
+        end_time = datetime.now()
+        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        execution_id = str(uuid.uuid4())
+        
+        return OrchestrationResult(
+            pattern="debate",
+            execution_id=execution_id,
+            status="completed",
+            result=result,
+            duration_ms=duration_ms,
+            created_at=start_time
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Debate execution failed: {str(e)}")
+
+@app.post(
+    "/api/orchestration/hierarchical",
+    response_model=OrchestrationResult,
+    summary="Execute Hierarchical Pattern",
+    description="Execute hierarchical orchestration where a manager delegates tasks to worker agents.",
+    tags=["Agent Orchestration"]
+)
+async def execute_hierarchical(request: HierarchicalRequest):
+    """Execute hierarchical orchestration pattern."""
+    try:
+        api_key = os.getenv("CLAUDE_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="CLAUDE_API_KEY not configured")
+        
+        model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+        
+        orchestrator = MultiAgentOrchestrator(api_key=api_key, model=model)
+        
+        # Add manager
+        orchestrator.add_agent(
+            name=request.manager.name,
+            system_prompt=request.manager.system_prompt,
+            role=OrchestratorAgentRole(request.manager.role.value)
+        )
+        
+        # Add workers
+        for worker in request.workers:
+            orchestrator.add_agent(
+                name=worker.name,
+                system_prompt=worker.system_prompt,
+                role=OrchestratorAgentRole(worker.role.value)
+            )
+        
+        # Execute hierarchical
+        start_time = datetime.now()
+        result = orchestrator.hierarchical_execution(request.task, request.manager.name, request.worker_names)
+        end_time = datetime.now()
+        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        execution_id = str(uuid.uuid4())
+        
+        return OrchestrationResult(
+            pattern="hierarchical",
+            execution_id=execution_id,
+            status="completed",
+            result=result,
+            duration_ms=duration_ms,
+            created_at=start_time
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Hierarchical execution failed: {str(e)}")
+
+@app.post(
+    "/api/orchestration/parallel",
+    response_model=OrchestrationResult,
+    summary="Execute Parallel Aggregation",
+    description="Execute parallel aggregation where multiple agents work independently on the same task.",
+    tags=["Agent Orchestration"]
+)
+async def execute_parallel_aggregate(request: ParallelAggregateRequest):
+    """Execute parallel aggregation orchestration pattern."""
+    try:
+        api_key = os.getenv("CLAUDE_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="CLAUDE_API_KEY not configured")
+        
+        model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+        
+        orchestrator = MultiAgentOrchestrator(api_key=api_key, model=model)
+        
+        # Add agents
+        for agent in request.agents:
+            orchestrator.add_agent(
+                name=agent.name,
+                system_prompt=agent.system_prompt,
+                role=OrchestratorAgentRole(agent.role.value)
+            )
+        
+        # Add aggregator if provided
+        if request.aggregator:
+            orchestrator.add_agent(
+                name=request.aggregator.name,
+                system_prompt=request.aggregator.system_prompt,
+                role=OrchestratorAgentRole(request.aggregator.role.value)
+            )
+        
+        # Execute parallel aggregation
+        start_time = datetime.now()
+        result = orchestrator.parallel_aggregate(request.task, request.agent_names, request.aggregator_name)
+        end_time = datetime.now()
+        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        execution_id = str(uuid.uuid4())
+        
+        return OrchestrationResult(
+            pattern="parallel",
+            execution_id=execution_id,
+            status="completed",
+            result=result,
+            duration_ms=duration_ms,
+            created_at=start_time
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Parallel aggregation execution failed: {str(e)}")
+
+@app.post(
+    "/api/orchestration/routing",
+    response_model=OrchestrationResult,
+    summary="Execute Dynamic Routing",
+    description="Execute dynamic routing where a router agent selects the most appropriate specialist(s) for the task.",
+    tags=["Agent Orchestration"]
+)
+async def execute_dynamic_routing(request: DynamicRoutingRequest):
+    """Execute dynamic routing orchestration pattern."""
+    try:
+        api_key = os.getenv("CLAUDE_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="CLAUDE_API_KEY not configured")
+        
+        model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+        
+        orchestrator = MultiAgentOrchestrator(api_key=api_key, model=model)
+        
+        # Add router
+        orchestrator.add_agent(
+            name=request.router.name,
+            system_prompt=request.router.system_prompt,
+            role=OrchestratorAgentRole(request.router.role.value)
+        )
+        
+        # Add specialists
+        for specialist in request.specialists:
+            orchestrator.add_agent(
+                name=specialist.name,
+                system_prompt=specialist.system_prompt,
+                role=OrchestratorAgentRole(specialist.role.value)
+            )
+        
+        # Execute dynamic routing
+        start_time = datetime.now()
+        result = orchestrator.dynamic_routing(request.task, request.router.name, request.specialist_names)
+        end_time = datetime.now()
+        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        execution_id = str(uuid.uuid4())
+        
+        return OrchestrationResult(
+            pattern="dynamic_routing",
+            execution_id=execution_id,
+            status="completed",
+            result=result,
+            duration_ms=duration_ms,
+            created_at=start_time
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Dynamic routing execution failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

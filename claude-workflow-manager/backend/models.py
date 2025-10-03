@@ -397,3 +397,84 @@ class ModelSettingsResponse(BaseModel):
     """Response model for model settings"""
     default_model_id: str
     message: str
+
+# Agent Orchestration Models
+class OrchestrationPattern(str, Enum):
+    SEQUENTIAL = "sequential"
+    DEBATE = "debate"
+    HIERARCHICAL = "hierarchical"
+    PARALLEL = "parallel"
+    DYNAMIC_ROUTING = "dynamic_routing"
+
+class AgentRole(str, Enum):
+    MANAGER = "manager"
+    WORKER = "worker"
+    SPECIALIST = "specialist"
+    MODERATOR = "moderator"
+
+class OrchestrationAgent(BaseModel):
+    """Agent definition for orchestration"""
+    name: str
+    system_prompt: str
+    role: AgentRole = AgentRole.WORKER
+
+class SequentialPipelineRequest(BaseModel):
+    """Request for sequential pipeline execution"""
+    task: str
+    agents: List[OrchestrationAgent]
+    agent_sequence: List[str]  # Order of agent names
+    model: Optional[str] = None
+
+class DebateRequest(BaseModel):
+    """Request for debate pattern execution"""
+    topic: str
+    agents: List[OrchestrationAgent]
+    participant_names: List[str]
+    rounds: int = 3
+    model: Optional[str] = None
+
+class HierarchicalRequest(BaseModel):
+    """Request for hierarchical execution"""
+    task: str
+    manager: OrchestrationAgent
+    workers: List[OrchestrationAgent]
+    worker_names: List[str]
+    model: Optional[str] = None
+
+class ParallelAggregateRequest(BaseModel):
+    """Request for parallel aggregation"""
+    task: str
+    agents: List[OrchestrationAgent]
+    agent_names: List[str]
+    aggregator: Optional[OrchestrationAgent] = None
+    aggregator_name: Optional[str] = None
+    model: Optional[str] = None
+
+class DynamicRoutingRequest(BaseModel):
+    """Request for dynamic routing"""
+    task: str
+    router: OrchestrationAgent
+    specialists: List[OrchestrationAgent]
+    specialist_names: List[str]
+    model: Optional[str] = None
+
+class OrchestrationResult(BaseModel):
+    """Result from orchestration execution"""
+    pattern: str
+    execution_id: str
+    status: str
+    result: Dict[str, Any]
+    duration_ms: int
+    created_at: datetime
+
+class OrchestrationExecution(BaseModel):
+    """Orchestration execution record"""
+    id: Optional[str] = None
+    pattern: OrchestrationPattern
+    request_data: Dict[str, Any]
+    result_data: Dict[str, Any]
+    status: str
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_ms: Optional[int] = None
+    error: Optional[str] = None
