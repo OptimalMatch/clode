@@ -16,26 +16,49 @@ if [ "$(id -u)" -eq 0 ] && [ -S /var/run/docker.sock ]; then
     DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
     echo "📊 Docker socket GID: $DOCKER_SOCK_GID"
     
-    # Create docker group with matching GID if it doesn't exist
-    if ! getent group $DOCKER_SOCK_GID > /dev/null; then
-        groupadd -g $DOCKER_SOCK_GID docker 2>/dev/null || true
+    # Check if a group with this GID already exists
+    DOCKER_GROUP_NAME=$(getent group $DOCKER_SOCK_GID | cut -d: -f1)
+    
+    if [ -z "$DOCKER_GROUP_NAME" ]; then
+        # No group exists with this GID, need to create one
+        echo "📝 Creating group for Docker socket GID $DOCKER_SOCK_GID..."
+        
+        # Try to create a group named "docker" with the socket GID
+        if groupadd -g $DOCKER_SOCK_GID docker 2>/dev/null; then
+            DOCKER_GROUP_NAME="docker"
+            echo "✅ Created docker group with GID $DOCKER_SOCK_GID"
+        else
+            # "docker" name might be taken, try "dockerhost"
+            if groupadd -g $DOCKER_SOCK_GID dockerhost 2>/dev/null; then
+                DOCKER_GROUP_NAME="dockerhost"
+                echo "✅ Created dockerhost group with GID $DOCKER_SOCK_GID"
+            else
+                # Last resort: use a unique name
+                DOCKER_GROUP_NAME="dockersock$DOCKER_SOCK_GID"
+                groupadd -g $DOCKER_SOCK_GID $DOCKER_GROUP_NAME 2>/dev/null || {
+                    echo "❌ Failed to create group with GID $DOCKER_SOCK_GID"
+                    exit 1
+                }
+                echo "✅ Created $DOCKER_GROUP_NAME group with GID $DOCKER_SOCK_GID"
+            fi
+        fi
+    else
+        echo "✅ Found existing group '$DOCKER_GROUP_NAME' with GID $DOCKER_SOCK_GID"
     fi
     
-    # Add claude user to the docker group with the correct GID
-    usermod -aG $DOCKER_SOCK_GID claude 2>/dev/null || true
+    echo "🔍 Docker group name: $DOCKER_GROUP_NAME (GID: $DOCKER_SOCK_GID)"
+    
+    # Add claude user to the docker group
+    usermod -aG $DOCKER_GROUP_NAME claude 2>/dev/null || {
+        echo "❌ Failed to add claude user to $DOCKER_GROUP_NAME group"
+        exit 1
+    }
+    echo "✅ Added claude user to $DOCKER_GROUP_NAME group"
     
     # Also ensure claude user owns necessary directories
     chown -R claude:claude /app/claude_profiles /app/terminal_sessions /home/claude 2>/dev/null || true
     
     echo "✅ Docker socket permissions configured"
-    
-    # Get the docker group name from the GID
-    DOCKER_GROUP_NAME=$(getent group $DOCKER_SOCK_GID | cut -d: -f1)
-    if [ -z "$DOCKER_GROUP_NAME" ]; then
-        echo "⚠️ Warning: Could not find group name for GID $DOCKER_SOCK_GID"
-        DOCKER_GROUP_NAME="docker"
-    fi
-    echo "🔍 Docker group name: $DOCKER_GROUP_NAME"
     
     # Switch to claude user with the docker group activated using sg (set group)
     # This immediately activates the group membership without needing to re-login
