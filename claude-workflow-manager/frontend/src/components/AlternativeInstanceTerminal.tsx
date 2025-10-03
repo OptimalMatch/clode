@@ -324,15 +324,19 @@ const AlternativeInstanceTerminal: React.FC<AlternativeInstanceTerminalProps> = 
         {/* Usage Instructions */}
         <Alert severity="info" sx={{ mt: 2 }}>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            <strong>💡 Real-Time Terminal:</strong> Fast xterm.js terminal with conversation history.
+            <strong>🐳 Backend Container Access:</strong> This terminal connects directly to the backend container 
+            via <code>docker exec</code>, giving you full access to instance working directories.
           </Typography>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            <strong>📁 File Access:</strong> Git repo should be mounted at <code>/app/project</code>. 
-            Check the terminal output above to confirm.
+            <strong>📁 File Access:</strong> Instance git repos are in <code>/tmp/tmp*</code> directories. 
+            The terminal will show recent directories when you connect.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            <strong>💡 Tip:</strong> Use <code>cd /tmp/tmp*</code> (with tab completion) to navigate to your instance's working directory.
           </Typography>
           <Typography variant="body2">
             <strong>🔄 Alternative:</strong> Use <strong>Rich Terminal</strong> for the formatted view 
-            with markdown rendering and interactive features.
+            with markdown rendering, TODO sidebar, and streaming output.
           </Typography>
         </Alert>
       </DialogContent>

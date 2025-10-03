@@ -110,6 +110,7 @@ services:
       - terminal_sessions:/app/terminal_sessions  # Session working directories
       - ~/.claude:/root/.claude  # Fallback to host Claude auth
       - ${PWD}/..:/app/project  # Mount the actual project directory (parent of claude-workflow-manager)
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker socket for docker exec access to backend
     networks:
       - claude-network
       - default  # Add default network for internet access
