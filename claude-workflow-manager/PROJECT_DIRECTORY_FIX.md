@@ -1,136 +1,143 @@
-# Project Directory Fix for Claude Terminal
+# Project Directory Fix
 
 ## Problem
-Both the Claude terminal interface and Claude Code instances were previously working in temporary directories (`/tmp/tmpth5hlmel`) instead of the actual project directory, causing issues with git operations like pushing to origin.
+Claude Code instances were starting in empty temporary directories instead of the actual project directory because:
+
+1. **Wrong path**: `PROJECT_ROOT_DIR` was set to `/app/project` but the actual git repository is at `/app/project/claude-workflow-manager`
+2. **Permission issues**: The mounted directory had wrong ownership (UID 1003:1004) and wasn't accessible by the `claude` user
 
 ## Solution
-Modified both the terminal server and Claude Code Manager to use the actual project directory as the working directory instead of creating isolated temporary session directories.
 
-## Changes Made
+### 1. Updated PROJECT_ROOT_DIR Environment Variable
 
-### 1. Docker Compose Updates
-- Added `PROJECT_ROOT_DIR` environment variable to both `docker-compose.yml` and `docker-compose.dev.yml`
-- Added volume mount `${PWD}/..:/app/project` to mount the host project directory into the container
-- **Important**: Uses `${PWD}/..` because docker-compose runs from the `claude-workflow-manager` subdirectory, but the `.git` directory is at the repository root
-
-### 2. Terminal Server Updates
-- Added `self.project_root_dir` configuration option (defaults to `/app/project`)
-- Modified `_initialize_terminal_session()` to use the project root directory instead of creating temporary session directories
-- Added fallback to session-specific directories if project root doesn't exist
-- Enhanced logging to show which directory is being used
-
-### 3. Claude Code Manager Updates
-- Added `self.project_root_dir` configuration option (defaults to `/app/project`)
-- Modified `spawn_instance()` method to use existing project directory when available
-- Added git repository verification to ensure the project directory contains the expected repository
-- Falls back to temporary directory cloning if project directory doesn't exist or isn't the right repository
-- **Added automatic SSH key setup**: Claude Code instances now automatically get SSH keys copied from `/app/ssh_keys`
-- **Added SSH config generation**: Automatically creates `~/.ssh/config` for seamless git operations
-- Updated all references from `temp_dir` to `working_dir` throughout the codebase
-
-### 4. Backend Container Updates  
-- Added `PROJECT_ROOT_DIR` environment variable to backend container
-- Added volume mount `${PWD}:/app/project` to both docker-compose files
-- Updated backend Dockerfile to create `/app/project` directory
-
-### 5. Dockerfile Updates
-- Created `/app/project` directory in both terminal and backend containers
-- Set proper permissions for the project directory
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PROJECT_ROOT_DIR` | `/app/project` | Path to the project directory inside the container |
-
-## Usage
-
-### Development
-```bash
-cd claude-workflow-manager
-docker-compose -f docker-compose.dev.yml up --build claude-terminal
+Changed from:
+```yaml
+PROJECT_ROOT_DIR: ${PROJECT_ROOT_DIR:-/app/project}
 ```
 
-### Production
-```bash
-cd claude-workflow-manager
-docker-compose up --build claude-terminal
+To:
+```yaml
+PROJECT_ROOT_DIR: ${PROJECT_ROOT_DIR:-/app/project/claude-workflow-manager}
 ```
 
-## Benefits
+This was updated in:
+- `docker-compose.yml` (backend and claude-terminal services)
+- `docker-compose.dev.yml` (backend and claude-terminal services)
 
-1. **Real Git Operations**: Claude can now perform actual git operations on the real repository
-2. **File Persistence**: Changes made by Claude persist in the actual project files  
-3. **Automatic SSH Key Setup**: SSH keys are automatically copied and configured for each Claude Code instance
-4. **Seamless Git Authentication**: No need to manually ask Claude to copy SSH keys - it's done automatically
-5. **No Temporary Directories**: No more confusion with temporary directories that don't contain the real project
+### 2. Added Permission Fix to Entrypoint Script
 
-## Testing
+The entrypoint script now fixes permissions before starting Docker daemon:
 
-After rebuilding and restarting the containers, Claude should now:
-- **Automatically have SSH keys configured** for git operations (no manual setup required)
-- Have access to the real git repository (either project directory or cloned)
-- **Be able to push changes to origin automatically** - no more "Permission denied" errors
-- Work with actual project files instead of copies
-- Show seamless git operations without user intervention
+```bash
+# Fix permissions for project directory if it exists
+if [ -d "/app/project" ]; then
+    echo "🔧 Fixing permissions for /app/project..."
+    chown -R claude:claude /app/project 2>/dev/null || true
+    chmod -R u+rwX /app/project 2>/dev/null || true
+fi
+```
 
-## Troubleshooting
+This ensures:
+- The `claude` user owns the project directory
+- Files are readable/writable by the `claude` user
+- Directories are executable (searchable) by the `claude` user
 
-### Issue: "Project directory /app/project is not a git repository"
+## How to Apply
 
-This error indicates that the volume mount isn't working correctly. Here are the debugging steps:
+### Rebuild and Restart
 
-1. **Check the containers are using the updated configuration:**
-   ```bash
-   docker-compose down
-   docker-compose up --build
-   ```
+```bash
+cd claude-workflow-manager
 
-2. **Verify the volume mount is working:**
-   ```bash
-   # Check if the project directory is mounted correctly
-   docker exec -it claude-workflow-backend ls -la /app/project
-   
-   # Should show your project files, not an empty directory
-   ```
+# Stop services
+docker-compose down
 
-3. **Check the logs for debugging information:**
-   ```bash
-   docker logs claude-workflow-backend
-   ```
-   Look for lines like:
-   ```
-   🔧 ClaudeCodeManager initialized:
-      Project root directory: /app/project
-      Project directory exists: True
-   ```
+# Rebuild with the fixes
+docker-compose build --no-cache backend claude-terminal
 
-4. **Manual verification inside container:**
-   ```bash
-   docker exec -it claude-workflow-backend bash
-   ls -la /app/project
-   pwd
-   cd /app/project && git status
-   ```
+# Start services
+docker-compose up -d
 
-### Issue: Volume mount not working on Windows
+# Watch logs to see permission fix
+docker logs -f claude-workflow-backend
+```
 
-If you're on Windows, make sure:
-- Docker Desktop is running
-- The current directory (`${PWD}`) is being resolved correctly
-- Try using the full path instead of `${PWD}/..`:
-  ```yaml
-  volumes:
-    - C:/path/to/your/project:/app/project  # Point to the repository root, not claude-workflow-manager
-  ```
- 
-### Issue: Wrong directory mounted
+### Expected Output
 
-If you see project files but no `.git` directory, check:
-- The volume mount should point to the repository root (where `.git` exists)
-- If running docker-compose from `claude-workflow-manager/`, use `${PWD}/..:/app/project`
-- If running from repository root, use `${PWD}:/app/project`
+You should see:
+```
+🔧 Fixing permissions for /app/project...
+Starting Docker daemon...
+Docker daemon is ready
+Switching to claude user and starting application...
+INFO:     Started server process
+```
 
-## Backward Compatibility
+### Verify Project Directory
 
-The system still falls back to temporary directories and cloning if the project root directory is not found, ensuring compatibility with existing deployments.
+```bash
+# Check directory is accessible
+docker exec claude-workflow-backend ls -la /app/project/claude-workflow-manager/
+
+# Should show files owned by claude:claude
+
+# Verify git repository is detected
+docker exec claude-workflow-backend ls -la /app/project/claude-workflow-manager/.git/
+
+# Should show .git directory exists
+```
+
+## Testing with Claude Code
+
+After restarting, when you create a new Claude Code instance, it should:
+
+1. ✅ Detect the existing git repository at `/app/project/claude-workflow-manager`
+2. ✅ Use that directory instead of creating a temp directory
+3. ✅ Have access to all your project files
+4. ✅ Be able to run tests, build, and modify files
+
+Example output from Claude Code logs:
+```
+🔍 DEBUG: Checking project directory: /app/project/claude-workflow-manager
+🔍 DEBUG: Directory exists: True
+🔍 DEBUG: Is directory: True
+🔍 DEBUG: Directory contents count: 10
+🔍 DEBUG: Git directory (.git) exists: True
+📁 Using existing project directory: /app/project/claude-workflow-manager
+✅ Git remote matches expected repository
+```
+
+## Volume Mount Structure
+
+The volume mount structure is:
+```
+Host:                               Container:
+<parent-of-claude-workflow-manager> → /app/project/
+  └─ claude-workflow-manager/       →   └─ /app/project/claude-workflow-manager/
+       └─ .git/                     →        └─ .git/
+       └─ backend/                  →        └─ backend/
+       └─ frontend/                 →        └─ frontend/
+       └─ ...                       →        └─ ...
+```
+
+## Files Modified
+
+1. **claude-workflow-manager/backend/Dockerfile.base** - Added permission fix to entrypoint
+2. **claude-workflow-manager/backend/Dockerfile.terminal.base** - Added permission fix to entrypoint
+3. **claude-workflow-manager/docker-compose.yml** - Updated PROJECT_ROOT_DIR path
+4. **claude-workflow-manager/docker-compose.dev.yml** - Updated PROJECT_ROOT_DIR path
+
+## Why This Matters
+
+Without this fix:
+- ❌ Claude Code starts in empty `/tmp/tmpXXXXXX` directory
+- ❌ No access to project files
+- ❌ Can't run tests or build
+- ❌ Has to clone repository from scratch each time
+
+With this fix:
+- ✅ Claude Code starts in your actual project directory
+- ✅ Full access to all files
+- ✅ Can run tests, build, and modify files
+- ✅ Changes persist across sessions
+- ✅ Works with existing git repository

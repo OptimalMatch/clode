@@ -128,10 +128,9 @@ RUN pip install --no-cache-dir \
     python-multipart
 
 # Configure Docker daemon for DinD
-# Note: Using 'vfs' storage driver instead of 'overlay2' because overlay2 
-# doesn't work well in Docker-in-Docker without special kernel support
+# Note: Using 'fuse-overlayfs' for better performance than vfs while maintaining DinD compatibility
 RUN mkdir -p /etc/docker && \
-    echo '{\n  "storage-driver": "vfs",\n  "log-driver": "json-file",\n  "log-opts": {\n    "max-size": "10m",\n    "max-file": "3"\n  }\n}' > /etc/docker/daemon.json
+    echo '{\n  "storage-driver": "fuse-overlayfs",\n  "log-driver": "json-file",\n  "log-opts": {\n    "max-size": "10m",\n    "max-file": "3"\n  }\n}' > /etc/docker/daemon.json
 
 # Create non-root user for better security
 RUN useradd -m -s /bin/bash claude && \
@@ -144,6 +143,13 @@ RUN useradd -m -s /bin/bash claude && \
 # Create Docker startup script that runs dockerd as root, then switches to claude user
 RUN echo '#!/bin/bash\n\
 set -e\n\
+\n\
+# Fix permissions for project directory if it exists\n\
+if [ -d "/app/project" ]; then\n\
+    echo "🔧 Fixing permissions for /app/project..."\n\
+    chown -R claude:claude /app/project 2>/dev/null || true\n\
+    chmod -R u+rwX /app/project 2>/dev/null || true\n\
+fi\n\
 \n\
 # Start Docker daemon in background as root (configuration from /etc/docker/daemon.json)\n\
 echo "Starting Docker daemon..."\n\
