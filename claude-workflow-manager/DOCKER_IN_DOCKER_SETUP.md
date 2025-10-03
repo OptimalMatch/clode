@@ -128,10 +128,16 @@ The `privileged: true` flag is essential for Docker-in-Docker to work properly.
 
 **Cause:** Invalid Docker daemon configuration option in daemon.json.
 
-**Solution:** Remove the invalid `storage-opts` from daemon.json. The correct configuration is:
+**Solution:** Remove the invalid `storage-opts` from daemon.json.
+
+### Error: "failed to mount overlay: invalid argument" or "driver not supported: overlay2"
+
+**Cause:** The overlay2 storage driver doesn't work well in Docker-in-Docker without special kernel support.
+
+**Solution:** Use the `vfs` storage driver instead. The correct daemon.json configuration is:
 ```json
 {
-  "storage-driver": "overlay2",
+  "storage-driver": "vfs",
   "log-driver": "json-file",
   "log-opts": {
     "max-size": "10m",
@@ -139,6 +145,8 @@ The `privileged: true` flag is essential for Docker-in-Docker to work properly.
   }
 }
 ```
+
+**Note:** The `vfs` driver is slower than `overlay2` but works reliably in DinD scenarios. For production with heavy Docker usage, consider using a dedicated Docker host instead of DinD.
 
 ### Error: "Cannot connect to the Docker daemon"
 
