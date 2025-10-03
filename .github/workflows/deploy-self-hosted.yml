@@ -267,6 +267,13 @@ jobs:
           echo "🚀 Using fast deployment with pre-built base images..."
           export GITHUB_REPOSITORY_OWNER="$REPO_OWNER_LOWERCASE"
           export BASE_IMAGE_TAG="$BASE_IMAGE_TAG"
+          
+          # Pull the latest base images from registry
+          echo "📥 Pulling latest base images..."
+          docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-backend-base:$BASE_IMAGE_TAG" || true
+          docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-terminal-base:$BASE_IMAGE_TAG" || true
+          docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-frontend-base:$BASE_IMAGE_TAG" || true
+          
           docker compose -f docker-compose.yml -f docker-compose.fast.yml build --parallel
           docker compose -f docker-compose.yml -f docker-compose.fast.yml up -d
         else
