@@ -60,8 +60,8 @@ function App() {
               <Route path="/ssh-keys" element={<Layout><SSHKeysPage /></Layout>} />
               <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
               <Route path="/orchestration" element={<Layout><AgentOrchestrationPage /></Layout>} />
-              <Route path="/instances/:workflowId" element={<Layout><AgentsPage /></Layout>} />
-              <Route path="/multi-instance" element={<Layout><MultiAgentView /></Layout>} />
+              <Route path="/agents/:workflowId" element={<Layout><AgentsPage /></Layout>} />
+              <Route path="/multi-agent" element={<Layout><MultiAgentView /></Layout>} />
             </Routes>
           </AuthProvider>
         </Router>
