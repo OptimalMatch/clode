@@ -101,6 +101,13 @@ RUN useradd -m -s /bin/bash claude && \
 RUN echo '#!/bin/bash\n\
 set -e\n\
 \n\
+# Fix permissions for project directory if it exists\n\
+if [ -d "/app/project" ]; then\n\
+    echo "🔧 Fixing permissions for /app/project..."\n\
+    chown -R claude:claude /app/project 2>/dev/null || true\n\
+    chmod -R u+rwX /app/project 2>/dev/null || true\n\
+fi\n\
+\n\
 # Start Docker daemon in background as root (configuration from /etc/docker/daemon.json)\n\
 echo "Starting Docker daemon..."\n\
 dockerd &\n\
