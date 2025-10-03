@@ -8,7 +8,6 @@ websockets==12.0
 redis==5.0.1
 celery==5.3.4
 claude-agent-sdk>=0.3.0
-claude-code-sdk==0.0.19
 gitpython==3.1.41
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4

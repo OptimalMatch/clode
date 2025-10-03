@@ -3,7 +3,7 @@ import os
 import json
 from typing import Dict, Optional, List
 from fastapi import WebSocket
-from claude_code_sdk import query
+from claude_agent_sdk import query
 import subprocess
 import tempfile
 import shutil
