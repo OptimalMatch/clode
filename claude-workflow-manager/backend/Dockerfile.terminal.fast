@@ -17,5 +17,7 @@ RUN chown -R claude:claude /app
 # Note: Container starts as root to fix Docker socket permissions,
 # then startup script switches to claude user
 
-# Use the startup script which handles Docker socket permissions
+# Override base image ENTRYPOINT and use our startup script
+# This is critical - the base image has an old entrypoint that tries to start Docker daemon
+ENTRYPOINT []
 CMD ["/app/terminal_startup.sh"]
