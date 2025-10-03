@@ -4,8 +4,12 @@ from datetime import datetime, timedelta
 from typing import Optional
 import os
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing with explicit bcrypt configuration
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=12  # Explicit rounds configuration
+)
 
 # JWT configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production-please-use-openssl-rand")
@@ -18,14 +22,31 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def hash_password(password: str) -> str:
     """Hash a plain password with bcrypt (max 72 bytes)"""
-    # Bcrypt only uses the first 72 bytes of the password
-    # Truncate if necessary to avoid errors
-    password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        # Truncate to 72 bytes and decode back to string
-        password = password_bytes[:72].decode('utf-8', errors='ignore')
-    
-    return pwd_context.hash(password)
+    try:
+        # Ensure password is a string
+        if not isinstance(password, str):
+            raise ValueError(f"Password must be a string, got {type(password)}")
+        
+        # Bcrypt only uses the first 72 bytes of the password
+        # Truncate if necessary to avoid errors
+        password_bytes = password.encode('utf-8')
+        print(f"🔐 Hashing password: {len(password)} chars, {len(password_bytes)} bytes")
+        
+        if len(password_bytes) > 72:
+            # Truncate to 72 bytes and decode back to string
+            password = password_bytes[:72].decode('utf-8', errors='ignore')
+            print(f"⚠️  Truncated password to 72 bytes")
+        
+        # Hash the password
+        hashed = pwd_context.hash(password)
+        print(f"✅ Password hashed successfully")
+        return hashed
+        
+    except Exception as e:
+        print(f"❌ Password hashing failed with error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token"""
