@@ -124,8 +124,8 @@ RUN chown -R claude:claude /app /home/claude && \
     chown -R claude:claude /app/claude_profiles /app/terminal_sessions /app/project && \
     chmod 777 /app/project
 
-# Switch to claude user for runtime
-USER claude
+# Note: Don't switch to USER claude here - the startup script needs to run as root
+# to fix Docker socket permissions, then it will switch to claude user
 
 # Environment variables
 ENV PYTHONPATH=/app

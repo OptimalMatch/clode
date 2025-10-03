@@ -9,9 +9,51 @@ echo "📁 Terminal Sessions Directory: ${TERMINAL_SESSIONS_DIR:-/app/terminal_s
 echo "🔧 Claude Max Plan Mode: ${USE_CLAUDE_MAX_PLAN:-false}"
 echo "🌐 Server Port: ${TERMINAL_SERVER_PORT:-8006}"
 
-# Ensure directories exist (permissions already set in Dockerfile)
+# Check if running as root and Docker socket exists
+if [ "$(id -u)" -eq 0 ] && [ -S /var/run/docker.sock ]; then
+    echo "🔧 Fixing Docker socket permissions for claude user..."
+    # Get the docker group ID from the socket
+    DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
+    echo "📊 Docker socket GID: $DOCKER_SOCK_GID"
+    
+    # Create docker group with matching GID if it doesn't exist
+    if ! getent group $DOCKER_SOCK_GID > /dev/null; then
+        groupadd -g $DOCKER_SOCK_GID docker 2>/dev/null || true
+    fi
+    
+    # Add claude user to the docker group with the correct GID
+    usermod -aG $DOCKER_SOCK_GID claude 2>/dev/null || true
+    
+    # Also ensure claude user owns necessary directories
+    chown -R claude:claude /app/claude_profiles /app/terminal_sessions /home/claude 2>/dev/null || true
+    
+    echo "✅ Docker socket permissions configured"
+    
+    # Switch to claude user and re-execute this script
+    echo "🔄 Switching to claude user..."
+    exec su -c "cd /app && exec $0" claude
+fi
+
+# Now running as claude user
+echo "👤 Running as user: $(whoami)"
+
+# Ensure directories exist
 mkdir -p "${CLAUDE_PROFILES_DIR:-/app/claude_profiles}"
 mkdir -p "${TERMINAL_SESSIONS_DIR:-/app/terminal_sessions}"
+
+# Verify Docker CLI access
+if command -v docker &> /dev/null; then
+    echo "🐳 Testing Docker CLI access..."
+    if docker ps > /dev/null 2>&1; then
+        echo "✅ Docker CLI access working"
+        echo "📦 Docker containers accessible: $(docker ps --format '{{.Names}}' | wc -l) running"
+    else
+        echo "⚠️ Docker CLI installed but cannot access daemon"
+        echo "💡 Instance terminal will fall back to local mode"
+    fi
+else
+    echo "ℹ️ Docker CLI not installed (optional for instance terminal)"
+fi
 
 # Check if Claude CLI is available
 echo "🔍 Checking Claude CLI installation..."
