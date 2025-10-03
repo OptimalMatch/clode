@@ -61,7 +61,7 @@ Create a new user account.
 **Validation:**
 - Username: 3-50 characters, must be unique
 - Email: Valid email format, must be unique
-- Password: Minimum 8 characters
+- Password: Minimum 8 characters, maximum 72 **bytes** (bcrypt limitation)
 
 **Error Responses:**
 - `400 Bad Request`: Invalid input or username/email already exists
@@ -306,8 +306,14 @@ openssl rand -hex 32
 
 ### Password Requirements
 
-- Minimum 8 characters (enforced by API)
-- Recommended: Include uppercase, lowercase, numbers, and special characters
+- **Minimum:** 8 characters (enforced by API)
+- **Maximum:** 72 **bytes** (bcrypt limitation)
+- **Important:** The limit is in bytes, not characters!
+  - Regular ASCII characters = 1 byte each (e.g., "abcdefg" = 7 bytes)
+  - Special characters/emojis = 2-4 bytes each (e.g., "🔥" = 4 bytes)
+  - Example: "hello🔥🔥" = 5 chars but 13 bytes (5 + 4 + 4)
+- **Recommended:** Use uppercase, lowercase, numbers, and special characters
+- **Note:** Bcrypt hashing algorithm has a 72-byte limit
 
 ### Token Security
 

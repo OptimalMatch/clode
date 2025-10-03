@@ -43,6 +43,13 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
+    // Check byte length (bcrypt limit is 72 bytes, not characters)
+    const passwordBytes = new TextEncoder().encode(password).length;
+    if (passwordBytes > 72) {
+      setError(`Password is too long (${passwordBytes} bytes). Maximum is 72 bytes. Consider using fewer special characters or emojis.`);
+      return;
+    }
+
     if (username.length < 3 || username.length > 50) {
       setError('Username must be between 3 and 50 characters');
       return;
@@ -121,7 +128,7 @@ const RegisterPage: React.FC = () => {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="new-password"
-            helperText="Minimum 8 characters"
+            helperText="Minimum 8 characters (max 72 bytes)"
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
