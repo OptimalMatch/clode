@@ -152,11 +152,33 @@ class ClaudeCodeManager:
             self._log_with_timestamp(f"❌ Error restoring Claude profile: {e}")
             raise
     
-    def _select_model(self, input_text: str) -> str:
-        """Use Claude Sonnet 4 for all requests"""
-        return "claude-sonnet-4-20250514"
+    async def _select_model(self, instance_id: str = None, workflow_id: str = None) -> str:
+        """
+        Select the appropriate LLM model based on:
+        1. Instance-specific model (highest priority)
+        2. Workflow default model
+        3. Global default model (fallback)
+        """
+        # Try instance-specific model first
+        if instance_id:
+            instance = await self.db.get_instance(instance_id)
+            if instance and instance.model:
+                self._log_with_timestamp(f"📱 Using instance-specific model: {instance.model}")
+                return instance.model
+        
+        # Try workflow default model
+        if workflow_id:
+            workflow = await self.db.get_workflow(workflow_id)
+            if workflow and workflow.default_model:
+                self._log_with_timestamp(f"📋 Using workflow default model: {workflow.default_model}")
+                return workflow.default_model
+        
+        # Fallback to global default
+        default_model = await self.db.get_default_model()
+        self._log_with_timestamp(f"🌐 Using global default model: {default_model}")
+        return default_model
     
-    def _build_claude_command(self, session_id: str, input_text: str, instance_id: str = None, is_resume: bool = False) -> tuple[list, dict]:
+    async def _build_claude_command(self, session_id: str, input_text: str, instance_id: str = None, workflow_id: str = None, is_resume: bool = False) -> tuple[list, dict]:
         """
         Build Claude CLI command with support for both API key and max plan modes
         Returns: (command_list, environment_dict)
@@ -164,8 +186,8 @@ class ClaudeCodeManager:
         # Base environment
         env = os.environ.copy()
         
-        # Select appropriate model based on task complexity
-        selected_model = self._select_model(input_text)
+        # Select appropriate model
+        selected_model = await self._select_model(instance_id=instance_id, workflow_id=workflow_id)
         
         if self.use_max_plan:
             # Max plan mode: unset API key and use JSON stream mode for proper authentication
@@ -799,7 +821,8 @@ class ClaudeCodeManager:
         elif hasattr(self, '_pending_permission_grants') and self._pending_permission_grants.get(instance_id):
             self._log_with_timestamp(f"🔑 Permission grant retry - resuming existing session {session_id}")
             retry_input = "Yes, I grant permission to use the requested tools. Please proceed with the task."
-            retry_cmd, retry_env = self._build_claude_command(session_id, retry_input, instance_id, is_resume=True)
+            workflow_id = instance_info.get("workflow_id")
+            retry_cmd, retry_env = await self._build_claude_command(session_id, retry_input, instance_id, workflow_id, is_resume=True)
             # Clear the permission grant flag
             del self._pending_permission_grants[instance_id]
         else:
@@ -814,8 +837,9 @@ class ClaudeCodeManager:
                 retry_input = input_text  # Just run the original command
             else:
                 retry_input = input_text
-                
-            retry_cmd, retry_env = self._build_claude_command(new_session_id, retry_input, instance_id, is_resume=False)
+            
+            workflow_id = instance_info.get("workflow_id")
+            retry_cmd, retry_env = await self._build_claude_command(new_session_id, retry_input, instance_id, workflow_id, is_resume=False)
         
         # Try streaming execution again with new session
         success = await self._execute_claude_streaming(retry_cmd, instance_id, retry_env, input_text)
@@ -1900,22 +1924,23 @@ class ClaudeCodeManager:
             try:
                 session_id = instance_info.get("session_id")
                 session_created = instance_info.get("session_created", False)
+                workflow_id = instance_info.get("workflow_id")
                 
                 if not session_created:
                     # First command - create session with specific ID
                     self._log_with_timestamp(f"🆕 Creating new session {session_id}")
-                    cmd, env = self._build_claude_command(session_id, input_text, instance_id, is_resume=False)
+                    cmd, env = await self._build_claude_command(session_id, input_text, instance_id, workflow_id, is_resume=False)
                     instance_info["session_created"] = True
                     # Save session ID to database for future use
                     await self.db.update_instance_session_id(instance_id, session_id)
                 elif self.use_max_plan:
                     # Max plan mode - resume existing session for context preservation
                     self._log_with_timestamp(f"🎯 Max plan mode - resuming session {session_id} (preserving context)")
-                    cmd, env = self._build_claude_command(session_id, input_text, instance_id, is_resume=True)
+                    cmd, env = await self._build_claude_command(session_id, input_text, instance_id, workflow_id, is_resume=True)
                 else:
                     # API key mode - resume existing session
                     self._log_with_timestamp(f"🔄 Resuming session {session_id}")
-                    cmd, env = self._build_claude_command(session_id, input_text, instance_id, is_resume=True)
+                    cmd, env = await self._build_claude_command(session_id, input_text, instance_id, workflow_id, is_resume=True)
                 
                 self._log_with_timestamp(f"🚀 About to execute Claude CLI command: {' '.join(cmd)}")
                 self._log_with_timestamp(f"🔍 Command length: {len(cmd)} arguments")

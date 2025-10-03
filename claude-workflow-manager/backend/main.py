@@ -31,7 +31,8 @@ from models import (
     ClaudeLoginSessionResponse, ClaudeAuthTokenRequest,
     ClaudeProfileSelection, ClaudeProfileSelectionRequest,
     ClaudeProfileSelectionResponse, User, UserCreate, UserLogin, 
-    UserResponse, TokenResponse
+    UserResponse, TokenResponse, ModelInfo, AvailableModelsResponse,
+    ModelSettingsRequest, ModelSettingsResponse
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -1144,7 +1145,8 @@ async def spawn_instance(request: SpawnInstanceRequest):
             created_at=datetime.utcnow(),
             start_sequence=start_sequence,
             end_sequence=end_sequence,
-            claude_mode=claude_mode
+            claude_mode=claude_mode,
+            model=request.model  # Store model override if provided
         )
         
         await db.create_instance(instance)
@@ -1406,6 +1408,7 @@ async def websocket_endpoint(websocket: WebSocket, instance_id: str):
 @app.post("/api/instances/{instance_id}/execute")
 async def execute_prompt(instance_id: str, data: dict):
     prompt_content = data.get("prompt")
+    model_override = data.get("model")  # Optional model override
     
     # Check if instance exists first
     instance_info = claude_manager.instances.get(instance_id)
@@ -1415,6 +1418,10 @@ async def execute_prompt(instance_id: str, data: dict):
         if not db_instance:
             raise HTTPException(status_code=404, detail="Instance not found")
     
+    # If model override is provided, update instance in database
+    if model_override:
+        await db.update_instance_model(instance_id, model_override)
+    
     # Start prompt execution in background - don't await it!
     asyncio.create_task(claude_manager.execute_prompt(instance_id, prompt_content))
     
@@ -1423,6 +1430,7 @@ async def execute_prompt(instance_id: str, data: dict):
         "success": True, 
         "message": "Prompt execution started",
         "instance_id": instance_id,
+        "model": model_override,
         "non_blocking": True
     }
 
@@ -2348,6 +2356,182 @@ async def auto_discover_agents_on_workflow_update(workflow_id: str):
         "workflow_id": workflow_id,
         "auto_discovery_result": result
     }
+
+# ===== Model Configuration Endpoints =====
+
+# Model list cache (to avoid excessive API calls)
+_model_cache = {"models": None, "timestamp": None, "ttl": 3600}  # 1 hour TTL
+
+async def fetch_models_from_api():
+    """Fetch available models from Anthropic API or return curated list."""
+    import httpx
+    import time
+    
+    # Check if we're in max plan mode
+    use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "false").lower() == "true"
+    
+    # Check cache first
+    if _model_cache["models"] and _model_cache["timestamp"]:
+        if time.time() - _model_cache["timestamp"] < _model_cache["ttl"]:
+            return _model_cache["models"]
+    
+    # Try to fetch from API only if we have an API key (not in max plan mode)
+    api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    
+    if api_key and not use_max_plan:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    "https://api.anthropic.com/v1/models",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01"
+                    },
+                    timeout=10.0
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                # Cache the results
+                _model_cache["models"] = data.get("data", [])
+                _model_cache["timestamp"] = time.time()
+                
+                print(f"✅ Fetched {len(_model_cache['models'])} models from Anthropic API")
+                return _model_cache["models"]
+        except Exception as e:
+            print(f"⚠️ Failed to fetch models from Anthropic API: {e}")
+            print(f"   Falling back to curated model list")
+    else:
+        if use_max_plan:
+            print(f"ℹ️ Max plan mode enabled - using curated model list")
+        else:
+            print(f"ℹ️ No API key available - using curated model list")
+    
+    # Curated list of Claude models (for max plan users or API fallback)
+    curated_models = [
+        {
+            "id": "claude-sonnet-4-20250514",
+            "display_name": "Claude Sonnet 4",
+            "type": "model",
+            "created_at": "2025-02-19T00:00:00Z"
+        },
+        {
+            "id": "claude-opus-4-20250514",
+            "display_name": "Claude Opus 4",
+            "type": "model",
+            "created_at": "2025-02-19T00:00:00Z"
+        },
+        {
+            "id": "claude-haiku-4-20250514",
+            "display_name": "Claude Haiku 4",
+            "type": "model",
+            "created_at": "2025-02-19T00:00:00Z"
+        },
+        {
+            "id": "claude-sonnet-3-5-20241022",
+            "display_name": "Claude 3.5 Sonnet",
+            "type": "model",
+            "created_at": "2024-10-22T00:00:00Z"
+        },
+        {
+            "id": "claude-3-5-sonnet-20240620",
+            "display_name": "Claude 3.5 Sonnet (June)",
+            "type": "model",
+            "created_at": "2024-06-20T00:00:00Z"
+        },
+        {
+            "id": "claude-3-opus-20240229",
+            "display_name": "Claude 3 Opus",
+            "type": "model",
+            "created_at": "2024-02-29T00:00:00Z"
+        },
+        {
+            "id": "claude-3-sonnet-20240229",
+            "display_name": "Claude 3 Sonnet",
+            "type": "model",
+            "created_at": "2024-02-29T00:00:00Z"
+        },
+        {
+            "id": "claude-3-haiku-20240307",
+            "display_name": "Claude 3 Haiku",
+            "type": "model",
+            "created_at": "2024-03-07T00:00:00Z"
+        }
+    ]
+    
+    # Cache the curated list
+    _model_cache["models"] = curated_models
+    _model_cache["timestamp"] = time.time()
+    
+    return curated_models
+
+@app.get(
+    "/api/settings/available-models",
+    response_model=AvailableModelsResponse,
+    summary="Get Available Models",
+    description="Get list of available LLM models from Anthropic API with current default.",
+    tags=["Settings"]
+)
+async def get_available_models():
+    """Get list of available LLM models from Anthropic API."""
+    try:
+        default_model = await db.get_default_model()
+        api_models = await fetch_models_from_api()
+        
+        # Convert API models to our ModelInfo format
+        models = []
+        for model in api_models:
+            model_id = model.get("id")
+            models.append(ModelInfo(
+                id=model_id,
+                name=model.get("display_name", model_id),
+                description=f"Model: {model.get('display_name', model_id)}",
+                context_window=200000,  # Default, could be enhanced with model-specific data
+                is_default=(default_model == model_id)
+            ))
+        
+        return AvailableModelsResponse(models=models, default_model_id=default_model)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get available models: {str(e)}")
+
+@app.get(
+    "/api/settings/default-model",
+    response_model=ModelSettingsResponse,
+    summary="Get Default Model",
+    description="Get the current default LLM model.",
+    tags=["Settings"]
+)
+async def get_default_model_setting():
+    """Get the current default LLM model."""
+    try:
+        default_model = await db.get_default_model()
+        return ModelSettingsResponse(
+            default_model_id=default_model,
+            message="Current default model retrieved"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get default model: {str(e)}")
+
+@app.put(
+    "/api/settings/default-model",
+    response_model=ModelSettingsResponse,
+    summary="Set Default Model",
+    description="Set the default LLM model for new instances.",
+    tags=["Settings"]
+)
+async def set_default_model_setting(request: ModelSettingsRequest):
+    """Set the default LLM model."""
+    try:
+        success = await db.set_default_model(request.model_id)
+        if success:
+            return ModelSettingsResponse(
+                default_model_id=request.model_id,
+                message=f"Default model set to {request.model_id}"
+            )
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update default model")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to set default model: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -73,6 +73,7 @@ class Workflow(BaseModel):
     prompts: List[str] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    default_model: Optional[str] = None  # Default LLM model for this workflow's instances
     # Aggregated metrics across all instances
     total_tokens: Optional[int] = None
     total_cost_usd: Optional[float] = None
@@ -99,6 +100,7 @@ class ClaudeInstance(BaseModel):
     archived_at: Optional[datetime] = None
     # Claude authentication mode
     claude_mode: Optional[str] = None  # "max-plan" or "api-key"
+    model: Optional[str] = None  # LLM model to use for this instance (overrides workflow/global default)
     # Aggregated metrics
     total_tokens: Optional[int] = None
     total_cost_usd: Optional[float] = None
@@ -205,10 +207,12 @@ class SpawnInstanceRequest(BaseModel):
     claude_profile_id: Optional[str] = None  # Optional Claude auth profile to use
     start_sequence: Optional[int] = None  # Which sequence to start from (None = start from beginning)
     end_sequence: Optional[int] = None    # Which sequence to end at (None = run to end)
+    model: Optional[str] = None  # Override the LLM model for this instance
 
 class ExecutePromptRequest(BaseModel):
     """Request model for executing prompts"""
     prompt: str
+    model: Optional[str] = None  # Override the LLM model for this execution
 
 class InterruptInstanceRequest(BaseModel):
     """Request model for interrupting instances"""
@@ -370,3 +374,26 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+# Model Configuration Models
+class ModelInfo(BaseModel):
+    """Information about an available LLM model"""
+    id: str  # e.g., "claude-sonnet-4-20250514"
+    name: str  # e.g., "Claude Sonnet 4"
+    description: str
+    context_window: int  # Token limit
+    is_default: bool = False
+
+class AvailableModelsResponse(BaseModel):
+    """Response model for available models list"""
+    models: List[ModelInfo]
+    default_model_id: str
+
+class ModelSettingsRequest(BaseModel):
+    """Request model for updating default model"""
+    model_id: str
+
+class ModelSettingsResponse(BaseModel):
+    """Response model for model settings"""
+    default_model_id: str
+    message: str
