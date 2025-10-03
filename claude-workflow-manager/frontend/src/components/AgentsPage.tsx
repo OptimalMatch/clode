@@ -24,11 +24,11 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { instanceApi, promptApi, workflowApi } from '../services/api';
 import { ClaudeInstance, Prompt } from '../types';
-import InstanceTerminal from './InstanceTerminal';
-import AlternativeInstanceTerminal from './AlternativeInstanceTerminal';
+import AgentTerminal from './AgentTerminal';
+import AlternativeAgentTerminal from './AlternativeAgentTerminal';
 import LogsViewer from './LogsViewer';
 
-const InstancesPage: React.FC = () => {
+const AgentsPage: React.FC = () => {
   const { workflowId } = useParams<{ workflowId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -147,7 +147,7 @@ const InstancesPage: React.FC = () => {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h4">Instances</Typography>
+          <Typography variant="h4">Agents</Typography>
           {workflow && (
             <Typography variant="subtitle1" color="text.secondary">
               {workflow.name} - {workflow.git_repo}
@@ -170,7 +170,7 @@ const InstancesPage: React.FC = () => {
             startIcon={<Add />}
             onClick={() => setOpen(true)}
           >
-            Spawn Instance
+            Spawn Agent
           </Button>
         </Box>
       </Box>
@@ -188,7 +188,7 @@ const InstancesPage: React.FC = () => {
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                   <Box>
                     <Typography variant="h6">
-                      Instance {instance.id.slice(0, 8)}
+                      Agent {instance.id.slice(0, 8)}
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                       <Chip
@@ -307,7 +307,7 @@ const InstancesPage: React.FC = () => {
         disableRestoreFocus
         disableScrollLock
       >
-        <DialogTitle>Spawn New Instance</DialogTitle>
+        <DialogTitle>Spawn New Agent</DialogTitle>
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Select Prompt</InputLabel>
@@ -353,18 +353,18 @@ const InstancesPage: React.FC = () => {
         disableScrollLock
       >
         <DialogTitle>
-          {instanceToArchive?.archived ? 'Unarchive Instance' : 'Archive Instance'}
+          {instanceToArchive?.archived ? 'Unarchive Agent' : 'Archive Agent'}
         </DialogTitle>
         <DialogContent>
           <Typography>
             {instanceToArchive?.archived 
-              ? 'Are you sure you want to unarchive this instance? It will be restored to the active instances list.'
-              : 'Are you sure you want to archive this instance? It will be hidden from the default view but can be restored later.'
+              ? 'Are you sure you want to unarchive this agent? It will be restored to the active agents list.'
+              : 'Are you sure you want to archive this agent? It will be hidden from the default view but can be restored later.'
             }
           </Typography>
           {instanceToArchive && (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-              Instance ID: {instanceToArchive.id.slice(0, 8)}...
+              Agent ID: {instanceToArchive.id.slice(0, 8)}...
             </Typography>
           )}
         </DialogContent>
@@ -385,14 +385,14 @@ const InstancesPage: React.FC = () => {
       </Dialog>
 
       {selectedInstance && terminalView === 'rich' && (
-        <InstanceTerminal
+        <AgentTerminal
           instanceId={selectedInstance}
           onClose={() => setSelectedInstance(null)}
         />
       )}
 
       {selectedInstance && terminalView === 'realtime' && workflow && (
-        <AlternativeInstanceTerminal
+        <AlternativeAgentTerminal
           instanceId={selectedInstance}
           projectPath={workflow.git_repo || '/app/project'}
           onClose={() => setSelectedInstance(null)}
@@ -414,4 +414,4 @@ const InstancesPage: React.FC = () => {
   );
 };
 
-export default InstancesPage;
+export default AgentsPage;

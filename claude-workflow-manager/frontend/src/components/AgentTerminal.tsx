@@ -43,12 +43,12 @@ const getApiUrl = () => {
   return `${protocol}//${currentHostname}:${apiPort}`;
 };
 
-interface InstanceTerminalProps {
+interface AgentTerminalProps {
   instanceId: string;
   onClose: () => void;
 }
 
-const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
+const AgentTerminal: React.FC<AgentTerminalProps> = ({
   instanceId,
   onClose,
 }) => {
@@ -1519,4 +1519,4 @@ const InstanceTerminal: React.FC<InstanceTerminalProps> = ({
   );
 };
 
-export default InstanceTerminal;
+export default AgentTerminal;
