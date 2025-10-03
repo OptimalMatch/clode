@@ -108,7 +108,7 @@ class MultiAgentOrchestrator:
             # Configure options for this agent
             options = ClaudeAgentOptions(
                 system_prompt=agent.system_prompt,
-                permission_mode='acceptAll',  # Auto-accept for orchestration
+                permission_mode='bypassPermissions',  # Auto-accept for orchestration (valid option)
                 cwd=self.cwd
             )
             
