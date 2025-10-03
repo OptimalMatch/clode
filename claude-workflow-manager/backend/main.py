@@ -2548,15 +2548,11 @@ async def set_default_model_setting(request: ModelSettingsRequest):
 async def execute_sequential_pipeline(request: SequentialPipelineRequest):
     """Execute sequential pipeline orchestration pattern."""
     try:
-        # Get API key and model
-        api_key = os.getenv("CLAUDE_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="CLAUDE_API_KEY not configured")
-        
+        # Get model - uses Claude Agent SDK (works with Max Plan!)
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
-        # Create orchestrator
-        orchestrator = MultiAgentOrchestrator(api_key=api_key, model=model)
+        # Create orchestrator (no API key needed - uses Claude CLI)
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
         
         # Add agents
         for agent in request.agents:
@@ -2568,7 +2564,7 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
         
         # Execute pipeline
         start_time = datetime.now()
-        result = orchestrator.sequential_pipeline(request.task, request.agent_sequence)
+        result = await orchestrator.sequential_pipeline(request.task, request.agent_sequence)
         end_time = datetime.now()
         duration_ms = int((end_time - start_time).total_seconds() * 1000)
         
@@ -2595,13 +2591,9 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
 async def execute_debate(request: DebateRequest):
     """Execute debate orchestration pattern."""
     try:
-        api_key = os.getenv("CLAUDE_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="CLAUDE_API_KEY not configured")
-        
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
-        orchestrator = MultiAgentOrchestrator(api_key=api_key, model=model)
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
         
         # Add agents
         for agent in request.agents:
@@ -2613,7 +2605,7 @@ async def execute_debate(request: DebateRequest):
         
         # Execute debate
         start_time = datetime.now()
-        result = orchestrator.debate(request.topic, request.participant_names, request.rounds)
+        result = await orchestrator.debate(request.topic, request.participant_names, request.rounds)
         end_time = datetime.now()
         duration_ms = int((end_time - start_time).total_seconds() * 1000)
         
@@ -2640,13 +2632,9 @@ async def execute_debate(request: DebateRequest):
 async def execute_hierarchical(request: HierarchicalRequest):
     """Execute hierarchical orchestration pattern."""
     try:
-        api_key = os.getenv("CLAUDE_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="CLAUDE_API_KEY not configured")
-        
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
-        orchestrator = MultiAgentOrchestrator(api_key=api_key, model=model)
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
         
         # Add manager
         orchestrator.add_agent(
@@ -2665,7 +2653,7 @@ async def execute_hierarchical(request: HierarchicalRequest):
         
         # Execute hierarchical
         start_time = datetime.now()
-        result = orchestrator.hierarchical_execution(request.task, request.manager.name, request.worker_names)
+        result = await orchestrator.hierarchical_execution(request.task, request.manager.name, request.worker_names)
         end_time = datetime.now()
         duration_ms = int((end_time - start_time).total_seconds() * 1000)
         
@@ -2692,13 +2680,9 @@ async def execute_hierarchical(request: HierarchicalRequest):
 async def execute_parallel_aggregate(request: ParallelAggregateRequest):
     """Execute parallel aggregation orchestration pattern."""
     try:
-        api_key = os.getenv("CLAUDE_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="CLAUDE_API_KEY not configured")
-        
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
-        orchestrator = MultiAgentOrchestrator(api_key=api_key, model=model)
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
         
         # Add agents
         for agent in request.agents:
@@ -2718,7 +2702,7 @@ async def execute_parallel_aggregate(request: ParallelAggregateRequest):
         
         # Execute parallel aggregation
         start_time = datetime.now()
-        result = orchestrator.parallel_aggregate(request.task, request.agent_names, request.aggregator_name)
+        result = await orchestrator.parallel_aggregate(request.task, request.agent_names, request.aggregator_name)
         end_time = datetime.now()
         duration_ms = int((end_time - start_time).total_seconds() * 1000)
         
@@ -2745,13 +2729,9 @@ async def execute_parallel_aggregate(request: ParallelAggregateRequest):
 async def execute_dynamic_routing(request: DynamicRoutingRequest):
     """Execute dynamic routing orchestration pattern."""
     try:
-        api_key = os.getenv("CLAUDE_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="CLAUDE_API_KEY not configured")
-        
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
-        orchestrator = MultiAgentOrchestrator(api_key=api_key, model=model)
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
         
         # Add router
         orchestrator.add_agent(
@@ -2770,7 +2750,7 @@ async def execute_dynamic_routing(request: DynamicRoutingRequest):
         
         # Execute dynamic routing
         start_time = datetime.now()
-        result = orchestrator.dynamic_routing(request.task, request.router.name, request.specialist_names)
+        result = await orchestrator.dynamic_routing(request.task, request.router.name, request.specialist_names)
         end_time = datetime.now()
         duration_ms = int((end_time - start_time).total_seconds() * 1000)
         
