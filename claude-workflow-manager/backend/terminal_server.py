@@ -512,21 +512,97 @@ class TerminalServer:
             # Check if Claude CLI is available
             claude_available = self._check_claude_cli_available()
             
-            # For instance sessions, start a bash session in the terminal container
+            # For instance sessions, connect to backend container via docker exec
             if session.session_type == 'instance':
-                # Note: This runs in the terminal container, not the backend container
-                # History is accessible here, but instance git repos are in backend's /tmp
+                backend_container = "claude-workflow-backend"
                 
                 await self._send_status(session, 
-                    f"🖥️ Starting terminal session...")
-                await self._send_status(session, 
-                    f"📁 Claude Code history is accessible in ~/.claude/")
-                await self._send_status(session, 
-                    f"📂 Shared files are in /app/project/")
+                    f"🐳 Connecting to backend container: {backend_container}")
                 
-                # Start bash in the home directory where .claude is
-                command = 'bash'
-                initial_input = None
+                import subprocess
+                try:
+                    # Verify Docker CLI is available
+                    docker_check = subprocess.run(
+                        ['which', 'docker'], 
+                        capture_output=True, 
+                        text=True,
+                        timeout=5
+                    )
+                    if docker_check.returncode != 0:
+                        logger.error("❌ Docker CLI not found in terminal container")
+                        raise Exception("Docker CLI not available")
+                    
+                    logger.info(f"✅ Docker CLI found at: {docker_check.stdout.strip()}")
+                    
+                    # Check if we can access Docker daemon
+                    ps_check = subprocess.run(
+                        ['docker', 'ps', '--format', '{{.Names}}', '--filter', f'name={backend_container}'], 
+                        capture_output=True, 
+                        text=True, 
+                        timeout=10
+                    )
+                    
+                    if ps_check.returncode != 0:
+                        logger.error(f"❌ Docker ps failed: {ps_check.stderr}")
+                        raise Exception(f"Cannot access Docker daemon: {ps_check.stderr}")
+                    
+                    containers = [c for c in ps_check.stdout.strip().split('\n') if c]
+                    logger.info(f"📦 Found containers: {containers}")
+                    
+                    if backend_container not in containers:
+                        logger.error(f"❌ Backend container '{backend_container}' not found in running containers")
+                        raise Exception(f"Backend container '{backend_container}' is not running")
+                    
+                    # Container is running, connect via docker exec
+                    await self._send_status(session, 
+                        f"✅ Backend container found, establishing connection...")
+                    
+                    # Use pexpect to spawn docker exec with interactive TTY
+                    session.child_process = pexpect.spawn(
+                        'docker',
+                        ['exec', '-it', backend_container, '/bin/bash'],
+                        encoding='utf-8',
+                        codec_errors='ignore',
+                        env={'TERM': 'xterm-256color'}
+                    )
+                    
+                    # Set terminal size
+                    session.child_process.setwinsize(24, 80)
+                    
+                    logger.info(f"🐳 Connected to backend container via docker exec")
+                    await self._send_status(session, f"🐳 Connected to backend container!")
+                    
+                    # Wait a moment for bash to initialize
+                    await asyncio.sleep(0.3)
+                    
+                    # Send initial commands to show instance working directories
+                    session.child_process.send('cd /tmp 2>/dev/null || cd /app\r\n')
+                    await asyncio.sleep(0.3)
+                    
+                    session.child_process.send('echo "📁 Looking for instance working directories..."\r\n')
+                    await asyncio.sleep(0.3)
+                    
+                    session.child_process.send('ls -ldt /tmp/tmp* 2>/dev/null | head -5 || echo "No /tmp/tmp* directories found yet"\r\n')
+                    await asyncio.sleep(0.3)
+                    
+                    await self._send_status(session, 
+                        f"💡 Tip: Instance git repos are in /tmp/tmp* directories")
+                    
+                    return  # Exit early, we've already set up the process
+                    
+                except subprocess.TimeoutExpired:
+                    logger.error("⏱️ Timeout checking for backend container")
+                    await self._send_error(session, "⏱️ Timeout connecting to backend container")
+                    raise
+                except Exception as e:
+                    logger.error(f"❌ Failed to connect to backend container: {e}")
+                    await self._send_error(session, f"❌ Failed to connect to backend: {str(e)}")
+                    
+                    # Fallback: Start a local bash session
+                    await self._send_status(session, "📁 Falling back to local terminal session...")
+                    await self._send_status(session, "ℹ️ Note: Git repos not accessible in local terminal")
+                    command = 'bash'
+                    initial_input = None
                 
             # For login sessions, try to start Claude CLI
             elif session.session_type == 'login':
