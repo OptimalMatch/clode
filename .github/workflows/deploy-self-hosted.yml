@@ -72,6 +72,44 @@ jobs:
         fi
         echo "✅ Sufficient disk space available: ${AVAILABLE_SPACE}KB"
 
+    - name: Verify Docker group membership
+      run: |
+        echo "🔐 Verifying Docker permissions..."
+        
+        # Check if current user is in docker group
+        if groups | grep -q '\bdocker\b'; then
+          echo "✅ Current user ($USER) is in the docker group"
+        else
+          echo "❌ ERROR: Current user ($USER) is NOT in the docker group"
+          echo ""
+          echo "To fix this, run on the self-hosted runner machine:"
+          echo "  sudo usermod -aG docker $USER"
+          echo "  sudo systemctl restart actions.runner.*.service"
+          echo ""
+          echo "Or reboot the machine:"
+          echo "  sudo reboot"
+          echo ""
+          echo "See GITHUB_RUNNER_DOCKER_SETUP.md for detailed instructions"
+          exit 1
+        fi
+        
+        # Test Docker access without sudo
+        if docker ps &> /dev/null; then
+          echo "✅ Can run Docker commands without sudo"
+        else
+          echo "❌ ERROR: Cannot run Docker commands without sudo"
+          echo ""
+          echo "This usually means:"
+          echo "1. User is not in docker group (check above)"
+          echo "2. Docker daemon is not running"
+          echo "3. Need to log out and back in after adding to group"
+          echo ""
+          echo "Try running: newgrp docker"
+          exit 1
+        fi
+        
+        echo "✅ Docker permissions verified successfully"
+
     - name: Create deployment directory
       run: |
         echo "📁 Setting up deployment directory..."
@@ -94,12 +132,12 @@ jobs:
           fi
           cd ..
           
-          # Remove old deployment
+          # Remove old deployment (use sudo only for file removal, as Docker may have created root-owned files)
           echo "🗑️ Removing old deployment..."
-          rm -rf claude-workflow-manager || true
+          sudo rm -rf claude-workflow-manager || true
         fi
         
-        # Clean up unused Docker resources
+        # Clean up unused Docker resources (no sudo needed if user is in docker group)
         docker system prune -f || true
 
     - name: Deploy new version
@@ -109,6 +147,9 @@ jobs:
         
         # Copy the claude-workflow-manager subdirectory from the repo
         cp -r $GITHUB_WORKSPACE/claude-workflow-manager .
+        
+        # Fix ownership to current user (important after Docker operations)
+        sudo chown -R $USER:$USER claude-workflow-manager
 
     - name: Set up environment configuration
       run: |
@@ -151,6 +192,9 @@ jobs:
         # In API key mode, use the provided API key
         CLAUDE_API_KEY=$(if [ "$CLAUDE_MODE" = "true" ]; then echo ""; else echo "${{ secrets.CLAUDE_API_KEY }}"; fi)
         USE_CLAUDE_MAX_PLAN=$CLAUDE_MODE
+        
+        # JWT Secret Key for user authentication
+        JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
 
         # Host Configuration (auto-detected IP address)
         HOST_IP=$FINAL_HOST_IP
