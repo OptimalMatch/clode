@@ -212,21 +212,58 @@ class TerminalServer:
             """Get Claude Code conversation history from JSONL files"""
             try:
                 # Claude stores project history in ~/.claude/projects/{escaped_path}/
-                claude_dir = Path.home() / ".claude"
+                # Try multiple possible locations for .claude directory
+                possible_claude_dirs = [
+                    Path("/home/claude/.claude"),  # Terminal container user
+                    Path.home() / ".claude",  # Current process user
+                    Path("/root/.claude"),  # Root user
+                ]
+                
+                # Add session-specific directories if they exist
+                if os.path.exists(self.terminal_sessions_dir):
+                    for session_dir in Path(self.terminal_sessions_dir).iterdir():
+                        if session_dir.is_dir():
+                            possible_claude_dirs.append(session_dir / ".claude")
+                
+                claude_dir = None
+                for candidate in possible_claude_dirs:
+                    if candidate.exists() and (candidate / "projects").exists():
+                        claude_dir = candidate
+                        logger.info(f"📁 Found .claude directory at: {claude_dir}")
+                        break
+                
+                if not claude_dir:
+                    logger.warning(f"⚠️ No .claude directory found in: {[str(p) for p in possible_claude_dirs]}")
+                    return {"error": "No .claude directory found", "history": []}
+                
                 projects_dir = claude_dir / "projects"
                 
                 # Escape the project path for directory name (Claude uses this format)
                 escaped_path = project_path.replace('/', '-')
                 project_history_dir = projects_dir / escaped_path
                 
+                logger.info(f"🔍 Looking for history in: {project_history_dir}")
+                
                 if not project_history_dir.exists():
-                    return {"error": "No history found for this project", "history": []}
+                    # List available project directories for debugging
+                    available_projects = [d.name for d in projects_dir.iterdir() if d.is_dir()] if projects_dir.exists() else []
+                    logger.warning(f"⚠️ Project history directory not found: {project_history_dir}")
+                    logger.info(f"📂 Available project directories: {available_projects}")
+                    return {
+                        "error": f"No history found for project: {project_path} (escaped: {escaped_path})",
+                        "available_projects": available_projects,
+                        "searched_path": str(project_history_dir),
+                        "history": []
+                    }
                 
                 # Find all JSONL files in the directory
                 jsonl_files = list(project_history_dir.glob("*.jsonl"))
                 
                 if not jsonl_files:
+                    logger.info(f"📭 No JSONL files found in: {project_history_dir}")
                     return {"history": [], "sessions": []}
+                
+                logger.info(f"📚 Found {len(jsonl_files)} history files")
                 
                 # If a specific session_id is requested, only load that file
                 if session_id:
@@ -256,17 +293,21 @@ class TerminalServer:
                             "entry_count": len(session_history),
                             "history": session_history
                         })
+                        logger.info(f"✅ Loaded session {session_id}: {len(session_history)} entries")
                     except Exception as e:
                         logger.warning(f"Failed to parse {jsonl_file}: {e}")
                 
                 return {
                     "project_path": project_path,
+                    "claude_dir": str(claude_dir),
                     "sessions": sessions,
                     "total_sessions": len(sessions)
                 }
                 
             except Exception as e:
                 logger.error(f"Failed to get Claude history: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 return {"error": str(e), "history": []}
 
         @self.app.get("/export-credentials")
@@ -456,8 +497,40 @@ class TerminalServer:
             # Check if Claude CLI is available
             claude_available = self._check_claude_cli_available()
             
+            # For instance sessions, connect to a bash shell in the project directory
+            if session.session_type == 'instance':
+                # Instances run in the backend container, not separate containers
+                # We'll start a bash shell in the project directory
+                # Check if project directory exists and has content
+                project_path = Path(self.project_root_dir)
+                
+                await self._send_status(session, 
+                    f"🔍 Checking project directory: {project_path}")
+                
+                if project_path.exists() and project_path.is_dir():
+                    # Check if there's a git repo
+                    git_dir = project_path / ".git"
+                    if git_dir.exists():
+                        await self._send_status(session, 
+                            f"✅ Found git repository in project directory")
+                    else:
+                        await self._send_status(session, 
+                            f"⚠️ No git repository found in {project_path}")
+                    
+                    await self._send_status(session, 
+                        f"📁 Starting terminal in project directory...")
+                else:
+                    await self._send_error(session, 
+                        f"❌ Project directory not found: {project_path}")
+                    await self._send_status(session, 
+                        "⚠️ Git repo files may not be accessible in this terminal")
+                
+                # Start bash in the project directory
+                command = 'bash'
+                initial_input = None
+                
             # For login sessions, try to start Claude CLI
-            if session.session_type == 'login':
+            elif session.session_type == 'login':
                 if claude_available:
                     # Use Claude CLI with proper flags for interactive mode
                     command = 'claude'
