@@ -623,12 +623,12 @@ const DesignPage: React.FC = () => {
 
       setSnackbar({
         open: true,
-        message: `🚀 Prompt sent to Claude instance! Opening terminal...`,
+        message: `🚀 Prompt sent to Claude agent! Opening terminal...`,
         severity: 'success'
       });
       
-      // Navigate to instances page with the specific instance to auto-open terminal
-      navigate(`/instances/${selectedWorkflowId}?instance=${result.instance_id}`);
+      // Navigate to agents page with the specific agent to auto-open terminal
+      navigate(`/agents/${selectedWorkflowId}?instance=${result.instance_id}`);
       
     } catch (error: any) {
       setExecutionResults((prev: Map<string, any>) => new Map(prev).set(nodeId, {

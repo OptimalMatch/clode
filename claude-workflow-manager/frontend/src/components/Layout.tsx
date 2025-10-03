@@ -113,7 +113,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const menuItems = [
     { text: 'Workflows', icon: <WorkOutline />, path: '/workflows' },
-    { text: 'Multi-Instance', icon: <ViewModule />, path: '/multi-instance' },
+    { text: 'Multi-Agent', icon: <ViewModule />, path: '/multi-agent' },
     { text: 'Design', icon: <DesignServices />, path: '/design' },
     { text: 'Prompts', icon: <Description />, path: '/prompts' },
     { text: 'Subagents', icon: <SmartToy />, path: '/subagents' },

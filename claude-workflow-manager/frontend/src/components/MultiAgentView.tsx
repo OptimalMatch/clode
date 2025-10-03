@@ -34,7 +34,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { instanceApi, workflowApi } from '../services/api';
 import { ClaudeInstance, WebSocketMessage } from '../types';
-import InstanceTerminal from './InstanceTerminal';
+import AgentTerminal from './AgentTerminal';
 
 // Animations
 const zoomIn = keyframes`
@@ -141,7 +141,7 @@ interface InstancePanel {
   fileChanges: FileChange[];
 }
 
-const MultiInstanceView: React.FC = () => {
+const MultiAgentView: React.FC = () => {
   // State for 4 panels
   const [panels, setPanels] = useState<InstancePanel[]>([
     { instanceId: null, workflowId: null, isZoomed: false, isVisible: true, wsConnection: null, lastActivity: null, status: 'empty', terminalContent: '', lastMessage: '', fileChanges: [] },
@@ -442,14 +442,14 @@ const MultiInstanceView: React.FC = () => {
         flexShrink: 0
       }}>
         <Typography variant="h4" gutterBottom>
-          Multi-Instance View
+          Multi-Agent View
         </Typography>
         <Typography variant="subtitle1" color="text.secondary">
-          Monitor up to 4 Claude instances simultaneously in a tmux-style split view
+          Monitor up to 4 Claude agents simultaneously in a tmux-style split view
         </Typography>
         <Box sx={{ mt: 1, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
           <Chip 
-            label={`${runningInstances.length} Running Instances`} 
+            label={`${runningInstances.length} Running Agents`} 
             color="primary" 
             size="small" 
           />
@@ -550,11 +550,11 @@ const MultiInstanceView: React.FC = () => {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Select Instance for Panel {selectedPanelIndex !== null ? selectedPanelIndex + 1 : ''}</DialogTitle>
+        <DialogTitle>Select Agent for Panel {selectedPanelIndex !== null ? selectedPanelIndex + 1 : ''}</DialogTitle>
         <DialogContent>
           {runningInstances.length === 0 ? (
             <Alert severity="info">
-              No running instances found. Start some instances from the Workflows page first.
+              No running agents found. Start some agents from the Workflows page first.
             </Alert>
           ) : (
             <Grid container spacing={2}>
@@ -569,7 +569,7 @@ const MultiInstanceView: React.FC = () => {
                   >
                     <CardContent>
                       <Typography variant="h6">
-                        Instance {instance.id.slice(0, 8)}
+                        Agent {instance.id.slice(0, 8)}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Workflow: {instance.workflow_id}
@@ -604,7 +604,7 @@ const MultiInstanceView: React.FC = () => {
 
       {/* Instance Terminal Dialog */}
       {selectedInstance && (
-        <InstanceTerminal
+        <AgentTerminal
           instanceId={selectedInstance}
           onClose={() => setSelectedInstance(null)}
         />
@@ -746,14 +746,14 @@ const InstancePanel: React.FC<InstancePanelProps> = ({
                   <Terminal />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Remove Instance">
+              <Tooltip title="Remove Agent">
                 <IconButton size="small" onClick={() => onRemoveInstance(panelIndex)} color="error">
                   <Remove />
                 </IconButton>
               </Tooltip>
             </>
           ) : (
-            <Tooltip title="Assign Instance">
+            <Tooltip title="Assign Agent">
               <IconButton size="small" onClick={() => onAssignInstance(panelIndex)} color="primary">
                 <Add />
               </IconButton>
@@ -805,7 +805,7 @@ const InstancePanel: React.FC<InstancePanelProps> = ({
                 Mini terminal preview - Click for full view
               </Typography>
               <Typography variant="caption" sx={{ color: '#0f0', display: 'block' }}>
-                $ Instance {instance.id.slice(0, 8)} [{panel.status}]
+                $ Agent {instance.id.slice(0, 8)} [{panel.status}]
               </Typography>
               {panel.terminalContent && (
                 <Box sx={{ mt: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -911,10 +911,10 @@ const InstancePanel: React.FC<InstancePanelProps> = ({
           <Box sx={{ textAlign: 'center' }}>
             <Add sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
             <Typography variant="h6" color="text.secondary" gutterBottom>
-              No Instance Assigned
+              No Agent Assigned
             </Typography>
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              Click the + button to assign a running instance to this panel
+              Click the + button to assign a running agent to this panel
             </Typography>
             <Button 
               variant="outlined" 
@@ -922,7 +922,7 @@ const InstancePanel: React.FC<InstancePanelProps> = ({
               onClick={() => onAssignInstance(panelIndex)}
               sx={{ mt: 2 }}
             >
-              Assign Instance
+              Assign Agent
             </Button>
           </Box>
         )}
@@ -931,4 +931,4 @@ const InstancePanel: React.FC<InstancePanelProps> = ({
   );
 };
 
-export default MultiInstanceView;
+export default MultiAgentView;

@@ -264,9 +264,9 @@ const WorkflowsPage: React.FC = () => {
                 <Button
                   size="small"
                   startIcon={<PlayArrow />}
-                  onClick={() => navigate(`/instances/${workflow.id}`)}
+                  onClick={() => navigate(`/agents/${workflow.id}`)}
                 >
-                  View Instances
+                  View Agents
                 </Button>
                 <IconButton
                   size="small"
