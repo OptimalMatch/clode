@@ -84,8 +84,10 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:/root/.local/bin:$PATH"
 
 # Configure Docker daemon for DinD
+# Note: Using 'vfs' storage driver instead of 'overlay2' because overlay2 
+# doesn't work well in Docker-in-Docker without special kernel support
 RUN mkdir -p /etc/docker && \
-    echo '{\n  "storage-driver": "overlay2",\n  "log-driver": "json-file",\n  "log-opts": {\n    "max-size": "10m",\n    "max-file": "3"\n  }\n}' > /etc/docker/daemon.json
+    echo '{\n  "storage-driver": "vfs",\n  "log-driver": "json-file",\n  "log-opts": {\n    "max-size": "10m",\n    "max-file": "3"\n  }\n}' > /etc/docker/daemon.json
 
 # Create non-root user for better security
 RUN useradd -m -s /bin/bash claude && \
