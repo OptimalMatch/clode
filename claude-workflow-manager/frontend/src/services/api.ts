@@ -420,3 +420,6 @@ export const authApi = {
     return response.data;
   },
 };
+
+// Export the base axios instance as default for direct API calls
+export default api;
