@@ -17,6 +17,7 @@ import SSHKeysPage from './components/SSHKeysPage';
 import ClaudeAuthPage from './components/ClaudeAuthPage';
 import MultiInstanceView from './components/MultiInstanceView';
 import SettingsPage from './components/SettingsPage';
+import AgentOrchestrationPage from './components/AgentOrchestrationPage';
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,7 @@ function App() {
               <Route path="/claude-auth" element={<Layout><ClaudeAuthPage /></Layout>} />
               <Route path="/ssh-keys" element={<Layout><SSHKeysPage /></Layout>} />
               <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
+              <Route path="/orchestration" element={<Layout><AgentOrchestrationPage /></Layout>} />
               <Route path="/instances/:workflowId" element={<Layout><InstancesPage /></Layout>} />
               <Route path="/multi-instance" element={<Layout><MultiInstanceView /></Layout>} />
             </Routes>
