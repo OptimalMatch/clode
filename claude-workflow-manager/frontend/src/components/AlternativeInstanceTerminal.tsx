@@ -324,19 +324,19 @@ const AlternativeInstanceTerminal: React.FC<AlternativeInstanceTerminalProps> = 
         {/* Usage Instructions */}
         <Alert severity="info" sx={{ mt: 2 }}>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            <strong>🐳 Backend Container Access:</strong> This terminal connects directly to the backend container 
-            via <code>docker exec</code>, giving you full access to instance working directories.
+            <strong>✨ Fast Terminal:</strong> This xterm.js terminal runs in the terminal container 
+            with full access to Claude Code conversation history.
           </Typography>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            <strong>📁 File Access:</strong> Instance git repos are in <code>/tmp/tmp*</code> directories. 
-            The terminal will show recent directories when you connect.
+            <strong>📁 What's Accessible:</strong>
           </Typography>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            <strong>💡 Tip:</strong> Use <code>cd /tmp/tmp*</code> (with tab completion) to navigate to your instance's working directory.
-          </Typography>
+          <Box component="ul" sx={{ mt: 0, mb: 1, pl: 3 }}>
+            <li><Typography variant="body2">✅ Claude history in <code>~/.claude/projects/</code></Typography></li>
+            <li><Typography variant="body2">✅ Shared files in <code>/app/project/</code></Typography></li>
+            <li><Typography variant="body2">❌ Instance git repos (in backend container's <code>/tmp</code>)</Typography></li>
+          </Box>
           <Typography variant="body2">
-            <strong>🔄 Alternative:</strong> Use <strong>Rich Terminal</strong> for the formatted view 
-            with markdown rendering, TODO sidebar, and streaming output.
+            <strong>💡 Best For:</strong> Viewing history and using Claude CLI. For git repo access, use <strong>Rich Terminal</strong>.
           </Typography>
         </Alert>
       </DialogContent>
