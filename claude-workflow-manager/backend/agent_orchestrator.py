@@ -11,8 +11,56 @@ from datetime import datetime
 from enum import Enum
 import asyncio
 import logging
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+async def ensure_orchestration_credentials():
+    """
+    Restore Claude credentials for orchestration from database profile.
+    Call this before creating MultiAgentOrchestrator to ensure fresh credentials.
+    """
+    try:
+        # Import here to avoid circular dependencies
+        from database import Database
+        from claude_file_manager import ClaudeFileManager
+        
+        db = Database()
+        await db.connect()
+        try:
+            claude_file_manager = ClaudeFileManager(db)
+            
+            # Get the selected profile
+            selected_profile = await db.get_selected_profile_with_details()
+            
+            if not selected_profile:
+                logger.warning("⚠️ No Claude profile selected for orchestration")
+                return False
+            
+            profile_id = selected_profile["selected_profile_id"]
+            profile_name = selected_profile.get("profile_name", "Unknown")
+            
+            # Restore credentials to /home/claude/.claude/
+            target_dir = "/home/claude/.claude"
+            Path(target_dir).mkdir(parents=True, exist_ok=True)
+            
+            success = await claude_file_manager.restore_claude_files(profile_id, target_dir)
+            
+            if success:
+                logger.info(f"✅ Restored Claude credentials for orchestration: {profile_name}")
+                return True
+            else:
+                logger.error(f"❌ Failed to restore Claude credentials")
+                return False
+                
+        finally:
+            await db.disconnect()
+            
+    except Exception as e:
+        logger.warning(f"⚠️ Could not restore credentials for orchestration: {e}")
+        return False
 
 
 class AgentRole(str, Enum):
@@ -132,8 +180,9 @@ class MultiAgentOrchestrator:
             
             return reply
         except Exception as e:
-            logger.error(f"Error calling Claude for agent {agent.name}: {e}")
-            raise
+            logger.error(f"Error calling Claude for agent {agent.name}: {e}", exc_info=True)
+            # Re-raise with more context
+            raise Exception(f"Agent {agent.name} failed: {str(e)}")
     
     async def send_message(self, from_agent: str, to_agent: str, message: str, 
                           message_type: MessageType = MessageType.TASK) -> str:
