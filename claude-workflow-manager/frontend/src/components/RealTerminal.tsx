@@ -8,7 +8,7 @@ import 'xterm/css/xterm.css';
 
 interface RealTerminalProps {
   sessionId: string;
-  sessionType: 'login' | 'general';
+  sessionType: 'login' | 'general' | 'instance';
   onConnectionChange?: (connected: boolean) => void;
   onOAuthUrlDetected?: (url: string) => void;
   onAuthenticationComplete?: (success: boolean) => void;
@@ -151,15 +151,22 @@ const RealTerminal = forwardRef<RealTerminalRef, RealTerminalProps>(({
     // Fit terminal to container
     fitAddon.current.fit();
 
-    // Welcome message
-    terminal.current.writeln('\x1b[32m╭─────────────────────────────────────╮\x1b[0m');
-    terminal.current.writeln('\x1b[32m│ \x1b[1m✨ Claude Terminal Interface\x1b[0m\x1b[32m        │\x1b[0m');
-    terminal.current.writeln('\x1b[32m│ Connecting to Claude CLI session... │\x1b[0m');
-    terminal.current.writeln('\x1b[32m╰─────────────────────────────────────╯\x1b[0m');
+    // Welcome message based on session type
+    if (sessionType === 'instance') {
+      terminal.current.writeln('\x1b[32m╭─────────────────────────────────────╮\x1b[0m');
+      terminal.current.writeln('\x1b[32m│ \x1b[1m🖥️  Claude Code Instance Terminal\x1b[0m\x1b[32m   │\x1b[0m');
+      terminal.current.writeln('\x1b[32m│ Real-time interactive session...    │\x1b[0m');
+      terminal.current.writeln('\x1b[32m╰─────────────────────────────────────╯\x1b[0m');
+    } else {
+      terminal.current.writeln('\x1b[32m╭─────────────────────────────────────╮\x1b[0m');
+      terminal.current.writeln('\x1b[32m│ \x1b[1m✨ Claude Terminal Interface\x1b[0m\x1b[32m        │\x1b[0m');
+      terminal.current.writeln('\x1b[32m│ Connecting to Claude CLI session... │\x1b[0m');
+      terminal.current.writeln('\x1b[32m╰─────────────────────────────────────╯\x1b[0m');
+    }
     terminal.current.writeln('');
 
     console.log('✅ Terminal initialized successfully');
-  }, [onOAuthUrlDetected]);
+  }, [onOAuthUrlDetected, sessionType]);
 
   // Connect to WebSocket
   const connectWebSocket = useCallback(() => {
