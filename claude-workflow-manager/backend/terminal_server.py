@@ -558,9 +558,16 @@ class TerminalServer:
                         f"✅ Backend container found, establishing connection...")
                     
                     # Use pexpect to spawn docker exec with interactive TTY as claude user
+                    # Set CLAUDE_HOME to ensure credentials are found in /home/claude/.claude
                     session.child_process = pexpect.spawn(
                         'docker',
-                        ['exec', '-it', '-u', 'claude', backend_container, '/bin/bash'],
+                        [
+                            'exec', '-it', 
+                            '-e', 'CLAUDE_HOME=/home/claude/.claude',
+                            '-u', 'claude', 
+                            backend_container, 
+                            '/bin/bash'
+                        ],
                         encoding='utf-8',
                         codec_errors='ignore',
                         env={'TERM': 'xterm-256color'}
