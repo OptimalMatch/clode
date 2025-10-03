@@ -71,9 +71,19 @@ const AlternativeInstanceTerminal: React.FC<AlternativeInstanceTerminalProps> = 
       const data = await response.json();
       
       if (data.error) {
-        setHistoryError(data.error);
+        // Enhanced error message with debugging info
+        let errorMsg = data.error;
+        if (data.available_projects && data.available_projects.length > 0) {
+          errorMsg += `\n\nAvailable projects found: ${data.available_projects.join(', ')}`;
+        }
+        if (data.searched_path) {
+          errorMsg += `\n\nSearched in: ${data.searched_path}`;
+        }
+        console.log('📊 History fetch details:', data);
+        setHistoryError(errorMsg);
         setSessions([]);
       } else {
+        console.log(`✅ Loaded ${data.total_sessions} sessions from ${data.claude_dir}`);
         setSessions(data.sessions || []);
         
         // Auto-select the most recent session
@@ -280,11 +290,22 @@ const AlternativeInstanceTerminal: React.FC<AlternativeInstanceTerminalProps> = 
         {/* History Error */}
         {historyError && (
           <Alert severity="warning" sx={{ mb: 2 }}>
-            <Typography variant="body2">
-              <strong>No history found:</strong> {historyError}
+            <Typography variant="body2" component="div">
+              <strong>No history found</strong>
+              <Box component="pre" sx={{ 
+                mt: 1, 
+                fontSize: '0.75rem', 
+                whiteSpace: 'pre-wrap',
+                fontFamily: 'monospace',
+                backgroundColor: 'rgba(0,0,0,0.1)',
+                padding: 1,
+                borderRadius: 1
+              }}>
+                {historyError}
+              </Box>
             </Typography>
             <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
-              This is normal for new projects. Start chatting to create history!
+              💡 This is normal for new projects. Start chatting with Claude to create history!
             </Typography>
           </Alert>
         )}
@@ -302,9 +323,16 @@ const AlternativeInstanceTerminal: React.FC<AlternativeInstanceTerminalProps> = 
 
         {/* Usage Instructions */}
         <Alert severity="info" sx={{ mt: 2 }}>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            <strong>💡 Real-Time Terminal:</strong> Fast xterm.js terminal with conversation history.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            <strong>📁 File Access:</strong> Git repo should be mounted at <code>/app/project</code>. 
+            Check the terminal output above to confirm.
+          </Typography>
           <Typography variant="body2">
-            <strong>💡 Real-Time Terminal:</strong> This terminal provides direct access to the Claude Code CLI.
-            Type commands directly and see immediate responses. History is loaded from previous sessions.
+            <strong>🔄 Alternative:</strong> Use <strong>Rich Terminal</strong> for the formatted view 
+            with markdown rendering and interactive features.
           </Typography>
         </Alert>
       </DialogContent>
