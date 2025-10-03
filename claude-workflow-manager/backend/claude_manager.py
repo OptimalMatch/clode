@@ -162,16 +162,22 @@ class ClaudeCodeManager:
         # Try instance-specific model first
         if instance_id:
             instance = await self.db.get_instance(instance_id)
-            if instance and instance.model:
-                self._log_with_timestamp(f"📱 Using instance-specific model: {instance.model}")
-                return instance.model
+            if instance:
+                # Handle both dict and object access patterns
+                model = instance.get('model') if isinstance(instance, dict) else getattr(instance, 'model', None)
+                if model:
+                    self._log_with_timestamp(f"📱 Using instance-specific model: {model}")
+                    return model
         
         # Try workflow default model
         if workflow_id:
             workflow = await self.db.get_workflow(workflow_id)
-            if workflow and workflow.default_model:
-                self._log_with_timestamp(f"📋 Using workflow default model: {workflow.default_model}")
-                return workflow.default_model
+            if workflow:
+                # Handle both dict and object access patterns
+                default_model = workflow.get('default_model') if isinstance(workflow, dict) else getattr(workflow, 'default_model', None)
+                if default_model:
+                    self._log_with_timestamp(f"📋 Using workflow default model: {default_model}")
+                    return default_model
         
         # Fallback to global default
         default_model = await self.db.get_default_model()
