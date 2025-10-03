@@ -129,7 +129,7 @@ RUN pip install --no-cache-dir \
 
 # Configure Docker daemon for DinD
 RUN mkdir -p /etc/docker && \
-    echo '{\n  "storage-driver": "overlay2",\n  "storage-opts": ["overlay2.override_kernel_check=true"],\n  "hosts": ["unix:///var/run/docker.sock"],\n  "log-driver": "json-file",\n  "log-opts": {\n    "max-size": "10m",\n    "max-file": "3"\n  }\n}' > /etc/docker/daemon.json
+    echo '{\n  "storage-driver": "overlay2",\n  "log-driver": "json-file",\n  "log-opts": {\n    "max-size": "10m",\n    "max-file": "3"\n  }\n}' > /etc/docker/daemon.json
 
 # Create non-root user for better security
 RUN useradd -m -s /bin/bash claude && \

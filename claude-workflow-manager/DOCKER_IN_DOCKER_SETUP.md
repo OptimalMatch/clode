@@ -124,6 +124,22 @@ The `privileged: true` flag is essential for Docker-in-Docker to work properly.
 
 **Solution:** Remove any `user: claude` directives from docker-compose files.
 
+### Error: "overlay2: unknown option overlay2.override_kernel_check"
+
+**Cause:** Invalid Docker daemon configuration option in daemon.json.
+
+**Solution:** Remove the invalid `storage-opts` from daemon.json. The correct configuration is:
+```json
+{
+  "storage-driver": "overlay2",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+```
+
 ### Error: "Cannot connect to the Docker daemon"
 
 **Cause:** Docker daemon may not have started or isn't ready yet.
