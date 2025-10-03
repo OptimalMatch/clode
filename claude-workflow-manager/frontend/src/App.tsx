@@ -16,6 +16,7 @@ import SubagentsPage from './components/SubagentsPage';
 import SSHKeysPage from './components/SSHKeysPage';
 import ClaudeAuthPage from './components/ClaudeAuthPage';
 import MultiInstanceView from './components/MultiInstanceView';
+import SettingsPage from './components/SettingsPage';
 
 const queryClient = new QueryClient();
 
@@ -56,6 +57,7 @@ function App() {
               <Route path="/subagents" element={<Layout><SubagentsPage /></Layout>} />
               <Route path="/claude-auth" element={<Layout><ClaudeAuthPage /></Layout>} />
               <Route path="/ssh-keys" element={<Layout><SSHKeysPage /></Layout>} />
+              <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
               <Route path="/instances/:workflowId" element={<Layout><InstancesPage /></Layout>} />
               <Route path="/multi-instance" element={<Layout><MultiInstanceView /></Layout>} />
             </Routes>

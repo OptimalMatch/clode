@@ -66,6 +66,9 @@ class Database:
         await self.db.users.create_index("username", unique=True)
         await self.db.users.create_index("email", unique=True)
         await self.db.users.create_index("created_at")
+        
+        # Settings collection (for global app settings like default model)
+        # No indexes needed yet, it's a singleton document
     
     # Workflow methods
     async def create_workflow(self, workflow: Workflow) -> str:
@@ -1013,5 +1016,44 @@ class Database:
         result = await self.db.users.update_one(
             {"id": user_id},
             {"$set": {"is_active": False, "updated_at": datetime.utcnow()}}
+        )
+        return result.modified_count > 0
+    
+    # Model Settings Methods
+    async def get_default_model(self) -> Optional[str]:
+        """Get the default LLM model setting"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        settings = await self.db.settings.find_one({"_id": "app_settings"})
+        if settings:
+            return settings.get("default_model", "claude-sonnet-4-20250514")
+        return "claude-sonnet-4-20250514"  # Fallback default
+    
+    async def set_default_model(self, model_id: str) -> bool:
+        """Set the default LLM model"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        result = await self.db.settings.update_one(
+            {"_id": "app_settings"},
+            {
+                "$set": {
+                    "default_model": model_id,
+                    "updated_at": datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
+        return result.modified_count > 0 or result.upserted_id is not None
+    
+    async def update_instance_model(self, instance_id: str, model: str) -> bool:
+        """Update the model for a specific instance"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        result = await self.db.instances.update_one(
+            {"id": instance_id},
+            {"$set": {"model": model}}
         )
         return result.modified_count > 0

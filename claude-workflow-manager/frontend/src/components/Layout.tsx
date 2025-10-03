@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, Box, IconButton, Tooltip, Menu as MenuComponent, MenuItem, Avatar, Divider } from '@mui/material';
-import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle, Menu, ChevronLeft, ViewModule, Logout, Person } from '@mui/icons-material';
+import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle, Menu, ChevronLeft, ViewModule, Logout, Person, Settings } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import clodeBlueLogo from '../assets/clode-blue.png';
@@ -119,6 +119,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Subagents', icon: <SmartToy />, path: '/subagents' },
     { text: 'Claude Auth', icon: <AccountCircle />, path: '/claude-auth' },
     { text: 'SSH Keys', icon: <VpnKey />, path: '/ssh-keys' },
+    { text: 'Settings', icon: <Settings />, path: '/settings' },
   ];
 
   return (
