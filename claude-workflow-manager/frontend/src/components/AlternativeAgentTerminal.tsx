@@ -20,7 +20,7 @@ import {
 import { Close, History, Refresh } from '@mui/icons-material';
 import RealTerminal, { RealTerminalRef } from './RealTerminal';
 
-interface AlternativeInstanceTerminalProps {
+interface AlternativeAgentTerminalProps {
   instanceId: string;
   projectPath: string;
   onClose: () => void;
@@ -35,7 +35,7 @@ interface ClaudeSession {
   history: any[];
 }
 
-const AlternativeInstanceTerminal: React.FC<AlternativeInstanceTerminalProps> = ({
+const AlternativeAgentTerminal: React.FC<AlternativeAgentTerminalProps> = ({
   instanceId,
   projectPath,
   onClose,
@@ -354,5 +354,5 @@ const AlternativeInstanceTerminal: React.FC<AlternativeInstanceTerminalProps> = 
   );
 };
 
-export default AlternativeInstanceTerminal;
+export default AlternativeAgentTerminal;
 
