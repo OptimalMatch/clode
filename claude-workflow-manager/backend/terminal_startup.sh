@@ -29,9 +29,18 @@ if [ "$(id -u)" -eq 0 ] && [ -S /var/run/docker.sock ]; then
     
     echo "✅ Docker socket permissions configured"
     
-    # Switch to claude user and re-execute this script
-    echo "🔄 Switching to claude user..."
-    exec su -c "cd /app && exec $0" claude
+    # Get the docker group name from the GID
+    DOCKER_GROUP_NAME=$(getent group $DOCKER_SOCK_GID | cut -d: -f1)
+    if [ -z "$DOCKER_GROUP_NAME" ]; then
+        echo "⚠️ Warning: Could not find group name for GID $DOCKER_SOCK_GID"
+        DOCKER_GROUP_NAME="docker"
+    fi
+    echo "🔍 Docker group name: $DOCKER_GROUP_NAME"
+    
+    # Switch to claude user with the docker group activated using sg (set group)
+    # This immediately activates the group membership without needing to re-login
+    echo "🔄 Switching to claude user with docker group activated..."
+    exec sg $DOCKER_GROUP_NAME -c "su claude -c 'cd /app && exec $0'"
 fi
 
 # Now running as claude user
