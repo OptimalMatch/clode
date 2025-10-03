@@ -43,7 +43,7 @@ from prompt_file_manager import PromptFileManager
 from agent_discovery import AgentDiscovery
 from auth_utils import hash_password, verify_password, create_access_token, decode_access_token
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from agent_orchestrator import MultiAgentOrchestrator, AgentRole as OrchestratorAgentRole
+from agent_orchestrator import MultiAgentOrchestrator, AgentRole as OrchestratorAgentRole, ensure_orchestration_credentials
 
 # Ensure ANTHROPIC_API_KEY is set for claude-cli
 claude_api_key = os.getenv("CLAUDE_API_KEY")
@@ -2551,6 +2551,9 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
         # Get model - uses Claude Agent SDK (works with Max Plan!)
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
+        # Restore fresh credentials for orchestration
+        await ensure_orchestration_credentials()
+        
         # Create orchestrator (no API key needed - uses Claude CLI)
         orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
         
@@ -2593,6 +2596,9 @@ async def execute_debate(request: DebateRequest):
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
+        # Restore fresh credentials for orchestration
+        await ensure_orchestration_credentials()
+        
         orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
         
         # Add agents
@@ -2633,6 +2639,9 @@ async def execute_hierarchical(request: HierarchicalRequest):
     """Execute hierarchical orchestration pattern."""
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+        
+        # Restore fresh credentials for orchestration
+        await ensure_orchestration_credentials()
         
         orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
         
@@ -2682,6 +2691,9 @@ async def execute_parallel_aggregate(request: ParallelAggregateRequest):
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
+        # Restore fresh credentials for orchestration
+        await ensure_orchestration_credentials()
+        
         orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
         
         # Add agents
@@ -2730,6 +2742,9 @@ async def execute_dynamic_routing(request: DynamicRoutingRequest):
     """Execute dynamic routing orchestration pattern."""
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+        
+        # Restore fresh credentials for orchestration
+        await ensure_orchestration_credentials()
         
         orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
         
