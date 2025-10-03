@@ -61,6 +61,11 @@ class Database:
         await self.db.subagents.create_index("name", unique=True)
         await self.db.subagents.create_index("capabilities")
         await self.db.subagents.create_index("trigger_keywords")
+        
+        # Users indexes
+        await self.db.users.create_index("username", unique=True)
+        await self.db.users.create_index("email", unique=True)
+        await self.db.users.create_index("created_at")
     
     # Workflow methods
     async def create_workflow(self, workflow: Workflow) -> str:
@@ -918,3 +923,95 @@ class Database:
         
         result = await self.db.claude_profile_selections.delete_one(filter_query)
         return result.deleted_count > 0
+
+    # User Account Methods
+    async def create_user(self, user: 'User') -> str:
+        """Create a new user account"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        # Check if username or email already exists
+        existing_username = await self.db.users.find_one({"username": user.username})
+        if existing_username:
+            raise ValueError("Username already exists")
+        
+        existing_email = await self.db.users.find_one({"email": user.email})
+        if existing_email:
+            raise ValueError("Email already exists")
+        
+        user_dict = user.dict()
+        user_dict["created_at"] = datetime.utcnow()
+        user_dict["updated_at"] = datetime.utcnow()
+        
+        result = await self.db.users.insert_one(user_dict)
+        return str(result.inserted_id)
+    
+    async def get_user_by_username(self, username: str) -> Optional['User']:
+        """Get user by username"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        user = await self.db.users.find_one({"username": username, "is_active": True})
+        if user:
+            del user["_id"]
+            from models import User
+            return User(**user)
+        return None
+    
+    async def get_user_by_email(self, email: str) -> Optional['User']:
+        """Get user by email"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        user = await self.db.users.find_one({"email": email, "is_active": True})
+        if user:
+            del user["_id"]
+            from models import User
+            return User(**user)
+        return None
+    
+    async def get_user_by_id(self, user_id: str) -> Optional['User']:
+        """Get user by ID"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        user = await self.db.users.find_one({"id": user_id, "is_active": True})
+        if user:
+            del user["_id"]
+            from models import User
+            return User(**user)
+        return None
+    
+    async def update_user_last_login(self, user_id: str) -> bool:
+        """Update user's last login timestamp"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        result = await self.db.users.update_one(
+            {"id": user_id},
+            {"$set": {"last_login": datetime.utcnow()}}
+        )
+        return result.modified_count > 0
+    
+    async def update_user(self, user_id: str, updates: dict) -> bool:
+        """Update user account"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        updates["updated_at"] = datetime.utcnow()
+        result = await self.db.users.update_one(
+            {"id": user_id},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+    
+    async def deactivate_user(self, user_id: str) -> bool:
+        """Deactivate user account (soft delete)"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        result = await self.db.users.update_one(
+            {"id": user_id},
+            {"$set": {"is_active": False, "updated_at": datetime.utcnow()}}
+        )
+        return result.modified_count > 0

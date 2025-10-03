@@ -30,12 +30,15 @@ from models import (
     ClaudeAuthProfileListResponse, ClaudeLoginSessionRequest, 
     ClaudeLoginSessionResponse, ClaudeAuthTokenRequest,
     ClaudeProfileSelection, ClaudeProfileSelectionRequest,
-    ClaudeProfileSelectionResponse
+    ClaudeProfileSelectionResponse, User, UserCreate, UserLogin, 
+    UserResponse, TokenResponse
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
 from prompt_file_manager import PromptFileManager
 from agent_discovery import AgentDiscovery
+from auth_utils import hash_password, verify_password, create_access_token, decode_access_token
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Ensure ANTHROPIC_API_KEY is set for claude-cli
 claude_api_key = os.getenv("CLAUDE_API_KEY")
@@ -295,6 +298,37 @@ db = Database()
 claude_manager = ClaudeCodeManager(db)
 agent_discovery = AgentDiscovery(db)
 
+# HTTP Bearer token authentication
+security = HTTPBearer()
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
+    """Dependency to get the current authenticated user from JWT token"""
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
+    
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+    
+    user = await db.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    return user
+
+async def get_current_user_optional(credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))) -> Optional[User]:
+    """Optional dependency to get the current authenticated user (returns None if not authenticated)"""
+    if not credentials:
+        return None
+    
+    try:
+        return await get_current_user(credentials)
+    except HTTPException:
+        return None
+
 app = FastAPI(
     title="Claude Workflow Manager API",
     description="""
@@ -460,6 +494,194 @@ async def get_claude_mode():
         "use_max_plan": use_max_plan,
         "description": "Max Plan (authenticated via claude /login)" if use_max_plan else "API Key (using CLAUDE_API_KEY)"
     }
+
+# User Authentication Endpoints
+@app.post(
+    "/api/auth/register",
+    response_model=TokenResponse,
+    status_code=201,
+    summary="Register New User",
+    description="Create a new user account with email/username and password.",
+    tags=["Authentication"],
+    responses={
+        201: {"description": "User registered successfully"},
+        400: {"model": ErrorResponse, "description": "Username or email already exists"}
+    }
+)
+async def register_user(user_data: UserCreate):
+    """
+    Register a new user account.
+    
+    - **username**: Unique username (3-50 characters)
+    - **email**: Valid email address
+    - **password**: Password (minimum 8 characters recommended)
+    - **full_name**: Optional full name of the user
+    """
+    try:
+        # Validate password length
+        if len(user_data.password) < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+        
+        # Validate username length
+        if len(user_data.username) < 3 or len(user_data.username) > 50:
+            raise HTTPException(status_code=400, detail="Username must be between 3 and 50 characters")
+        
+        # Create user object with hashed password
+        user_id = str(uuid.uuid4())
+        user = User(
+            id=user_id,
+            username=user_data.username,
+            email=user_data.email.lower(),  # Store email in lowercase
+            hashed_password=hash_password(user_data.password),
+            full_name=user_data.full_name,
+            is_active=True,
+            is_admin=False,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        
+        # Save to database
+        await db.create_user(user)
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": user_id, "username": user_data.username})
+        
+        # Return token and user info
+        user_response = UserResponse(
+            id=user_id,
+            username=user.username,
+            email=user.email,
+            full_name=user.full_name,
+            is_active=user.is_active,
+            is_admin=user.is_admin,
+            created_at=user.created_at,
+            last_login=None
+        )
+        
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=user_response
+        )
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"❌ Error registering user: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to register user: {str(e)}")
+
+@app.post(
+    "/api/auth/login",
+    response_model=TokenResponse,
+    summary="User Login",
+    description="Authenticate user with username/email and password.",
+    tags=["Authentication"],
+    responses={
+        200: {"description": "Login successful"},
+        401: {"model": ErrorResponse, "description": "Invalid credentials"}
+    }
+)
+async def login_user(login_data: UserLogin):
+    """
+    Login with username or email and password.
+    
+    - **username_or_email**: Username or email address
+    - **password**: User's password
+    
+    Returns an access token for authenticated requests.
+    """
+    try:
+        # Try to find user by username first, then by email
+        user = await db.get_user_by_username(login_data.username_or_email)
+        if not user:
+            user = await db.get_user_by_email(login_data.username_or_email.lower())
+        
+        # Verify user exists and password is correct
+        if not user or not verify_password(login_data.password, user.hashed_password):
+            raise HTTPException(status_code=401, detail="Invalid username/email or password")
+        
+        # Check if user is active
+        if not user.is_active:
+            raise HTTPException(status_code=401, detail="User account is deactivated")
+        
+        # Update last login timestamp
+        await db.update_user_last_login(user.id)
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": user.id, "username": user.username})
+        
+        # Return token and user info
+        user_response = UserResponse(
+            id=user.id,
+            username=user.username,
+            email=user.email,
+            full_name=user.full_name,
+            is_active=user.is_active,
+            is_admin=user.is_admin,
+            created_at=user.created_at,
+            last_login=datetime.utcnow()
+        )
+        
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=user_response
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error during login: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+
+@app.get(
+    "/api/auth/me",
+    response_model=UserResponse,
+    summary="Get Current User",
+    description="Get the currently authenticated user's information.",
+    tags=["Authentication"],
+    responses={
+        200: {"description": "User information retrieved"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"}
+    }
+)
+async def get_me(current_user: User = Depends(get_current_user)):
+    """
+    Get current authenticated user information.
+    
+    Requires a valid JWT token in the Authorization header:
+    `Authorization: Bearer <token>`
+    """
+    return UserResponse(
+        id=current_user.id,
+        username=current_user.username,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        is_active=current_user.is_active,
+        is_admin=current_user.is_admin,
+        created_at=current_user.created_at,
+        last_login=current_user.last_login
+    )
+
+@app.post(
+    "/api/auth/logout",
+    response_model=ApiResponse,
+    summary="User Logout",
+    description="Logout the current user (client should discard token).",
+    tags=["Authentication"]
+)
+async def logout_user(current_user: User = Depends(get_current_user)):
+    """
+    Logout user.
+    
+    Since we're using JWT tokens (stateless), the actual logout happens client-side
+    by discarding the token. This endpoint is provided for consistency and can be
+    used to perform any server-side cleanup if needed in the future.
+    """
+    return ApiResponse(
+        message="Logout successful. Please discard your access token.",
+        success=True
+    )
 
 # Claude Authentication Profile Management Endpoints
 @app.get(

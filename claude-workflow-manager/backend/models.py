@@ -327,3 +327,46 @@ class ClaudeProfileSelectionResponse(BaseModel):
     selected_profile_id: Optional[str] = None
     profile_name: Optional[str] = None
     selected_at: Optional[datetime] = None
+
+# User Account Models
+class User(BaseModel):
+    """User account model"""
+    id: Optional[str] = None
+    username: str
+    email: str
+    hashed_password: str
+    full_name: Optional[str] = None
+    is_active: bool = True
+    is_admin: bool = False
+    created_at: datetime
+    updated_at: datetime
+    last_login: Optional[datetime] = None
+
+class UserCreate(BaseModel):
+    """Request model for user registration"""
+    username: str
+    email: str
+    password: str
+    full_name: Optional[str] = None
+
+class UserLogin(BaseModel):
+    """Request model for user login"""
+    username_or_email: str  # Can be username or email
+    password: str
+
+class UserResponse(BaseModel):
+    """Response model for user data (without password)"""
+    id: str
+    username: str
+    email: str
+    full_name: Optional[str] = None
+    is_active: bool
+    is_admin: bool
+    created_at: datetime
+    last_login: Optional[datetime] = None
+
+class TokenResponse(BaseModel):
+    """Response model for authentication token"""
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
