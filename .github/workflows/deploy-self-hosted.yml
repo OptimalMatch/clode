@@ -116,6 +116,10 @@ jobs:
         # Use home directory instead of /opt to avoid sudo requirements
         DEPLOY_DIR="$HOME/claude-workflow-manager-deploy"
         mkdir -p $DEPLOY_DIR
+        
+        # Fix ownership of deployment directory (in case it was created with wrong permissions)
+        sudo chown -R $USER:$USER $DEPLOY_DIR
+        
         echo "DEPLOY_DIR=$DEPLOY_DIR" >> $GITHUB_ENV
         echo "✅ Deployment directory created at $DEPLOY_DIR"
 
@@ -143,6 +147,10 @@ jobs:
     - name: Deploy new version
       run: |
         echo "🚀 Deploying new version..."
+        
+        # Ensure deployment directory is owned by current user
+        sudo chown -R $USER:$USER $DEPLOY_DIR
+        
         cd $DEPLOY_DIR
         
         # Copy the claude-workflow-manager subdirectory from the repo
@@ -150,6 +158,8 @@ jobs:
         
         # Fix ownership to current user (important after Docker operations)
         sudo chown -R $USER:$USER claude-workflow-manager
+        
+        echo "✅ Files deployed successfully"
 
     - name: Set up environment configuration
       run: |
