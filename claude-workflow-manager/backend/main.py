@@ -518,9 +518,18 @@ async def register_user(user_data: UserCreate):
     - **full_name**: Optional full name of the user
     """
     try:
-        # Validate password length
+        # Validate password length (in characters for minimum)
         if len(user_data.password) < 8:
             raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+        
+        # Validate password byte length (bcrypt limit is 72 bytes, not characters)
+        password_bytes = len(user_data.password.encode('utf-8'))
+        if password_bytes > 72:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Password is too long ({password_bytes} bytes). Maximum is 72 bytes (bcrypt limitation). "
+                       "Consider using fewer special characters or emojis."
+            )
         
         # Validate username length
         if len(user_data.username) < 3 or len(user_data.username) > 50:

@@ -46,7 +46,7 @@ Your browser will open to `http://localhost:3000`
 2. Fill in the registration form:
    - Username: `testuser` (3-50 characters)
    - Email: `test@example.com`
-   - Password: `password123` (minimum 8 characters)
+   - Password: `password123` (min 8 chars, max 72 bytes)
    - Full Name: `Test User` (optional)
 3. Click "Create Account"
 4. You'll be automatically logged in and redirected to the home page
@@ -282,7 +282,9 @@ Now that authentication is working:
 
 ## 💡 Tips
 
-1. **Use Strong Passwords**: Minimum 8 characters, but longer is better
+1. **Use Strong Passwords**: Minimum 8 characters, maximum 72 **bytes** (bcrypt limitation)
+   - Note: Emojis and special Unicode characters use multiple bytes!
+   - Example: "password🔥" = 12 bytes (8 + 4 for emoji)
 2. **Unique Usernames**: Usernames must be unique across all users
 3. **Valid Emails**: Email format is validated
 4. **Token Storage**: Tokens are stored in localStorage
