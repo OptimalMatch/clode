@@ -518,12 +518,24 @@ async def register_user(user_data: UserCreate):
     - **full_name**: Optional full name of the user
     """
     try:
+        # Debug logging
+        print(f"🔍 Registration attempt:")
+        print(f"   Username: {user_data.username}")
+        print(f"   Email: {user_data.email}")
+        print(f"   Password length: {len(user_data.password)} chars")
+        
         # Validate password length (in characters for minimum)
         if len(user_data.password) < 8:
             raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
         
         # Validate password byte length (bcrypt limit is 72 bytes, not characters)
-        password_bytes = len(user_data.password.encode('utf-8'))
+        try:
+            password_bytes = len(user_data.password.encode('utf-8'))
+            print(f"   Password bytes: {password_bytes}")
+        except Exception as e:
+            print(f"❌ Error encoding password: {e}")
+            raise HTTPException(status_code=400, detail="Invalid password encoding")
+        
         if password_bytes > 72:
             raise HTTPException(
                 status_code=400, 
@@ -537,11 +549,23 @@ async def register_user(user_data: UserCreate):
         
         # Create user object with hashed password
         user_id = str(uuid.uuid4())
+        
+        # Hash the password (with additional safety check)
+        try:
+            hashed_password = hash_password(user_data.password)
+        except Exception as hash_error:
+            print(f"❌ Password hashing error: {str(hash_error)}")
+            print(f"   Password length: {len(user_data.password)} chars, {password_bytes} bytes")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Password hashing failed. Please try a simpler password without special characters."
+            )
+        
         user = User(
             id=user_id,
             username=user_data.username,
             email=user_data.email.lower(),  # Store email in lowercase
-            hashed_password=hash_password(user_data.password),
+            hashed_password=hashed_password,
             full_name=user_data.full_name,
             is_active=True,
             is_admin=False,
