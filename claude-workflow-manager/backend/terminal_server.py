@@ -557,10 +557,10 @@ class TerminalServer:
                     await self._send_status(session, 
                         f"✅ Backend container found, establishing connection...")
                     
-                    # Use pexpect to spawn docker exec with interactive TTY
+                    # Use pexpect to spawn docker exec with interactive TTY as claude user
                     session.child_process = pexpect.spawn(
                         'docker',
-                        ['exec', '-it', backend_container, '/bin/bash'],
+                        ['exec', '-it', '-u', 'claude', backend_container, '/bin/bash'],
                         encoding='utf-8',
                         codec_errors='ignore',
                         env={'TERM': 'xterm-256color'}
@@ -569,24 +569,18 @@ class TerminalServer:
                     # Set terminal size
                     session.child_process.setwinsize(24, 80)
                     
-                    logger.info(f"🐳 Connected to backend container via docker exec")
-                    await self._send_status(session, f"🐳 Connected to backend container!")
+                    logger.info(f"🐳 Connected to backend container via docker exec (as claude user)")
+                    await self._send_status(session, f"🐳 Connected as claude user!")
                     
                     # Wait a moment for bash to initialize
                     await asyncio.sleep(0.3)
                     
-                    # Send initial commands to show instance working directories
-                    session.child_process.send('cd /tmp 2>/dev/null || cd /app\r\n')
-                    await asyncio.sleep(0.3)
-                    
-                    session.child_process.send('echo "📁 Looking for instance working directories..."\r\n')
-                    await asyncio.sleep(0.3)
-                    
-                    session.child_process.send('ls -ldt /tmp/tmp* 2>/dev/null | head -5 || echo "No /tmp/tmp* directories found yet"\r\n')
-                    await asyncio.sleep(0.3)
+                    # Detect instance working directory and cd into it automatically
+                    session.child_process.send('INSTANCE_DIR=$(ls -dt /tmp/tmp* 2>/dev/null | head -1); if [ -n "$INSTANCE_DIR" ]; then cd "$INSTANCE_DIR" && echo "📁 Auto-navigated to: $(pwd)"; else cd /tmp && echo "ℹ️ No instance directory found yet, starting in /tmp"; fi\r\n')
+                    await asyncio.sleep(0.5)
                     
                     await self._send_status(session, 
-                        f"💡 Tip: Instance git repos are in /tmp/tmp* directories")
+                        f"💡 Tip: You're now in the instance git repo directory!")
                     
                     return  # Exit early, we've already set up the process
                     
