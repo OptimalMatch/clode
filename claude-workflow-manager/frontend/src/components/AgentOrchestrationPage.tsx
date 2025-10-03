@@ -450,6 +450,17 @@ const AgentOrchestrationPage: React.FC = () => {
         Demonstrate multi-agent orchestration patterns with Claude AI
       </Typography>
 
+      {/* Claude Agent SDK Notice */}
+      <Alert severity="success" sx={{ mt: 2, mb: 2 }}>
+        <Typography variant="body2" gutterBottom>
+          <strong>✨ Powered by Claude Agent SDK</strong> - Works with your existing Max Plan authentication!
+        </Typography>
+        <Typography variant="body2">
+          Agent Orchestration uses the Claude Agent SDK, which integrates seamlessly with your Claude Code setup. No additional API key required. 
+          <a href="https://docs.claude.com/en/api/agent-sdk/python" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline', marginLeft: '4px' }}>Learn more</a>
+        </Typography>
+      </Alert>
+
       <Grid container spacing={3} sx={{ mt: 2 }}>
         {/* Pattern Selection */}
         <Grid item xs={12}>

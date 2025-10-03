@@ -1,10 +1,11 @@
 """
 Multi-Agent Orchestration System
 Implements 5 key patterns for agent collaboration
+Uses Claude Agent SDK for Max Plan compatibility
 """
 
-import anthropic
-from typing import List, Dict, Optional, Callable, Any
+from claude_agent_sdk import query, ClaudeSDKClient, ClaudeAgentOptions
+from typing import List, Dict, Optional, Callable, Any, AsyncIterator
 import json
 from datetime import datetime
 from enum import Enum
@@ -83,9 +84,9 @@ class Agent:
 
 
 class MultiAgentOrchestrator:
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
-        self.client = anthropic.Anthropic(api_key=api_key)
+    def __init__(self, model: str = "claude-sonnet-4-20250514", cwd: Optional[str] = None):
         self.model = model
+        self.cwd = cwd
         self.agents: Dict[str, Agent] = {}
         self.shared_memory: List[Dict] = []
         self.message_log: List[Message] = []
@@ -97,23 +98,33 @@ class MultiAgentOrchestrator:
         logger.info(f"Added agent: {name} with role {role}")
         return self.agents[name]
     
-    def _call_claude(self, agent: Agent, message: str, context: Optional[str] = None) -> str:
-        """Internal method to call Claude API"""
+    async def _call_claude(self, agent: Agent, message: str, context: Optional[str] = None) -> str:
+        """Internal method to call Claude via Agent SDK"""
         full_message = message
         if context:
             full_message = f"Context:\n{context}\n\nTask:\n{message}"
-            
-        messages = agent.history + [{"role": "user", "content": full_message}]
         
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=4000,
-                system=agent.system_prompt,
-                messages=messages
+            # Configure options for this agent
+            options = ClaudeAgentOptions(
+                system_prompt=agent.system_prompt,
+                permission_mode='acceptAll',  # Auto-accept for orchestration
+                cwd=self.cwd
             )
             
-            reply = response.content[0].text
+            # Use query() for one-off agent interactions
+            reply_parts = []
+            async for msg in query(prompt=full_message, options=options):
+                # Extract text content from messages
+                if hasattr(msg, 'content'):
+                    if isinstance(msg.content, list):
+                        for block in msg.content:
+                            if hasattr(block, 'text'):
+                                reply_parts.append(block.text)
+                    elif isinstance(msg.content, str):
+                        reply_parts.append(msg.content)
+            
+            reply = "\n".join(reply_parts) if reply_parts else "No response"
             
             # Update history
             agent.add_to_history("user", full_message)
@@ -124,8 +135,8 @@ class MultiAgentOrchestrator:
             logger.error(f"Error calling Claude for agent {agent.name}: {e}")
             raise
     
-    def send_message(self, from_agent: str, to_agent: str, message: str, 
-                    message_type: MessageType = MessageType.TASK) -> str:
+    async def send_message(self, from_agent: str, to_agent: str, message: str, 
+                          message_type: MessageType = MessageType.TASK) -> str:
         """Send a message from one agent to another"""
         if to_agent not in self.agents:
             raise ValueError(f"Agent {to_agent} not found")
@@ -138,7 +149,7 @@ class MultiAgentOrchestrator:
         # Get response from target agent
         target = self.agents[to_agent]
         context = f"Message from {from_agent}"
-        response = self._call_claude(target, message, context)
+        response = await self._call_claude(target, message, context)
         
         # Log response
         response_msg = Message(to_agent, from_agent, response, MessageType.RESPONSE)
@@ -147,7 +158,7 @@ class MultiAgentOrchestrator:
         return response
     
     # PATTERN 1: SEQUENTIAL PIPELINE
-    def sequential_pipeline(self, task: str, agent_sequence: List[str]) -> Dict[str, Any]:
+    async def sequential_pipeline(self, task: str, agent_sequence: List[str]) -> Dict[str, Any]:
         """
         Execute task through a sequential pipeline of agents.
         Each agent processes the output of the previous agent.
@@ -162,7 +173,7 @@ class MultiAgentOrchestrator:
             logger.info(f"Sequential step {i+1}/{len(agent_sequence)}: {agent_name}")
             
             step_start = datetime.now()
-            response = self.send_message("system", agent_name, current_input, MessageType.TASK)
+            response = await self.send_message("system", agent_name, current_input, MessageType.TASK)
             step_end = datetime.now()
             
             results[agent_name] = response
@@ -186,7 +197,7 @@ class MultiAgentOrchestrator:
         }
     
     # PATTERN 2: DEBATE/DISCUSSION
-    def debate(self, topic: str, agents: List[str], rounds: int = 3) -> Dict[str, Any]:
+    async def debate(self, topic: str, agents: List[str], rounds: int = 3) -> Dict[str, Any]:
         """
         Agents debate a topic back and forth for specified rounds.
         Each agent responds to the previous agent's argument.
@@ -201,7 +212,7 @@ class MultiAgentOrchestrator:
             
             for agent_name in agents:
                 round_start = datetime.now()
-                response = self.send_message("moderator", agent_name, current_statement, MessageType.TASK)
+                response = await self.send_message("moderator", agent_name, current_statement, MessageType.TASK)
                 round_end = datetime.now()
                 
                 debate_entry = {
@@ -223,7 +234,7 @@ class MultiAgentOrchestrator:
         }
     
     # PATTERN 3: HIERARCHICAL
-    def hierarchical_execution(self, task: str, manager: str, workers: List[str]) -> Dict[str, Any]:
+    async def hierarchical_execution(self, task: str, manager: str, workers: List[str]) -> Dict[str, Any]:
         """
         Manager agent delegates subtasks to worker agents and synthesizes results.
         """
@@ -237,7 +248,7 @@ Format your response as JSON:
 {{"subtasks": [{{"worker": "name", "task": "description"}}]}}"""
         
         delegation_start = datetime.now()
-        delegation = self.send_message("system", manager, delegation_prompt, MessageType.DELEGATION)
+        delegation = await self.send_message("system", manager, delegation_prompt, MessageType.DELEGATION)
         delegation_end = datetime.now()
         
         # Parse subtasks
@@ -257,7 +268,7 @@ Format your response as JSON:
             worker = subtask["worker"]
             if worker in self.agents:
                 worker_start = datetime.now()
-                result = self.send_message(manager, worker, subtask["task"], MessageType.TASK)
+                result = await self.send_message(manager, worker, subtask["task"], MessageType.TASK)
                 worker_end = datetime.now()
                 
                 worker_results[worker] = result
@@ -277,7 +288,7 @@ Worker results:
 Synthesize these results into a coherent final output."""
         
         synthesis_start = datetime.now()
-        final_result = self.send_message("system", manager, synthesis_prompt, MessageType.SYNTHESIS)
+        final_result = await self.send_message("system", manager, synthesis_prompt, MessageType.SYNTHESIS)
         synthesis_end = datetime.now()
         
         return {
@@ -294,8 +305,8 @@ Synthesize these results into a coherent final output."""
         }
     
     # PATTERN 4: PARALLEL WITH AGGREGATION
-    def parallel_aggregate(self, task: str, agents: List[str], 
-                          aggregator: Optional[str] = None) -> Dict[str, Any]:
+    async def parallel_aggregate(self, task: str, agents: List[str], 
+                                aggregator: Optional[str] = None) -> Dict[str, Any]:
         """
         Multiple agents work on the same task independently in parallel,
         then results are aggregated.
@@ -308,7 +319,7 @@ Synthesize these results into a coherent final output."""
         
         for agent_name in agents:
             agent_start = datetime.now()
-            response = self.send_message("system", agent_name, task, MessageType.TASK)
+            response = await self.send_message("system", agent_name, task, MessageType.TASK)
             agent_end = datetime.now()
             
             results[agent_name] = response
@@ -331,7 +342,7 @@ Multiple agents provided these responses:
 Synthesize the best elements from each response into a comprehensive answer."""
             
             aggregation_start = datetime.now()
-            aggregated_result = self.send_message("system", aggregator, aggregation_prompt, MessageType.SYNTHESIS)
+            aggregated_result = await self.send_message("system", aggregator, aggregation_prompt, MessageType.SYNTHESIS)
             aggregation_end = datetime.now()
             aggregation_duration_ms = int((aggregation_end - aggregation_start).total_seconds() * 1000)
         
@@ -347,7 +358,7 @@ Synthesize the best elements from each response into a comprehensive answer."""
         }
     
     # PATTERN 5: DYNAMIC ROUTING
-    def dynamic_routing(self, task: str, router: str, specialists: List[str]) -> Dict[str, Any]:
+    async def dynamic_routing(self, task: str, router: str, specialists: List[str]) -> Dict[str, Any]:
         """
         Router agent analyzes the task and routes it to the most appropriate specialist(s).
         """
@@ -361,7 +372,7 @@ Analyze the task and decide which specialist(s) should handle it.
 Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"""
         
         routing_start = datetime.now()
-        routing_decision = self.send_message("system", router, routing_prompt, MessageType.ROUTING)
+        routing_decision = await self.send_message("system", router, routing_prompt, MessageType.ROUTING)
         routing_end = datetime.now()
         
         # Parse routing decision
@@ -381,7 +392,7 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
         for agent_name in selected:
             if agent_name in self.agents:
                 exec_start = datetime.now()
-                response = self.send_message(router, agent_name, task, MessageType.TASK)
+                response = await self.send_message(router, agent_name, task, MessageType.TASK)
                 exec_end = datetime.now()
                 
                 results[agent_name] = response
@@ -405,13 +416,13 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
         }
     
     # UTILITY METHODS
-    def broadcast(self, from_agent: str, message: str, exclude: Optional[List[str]] = None) -> Dict[str, str]:
+    async def broadcast(self, from_agent: str, message: str, exclude: Optional[List[str]] = None) -> Dict[str, str]:
         """Broadcast message to all agents except those in exclude list"""
         exclude = exclude or []
         responses = {}
         for agent_name in self.agents:
             if agent_name != from_agent and agent_name not in exclude:
-                responses[agent_name] = self.send_message(from_agent, agent_name, message)
+                responses[agent_name] = await self.send_message(from_agent, agent_name, message)
         return responses
     
     def get_shared_context(self, max_items: int = 10) -> str:
