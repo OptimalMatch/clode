@@ -324,19 +324,25 @@ const AlternativeInstanceTerminal: React.FC<AlternativeInstanceTerminalProps> = 
         {/* Usage Instructions */}
         <Alert severity="info" sx={{ mt: 2 }}>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            <strong>✨ Fast Terminal:</strong> This xterm.js terminal runs in the terminal container 
-            with full access to Claude Code conversation history.
+            <strong>🐳 Backend Container Access:</strong> This terminal connects directly to the backend container 
+            via <code>docker exec</code>, giving you full access to instance working directories.
           </Typography>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            <strong>📁 What's Accessible:</strong>
+            <strong>📁 What You'll Find:</strong>
           </Typography>
           <Box component="ul" sx={{ mt: 0, mb: 1, pl: 3 }}>
-            <li><Typography variant="body2">✅ Claude history in <code>~/.claude/projects/</code></Typography></li>
-            <li><Typography variant="body2">✅ Shared files in <code>/app/project/</code></Typography></li>
-            <li><Typography variant="body2">❌ Instance git repos (in backend container's <code>/tmp</code>)</Typography></li>
+            <li><Typography variant="body2">✅ Instance git repos in <code>/tmp/tmp*</code> directories</Typography></li>
+            <li><Typography variant="body2">✅ Full backend container environment</Typography></li>
+            <li><Typography variant="body2">✅ Same files Claude Code is working with</Typography></li>
+            <li><Typography variant="body2">✅ Access to all backend tools (Python, Node.js, etc.)</Typography></li>
           </Box>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            <strong>💡 Pro Tip:</strong> The terminal will automatically show recent instance directories when you connect. 
+            Use <code>cd /tmp/tmp*</code> (with tab completion) to navigate to your instance's working directory.
+          </Typography>
           <Typography variant="body2">
-            <strong>💡 Best For:</strong> Viewing history and using Claude CLI. For git repo access, use <strong>Rich Terminal</strong>.
+            <strong>🔄 Alternative:</strong> Use <strong>Rich Terminal</strong> for the formatted view 
+            with markdown rendering, TODO sidebar, and streaming output.
           </Typography>
         </Alert>
       </DialogContent>

@@ -1,40 +1,45 @@
 #!/bin/bash
-# Rebuild terminal container and test
+# Rebuild terminal container with Docker socket access
 
-echo "🔄 Rebuilding terminal container..."
+echo "🔨 Rebuilding terminal container with Docker CLI support..."
+echo ""
 
-# Stop and remove existing terminal container
-docker stop claude-workflow-terminal 2>/dev/null || true
-docker rm claude-workflow-terminal 2>/dev/null || true
+# Stop the terminal container
+echo "🛑 Stopping terminal container..."
+docker-compose stop claude-terminal
 
-# Rebuild the terminal service
+# Rebuild with no cache to ensure all changes are applied
+echo "🏗️ Building terminal container (this may take a few minutes)..."
 docker-compose build --no-cache claude-terminal
 
-# Start the terminal service
+# Start the terminal container
+echo "🚀 Starting terminal container..."
 docker-compose up -d claude-terminal
 
-# Wait a moment for startup
-echo "⏳ Waiting for terminal server to start..."
+# Wait for container to be healthy
+echo "⏳ Waiting for container to be healthy..."
 sleep 5
 
-# Show logs
-echo "📊 Terminal container logs:"
-docker logs claude-workflow-terminal
-
-# Check if container is running
+# Check container status
 echo ""
-echo "📋 Container status:"
-docker ps | grep claude-workflow-terminal
-
-# Test WebSocket endpoint
-echo ""
-echo "🔗 Testing WebSocket endpoint..."
-curl -i -N -H "Connection: Upgrade" \
-     -H "Upgrade: websocket" \
-     -H "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==" \
-     -H "Sec-WebSocket-Version: 13" \
-     http://localhost:8006/ws/terminal/login/test-session || echo "⚠️ WebSocket test failed (expected in curl)"
+echo "📊 Container status:"
+docker ps --filter "name=claude-workflow-terminal" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 echo ""
-echo "✅ Terminal container rebuild complete!"
-echo "🌐 WebSocket should be available at: ws://localhost:8006"
+echo "✅ Terminal container rebuilt!"
+echo ""
+echo "📝 Checking Docker CLI access..."
+docker exec claude-workflow-terminal su -c "which docker" claude
+docker exec claude-workflow-terminal su -c "docker --version" claude
+
+echo ""
+echo "📝 Checking Docker socket permissions..."
+docker exec claude-workflow-terminal su -c "ls -la /var/run/docker.sock" claude
+
+echo ""
+echo "📝 Checking if claude user is in docker group..."
+docker exec claude-workflow-terminal su -c "groups" claude
+
+echo ""
+echo "✅ All done! The Real-Time Terminal should now have access to the backend container."
+echo "💡 Try opening the Real-Time Terminal in the UI to test the connection."
