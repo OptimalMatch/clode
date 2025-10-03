@@ -11,11 +11,11 @@ import ProfilePage from './components/ProfilePage';
 import WorkflowsPage from './components/WorkflowsPage';
 import DesignPage from './components/DesignPage';
 import PromptsPage from './components/PromptsPage';
-import InstancesPage from './components/InstancesPage';
+import AgentsPage from './components/AgentsPage';
 import SubagentsPage from './components/SubagentsPage';
 import SSHKeysPage from './components/SSHKeysPage';
 import ClaudeAuthPage from './components/ClaudeAuthPage';
-import MultiInstanceView from './components/MultiInstanceView';
+import MultiAgentView from './components/MultiAgentView';
 import SettingsPage from './components/SettingsPage';
 import AgentOrchestrationPage from './components/AgentOrchestrationPage';
 
@@ -60,8 +60,8 @@ function App() {
               <Route path="/ssh-keys" element={<Layout><SSHKeysPage /></Layout>} />
               <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
               <Route path="/orchestration" element={<Layout><AgentOrchestrationPage /></Layout>} />
-              <Route path="/instances/:workflowId" element={<Layout><InstancesPage /></Layout>} />
-              <Route path="/multi-instance" element={<Layout><MultiInstanceView /></Layout>} />
+              <Route path="/instances/:workflowId" element={<Layout><AgentsPage /></Layout>} />
+              <Route path="/multi-instance" element={<Layout><MultiAgentView /></Layout>} />
             </Routes>
           </AuthProvider>
         </Router>
