@@ -507,9 +507,37 @@ class TerminalServer:
                 
                 import subprocess
                 try:
+                    # Check if docker is available
+                    docker_check = subprocess.run(['which', 'docker'], capture_output=True, text=True)
+                    if docker_check.returncode != 0:
+                        logger.error("❌ Docker CLI not found in terminal container")
+                        await self._send_error(session, "Docker CLI not available in this container")
+                        raise Exception("Docker CLI not found")
+                    
+                    logger.info(f"✅ Docker CLI found at: {docker_check.stdout.strip()}")
+                    await self._send_status(session, f"✅ Docker CLI available")
+                    
+                    # Check if Docker socket is accessible
+                    socket_check = subprocess.run(['ls', '-la', '/var/run/docker.sock'], capture_output=True, text=True)
+                    logger.info(f"🔍 Docker socket check: {socket_check.stdout.strip()}")
+                    
+                    # Try to list containers to verify Docker access
+                    ps_check = subprocess.run(['docker', 'ps', '--format', '{{.Names}}'], 
+                                             capture_output=True, text=True, timeout=5)
+                    logger.info(f"🔍 Docker ps result: returncode={ps_check.returncode}")
+                    if ps_check.returncode == 0:
+                        containers = ps_check.stdout.strip().split('\n')
+                        logger.info(f"📦 Found containers: {containers}")
+                        await self._send_status(session, f"📦 Can see {len(containers)} containers")
+                    else:
+                        logger.error(f"❌ Docker ps failed: {ps_check.stderr}")
+                        await self._send_error(session, f"Cannot access Docker: {ps_check.stderr}")
+                    
                     # Check if the backend container is running
                     check_cmd = ['docker', 'inspect', '-f', '{{.State.Running}}', backend_container]
                     result = subprocess.run(check_cmd, capture_output=True, text=True, timeout=5)
+                    
+                    logger.info(f"🔍 Docker inspect result: returncode={result.returncode}, stdout='{result.stdout.strip()}', stderr='{result.stderr.strip()}')")
                     
                     if result.returncode == 0 and result.stdout.strip() == 'true':
                         # Container is running, use docker exec
