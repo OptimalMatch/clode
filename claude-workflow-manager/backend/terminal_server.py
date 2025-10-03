@@ -207,6 +207,68 @@ class TerminalServer:
         async def list_profiles():
             return {"profiles": self.profile_manager.list_profiles()}
 
+        @self.app.get("/claude-history/{project_path:path}")
+        async def get_claude_history(project_path: str, session_id: str = None):
+            """Get Claude Code conversation history from JSONL files"""
+            try:
+                # Claude stores project history in ~/.claude/projects/{escaped_path}/
+                claude_dir = Path.home() / ".claude"
+                projects_dir = claude_dir / "projects"
+                
+                # Escape the project path for directory name (Claude uses this format)
+                escaped_path = project_path.replace('/', '-')
+                project_history_dir = projects_dir / escaped_path
+                
+                if not project_history_dir.exists():
+                    return {"error": "No history found for this project", "history": []}
+                
+                # Find all JSONL files in the directory
+                jsonl_files = list(project_history_dir.glob("*.jsonl"))
+                
+                if not jsonl_files:
+                    return {"history": [], "sessions": []}
+                
+                # If a specific session_id is requested, only load that file
+                if session_id:
+                    session_file = project_history_dir / f"{session_id}.jsonl"
+                    if session_file.exists():
+                        jsonl_files = [session_file]
+                    else:
+                        return {"error": f"Session {session_id} not found", "history": []}
+                
+                # Parse JSONL files and extract conversation history
+                sessions = []
+                for jsonl_file in sorted(jsonl_files, key=lambda f: f.stat().st_mtime, reverse=True):
+                    session_history = []
+                    session_id = jsonl_file.stem
+                    
+                    try:
+                        with open(jsonl_file, 'r') as f:
+                            for line in f:
+                                if line.strip():
+                                    entry = json.loads(line)
+                                    session_history.append(entry)
+                        
+                        sessions.append({
+                            "session_id": session_id,
+                            "file": str(jsonl_file),
+                            "modified": jsonl_file.stat().st_mtime,
+                            "entry_count": len(session_history),
+                            "history": session_history
+                        })
+                    except Exception as e:
+                        logger.warning(f"Failed to parse {jsonl_file}: {e}")
+                
+                return {
+                    "project_path": project_path,
+                    "sessions": sessions,
+                    "total_sessions": len(sessions)
+                }
+                
+            except Exception as e:
+                logger.error(f"Failed to get Claude history: {e}")
+                return {"error": str(e), "history": []}
+
         @self.app.get("/export-credentials")
         async def export_claude_credentials(session_id: str = None):
             """Export Claude credentials for backend integration"""

@@ -25,6 +25,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { instanceApi, promptApi, workflowApi } from '../services/api';
 import { ClaudeInstance, Prompt } from '../types';
 import InstanceTerminal from './InstanceTerminal';
+import AlternativeInstanceTerminal from './AlternativeInstanceTerminal';
 import LogsViewer from './LogsViewer';
 
 const InstancesPage: React.FC = () => {
@@ -34,6 +35,7 @@ const InstancesPage: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [selectedPromptId, setSelectedPromptId] = useState('');
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null);
+  const [terminalView, setTerminalView] = useState<'rich' | 'realtime'>('rich'); // Default to rich view
   const [logsViewerOpen, setLogsViewerOpen] = useState(false);
   const [logsInstanceId, setLogsInstanceId] = useState<string | null>(null);
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -204,9 +206,19 @@ const InstancesPage: React.FC = () => {
                       )}
                     </Box>
                   </Box>
-                  <Box>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <FormControl size="small" sx={{ minWidth: 140 }}>
+                      <Select
+                        value={terminalView}
+                        onChange={(e) => setTerminalView(e.target.value as 'rich' | 'realtime')}
+                        displayEmpty
+                      >
+                        <MenuItem value="rich">📊 Rich Terminal</MenuItem>
+                        <MenuItem value="realtime">⚡ Real-Time Terminal</MenuItem>
+                      </Select>
+                    </FormControl>
                     <Button
-                      variant="outlined"
+                      variant="contained"
                       size="small"
                       onClick={() => setSelectedInstance(instance.id)}
                       sx={{ mr: 1 }}
@@ -372,10 +384,19 @@ const InstancesPage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {selectedInstance && (
+      {selectedInstance && terminalView === 'rich' && (
         <InstanceTerminal
           instanceId={selectedInstance}
           onClose={() => setSelectedInstance(null)}
+        />
+      )}
+
+      {selectedInstance && terminalView === 'realtime' && workflow && (
+        <AlternativeInstanceTerminal
+          instanceId={selectedInstance}
+          projectPath={workflow.git_repo || '/app/project'}
+          onClose={() => setSelectedInstance(null)}
+          onSwitchView={() => setTerminalView('rich')}
         />
       )}
 
