@@ -13,21 +13,30 @@ DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
 echo "📊 Docker socket GID: $DOCKER_SOCK_GID"
 echo ""
 
+# Detect which compose files to use
+if [ -f docker-compose.fast.yml ]; then
+    echo "📦 Using fast deployment with pre-built base images..."
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.fast.yml"
+else
+    echo "📦 Using standard docker-compose.yml..."
+    COMPOSE_FILES="-f docker-compose.yml"
+fi
+
 # Stop the terminal container
 echo "🛑 Stopping terminal container..."
-docker-compose stop claude-terminal || true
+docker compose $COMPOSE_FILES stop claude-terminal || true
 
 # Remove old container to ensure clean rebuild
 echo "🗑️ Removing old container..."
-docker-compose rm -f claude-terminal || true
+docker compose $COMPOSE_FILES rm -f claude-terminal || true
 
 # Rebuild with no cache to ensure all changes are applied
 echo "🏗️ Building terminal container (this may take a few minutes)..."
-docker-compose build --no-cache claude-terminal
+docker compose $COMPOSE_FILES build --no-cache claude-terminal
 
 # Start the terminal container
 echo "🚀 Starting terminal container..."
-docker-compose up -d claude-terminal
+docker compose $COMPOSE_FILES up -d claude-terminal
 
 # Wait for container to be healthy
 echo "⏳ Waiting for container to start..."

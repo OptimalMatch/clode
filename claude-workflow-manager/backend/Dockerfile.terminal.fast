@@ -14,8 +14,8 @@ RUN chmod +x /app/terminal_startup.sh
 # Ensure proper ownership
 RUN chown -R claude:claude /app
 
-# Note: We DON'T switch back to USER claude here because the entrypoint script
-# needs to run as root to start dockerd, then it switches to claude user
+# Note: Container starts as root to fix Docker socket permissions,
+# then startup script switches to claude user
 
-# The base image ENTRYPOINT will handle dockerd startup and user switching
-CMD ["python", "terminal_server.py"]
+# Use the startup script which handles Docker socket permissions
+CMD ["/app/terminal_startup.sh"]
