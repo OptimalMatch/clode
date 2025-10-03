@@ -87,10 +87,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile.terminal
     container_name: claude-workflow-terminal
-    # Note: No 'user: claude' here - the entrypoint script starts as root to run dockerd,
-    # then switches to claude user for the application
+    # Note: Container starts as root to fix Docker socket permissions,
+    # then startup script switches to claude user
     restart: always
-    privileged: true  # Required for Docker-in-Docker
+    # privileged: false - No longer needed (using Docker CLI only, not DinD)
     ports:
       - "8006:8006"  # Terminal WebSocket server
       - "8007:8007"  # Health check server
