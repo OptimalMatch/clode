@@ -423,6 +423,11 @@ class MultiAgentOrchestrator:
                 else:
                     # Not the last agent - give them the previous agent's response
                     current_statement = f"Respond to {agent_name}'s argument: {response}"
+            
+            # After each round completes, reset context for the next round
+            # Use the topic to re-ground the debate
+            if round_num < rounds - 1:  # Not the last round
+                current_statement = f"Continue the debate on: {topic}. Build on previous arguments."
         
         return {
             "pattern": "debate",
@@ -476,6 +481,11 @@ class MultiAgentOrchestrator:
                 else:
                     # Not the last agent - give them the previous agent's response
                     current_statement = f"Respond to {agent_name}'s argument: {response}"
+            
+            # After each round completes, reset context for the next round
+            # Use the topic to re-ground the debate
+            if round_num < rounds - 1:  # Not the last round
+                current_statement = f"Continue the debate on: {topic}. Build on previous arguments."
         
         return {
             "pattern": "debate",
