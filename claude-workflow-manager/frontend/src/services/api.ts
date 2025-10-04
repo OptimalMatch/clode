@@ -504,7 +504,7 @@ export const orchestrationApi = {
   ): Promise<OrchestrationResult> => {
     return new Promise(async (resolve, reject) => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/orchestration/debate/stream`, {
+        const response = await fetch(`${API_URL}/api/orchestration/debate/stream`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
