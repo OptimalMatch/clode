@@ -501,7 +501,7 @@ export const orchestrationApi = {
   executeDebateStream: async (
     request: DebateRequest,
     onEvent: (event: StreamEvent) => void
-  ): Promise<void> => {
+  ): Promise<OrchestrationResult> => {
     return new Promise(async (resolve, reject) => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/orchestration/debate/stream`, {
@@ -537,8 +537,15 @@ export const orchestrationApi = {
                 const event: StreamEvent = JSON.parse(jsonStr);
                 onEvent(event);
 
-                if (event.type === 'complete') {
-                  resolve();
+                if (event.type === 'complete' && event.result) {
+                  resolve({
+                    pattern: 'debate',
+                    execution_id: 'stream-exec',
+                    status: 'completed',
+                    result: event.result,
+                    duration_ms: event.duration_ms || 0,
+                    created_at: new Date().toISOString()
+                  });
                   return;
                 } else if (event.type === 'error') {
                   reject(new Error(event.error || 'Unknown error'));
