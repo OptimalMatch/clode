@@ -105,25 +105,25 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
 
     case 'debate':
       return {
-        task: 'Should artificial intelligence development be more heavily regulated?',
+        task: 'Which is better for productivity: working from home or working in an office?',
         agents: [
           {
-            name: 'Advocate',
-            system_prompt: 'You support AI regulation. Argue for stronger oversight, safety measures, and ethical frameworks. Present actual arguments with evidence and real-world examples. Output substantive debate points, not meta-discussion about the debate.',
+            name: 'Remote Advocate',
+            system_prompt: 'You advocate for remote work. Argue for its benefits including flexibility, work-life balance, reduced commute time, cost savings, and productivity gains. Present actual arguments with evidence and real-world examples. Output substantive debate points, not meta-discussion about the debate.',
             role: 'worker'
           },
           {
-            name: 'Skeptic',
-            system_prompt: 'You oppose heavy AI regulation. Argue for innovation freedom, market-driven solutions, and minimal government intervention. Present actual arguments with evidence and real-world examples. Output substantive debate points, not meta-discussion about the debate.',
+            name: 'Office Advocate',
+            system_prompt: 'You advocate for office work. Argue for its benefits including better collaboration, spontaneous creativity, clearer boundaries, team building, and structured environment. Present actual arguments with evidence and real-world examples. Output substantive debate points, not meta-discussion about the debate.',
             role: 'worker'
           },
           {
             name: 'Moderator',
-            system_prompt: 'You are a neutral moderator. Summarize key points from both sides and identify areas of agreement or strong disagreement. Output actual analysis of the arguments presented, synthesizing the debate constructively.',
+            system_prompt: 'You are a neutral moderator. Summarize key points from both sides, identify areas of agreement or strong disagreement, and explore potential hybrid solutions. Output actual analysis of the arguments presented, synthesizing the debate constructively.',
             role: 'moderator'
           }
         ],
-        rounds: 4
+        rounds: 3
       };
 
     case 'hierarchical':
@@ -737,20 +737,29 @@ const AgentOrchestrationPage: React.FC = () => {
                     transform: agentStatus.status === 'executing' ? 'scale(1.02)' : 'scale(1)',
                   }}
                 >
-                  <CardContent sx={{ display: 'flex', alignItems: 'center' }}>
-                    {getStatusIcon(agentStatus.status)}
-                    <Typography variant="subtitle1" sx={{ ml: 2, fontWeight: 'bold', flex: 1 }}>
-                      {agentStatus.name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
-                      {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
-                        <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
-                      )}
-                      {agentStatus.status === 'completed' && agentStatus.duration_ms && (
-                        <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
-                      )}
-                    </Typography>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: enableStreaming && agentStatus.streamingOutput ? 1 : 0 }}>
+                      {getStatusIcon(agentStatus.status)}
+                      <Typography variant="subtitle1" sx={{ ml: 2, fontWeight: 'bold', flex: 1 }}>
+                        {agentStatus.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
+                        {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
+                          <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
+                        )}
+                        {agentStatus.status === 'completed' && agentStatus.duration_ms && (
+                          <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
+                        )}
+                      </Typography>
+                    </Box>
+                    {enableStreaming && agentStatus.streamingOutput && (
+                      <Box sx={{ mt: 1, p: 1, bgcolor: 'background.paper', borderRadius: 1, maxHeight: 200, overflow: 'auto' }}>
+                        <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                          {agentStatus.streamingOutput}
+                        </Typography>
+                      </Box>
+                    )}
                   </CardContent>
                 </Card>
               ))}
