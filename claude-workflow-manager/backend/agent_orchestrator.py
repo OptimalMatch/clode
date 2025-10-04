@@ -153,6 +153,12 @@ class MultiAgentOrchestrator:
         self.message_log: List[Message] = []
         self.execution_log: List[Dict] = []
         
+        # Log authentication mode
+        if self._is_max_plan_mode():
+            logger.info("🎯 Multi-Agent Orchestrator: Max Plan mode (message-level streaming)")
+        else:
+            logger.info("⚡ Multi-Agent Orchestrator: API Key mode (token-level streaming available)")
+        
     def add_agent(self, name: str, system_prompt: str, role: AgentRole = AgentRole.WORKER, use_tools: bool = None) -> Agent:
         """
         Add an agent to the system.
@@ -168,6 +174,29 @@ class MultiAgentOrchestrator:
         logger.info(f"Added agent: {name} with role {role}, tools: {tool_status}")
         return self.agents[name]
     
+    def _get_api_key(self) -> Optional[str]:
+        """
+        Get Anthropic API key from environment variables.
+        Returns None if using Max Plan (which uses OAuth, not API keys).
+        """
+        # Only check environment variables for API keys
+        # Max Plan uses OAuth session tokens, not API keys
+        api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
+        return api_key
+    
+    def _is_max_plan_mode(self) -> bool:
+        """
+        Detect if we're running in Max Plan mode.
+        Max Plan uses OAuth session tokens, not API keys.
+        """
+        # Check for explicit Max Plan flag
+        use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "false").lower() == "true"
+        
+        # If no API key is set, assume Max Plan
+        has_api_key = self._get_api_key() is not None
+        
+        return use_max_plan or not has_api_key
+    
     async def _call_claude_streaming(self, agent: Agent, message: str, context: Optional[str] = None,
                                      stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
         """Call Claude via Anthropic SDK for true token-level streaming (no tools)"""
@@ -176,8 +205,13 @@ class MultiAgentOrchestrator:
             full_message = f"Context:\n{context}\n\nTask:\n{message}"
         
         try:
+            # Get API key for Anthropic SDK
+            api_key = self._get_api_key()
+            if not api_key:
+                raise Exception("No API key found. Set ANTHROPIC_API_KEY or ensure Claude CLI is authenticated.")
+            
             # Use Anthropic SDK directly for true token-level streaming
-            client = anthropic.AsyncAnthropic()
+            client = anthropic.AsyncAnthropic(api_key=api_key)
             
             reply_parts = []
             
@@ -253,14 +287,28 @@ class MultiAgentOrchestrator:
     async def _call_claude(self, agent: Agent, message: str, context: Optional[str] = None, 
                           stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
         """
-        Hybrid routing: Choose the best Claude SDK based on agent needs.
-        - Anthropic SDK: True token-level streaming for text-only agents
-        - Claude Agent SDK: Tool use capabilities for agents that need file/bash/web tools
+        Hybrid routing: Choose the best Claude SDK based on agent needs and available authentication.
+        
+        Max Plan Mode (OAuth):
+          - All agents use Claude Agent SDK (message-level streaming)
+          - Token streaming requires API key, which Max Plan doesn't have
+        
+        API Key Mode:
+          - Text-only agents: Anthropic SDK (true token-level streaming)
+          - Tool-using agents: Claude Agent SDK (full tool capabilities)
         """
-        if agent.use_tools:
+        is_max_plan = self._is_max_plan_mode()
+        
+        if is_max_plan:
+            # Max Plan: Use Claude Agent SDK for all agents (no token streaming available)
+            logger.info(f"Agent {agent.name}: Using Claude Agent SDK (Max Plan mode)")
+            return await self._call_claude_with_tools(agent, message, context, stream_callback)
+        elif agent.use_tools:
+            # API Key mode with tools: Use Claude Agent SDK
             logger.info(f"Agent {agent.name}: Using Claude Agent SDK (tools enabled)")
             return await self._call_claude_with_tools(agent, message, context, stream_callback)
         else:
+            # API Key mode without tools: Use Anthropic SDK for token streaming
             logger.info(f"Agent {agent.name}: Using Anthropic SDK (token streaming)")
             return await self._call_claude_streaming(agent, message, context, stream_callback)
     
