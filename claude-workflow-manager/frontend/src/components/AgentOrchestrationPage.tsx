@@ -36,6 +36,7 @@ import {
   CallSplit as CallSplitIcon,
   Speed as SpeedIcon,
   Hub as HubIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { orchestrationApi } from '../services/api';
 
@@ -58,13 +59,156 @@ interface OrchestrationResult {
   created_at: string;
 }
 
+// Sample data for different orchestration patterns
+const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string; agents: Agent[]; rounds: number } => {
+  switch (pattern) {
+    case 'sequential':
+      return {
+        task: 'Write a comprehensive blog post about the benefits of renewable energy',
+        agents: [
+          {
+            name: 'Researcher',
+            system_prompt: 'You are a research specialist. Your role is to gather and present key facts, statistics, and evidence about the given topic. Focus on accuracy and credibility.',
+            role: 'worker'
+          },
+          {
+            name: 'Writer',
+            system_prompt: 'You are a creative writer. Take the research provided and craft it into an engaging, well-structured narrative. Focus on clarity and readability.',
+            role: 'worker'
+          },
+          {
+            name: 'Editor',
+            system_prompt: 'You are an editor. Review the written content for grammar, style, coherence, and impact. Provide a polished final version.',
+            role: 'worker'
+          }
+        ],
+        rounds: 3
+      };
+
+    case 'debate':
+      return {
+        task: 'Should artificial intelligence development be more heavily regulated?',
+        agents: [
+          {
+            name: 'Advocate',
+            system_prompt: 'You support AI regulation. Argue for stronger oversight, safety measures, and ethical frameworks. Use evidence and real-world examples.',
+            role: 'worker'
+          },
+          {
+            name: 'Skeptic',
+            system_prompt: 'You oppose heavy AI regulation. Argue for innovation freedom, market-driven solutions, and minimal government intervention. Use evidence and real-world examples.',
+            role: 'worker'
+          },
+          {
+            name: 'Moderator',
+            system_prompt: 'You are a neutral moderator. After each round, summarize key points from both sides and identify areas of agreement or strong disagreement.',
+            role: 'moderator'
+          }
+        ],
+        rounds: 4
+      };
+
+    case 'hierarchical':
+      return {
+        task: 'Plan a comprehensive marketing campaign for a new eco-friendly product',
+        agents: [
+          {
+            name: 'Marketing Director',
+            system_prompt: 'You are a marketing director. Analyze the task, break it down into specific subtasks for your team (content, social media, analytics), and later synthesize their work into a cohesive strategy.',
+            role: 'manager'
+          },
+          {
+            name: 'Content Specialist',
+            system_prompt: 'You create compelling content. Focus on messaging, copywriting, and brand storytelling.',
+            role: 'worker'
+          },
+          {
+            name: 'Social Media Manager',
+            system_prompt: 'You manage social media strategy. Focus on platform selection, posting schedules, and audience engagement tactics.',
+            role: 'worker'
+          },
+          {
+            name: 'Analytics Expert',
+            system_prompt: 'You focus on metrics and measurement. Define KPIs, tracking methods, and success criteria.',
+            role: 'worker'
+          }
+        ],
+        rounds: 3
+      };
+
+    case 'parallel':
+      return {
+        task: 'Generate creative ideas for a tech startup that helps remote workers stay productive',
+        agents: [
+          {
+            name: 'Creative Thinker',
+            system_prompt: 'You are a creative brainstormer. Generate bold, innovative ideas without worrying about constraints. Think outside the box.',
+            role: 'worker'
+          },
+          {
+            name: 'Practical Engineer',
+            system_prompt: 'You are a pragmatic engineer. Focus on technically feasible solutions that can be built with existing technology.',
+            role: 'worker'
+          },
+          {
+            name: 'Business Analyst',
+            system_prompt: 'You are a business-minded analyst. Focus on market viability, monetization, and customer acquisition strategies.',
+            role: 'worker'
+          },
+          {
+            name: 'UX Designer',
+            system_prompt: 'You are a UX/UI expert. Focus on user experience, interface design, and making solutions intuitive and delightful.',
+            role: 'specialist'
+          }
+        ],
+        rounds: 3
+      };
+
+    case 'routing':
+      return {
+        task: 'I need help optimizing my Python web application. It\'s slow on database queries, the UI feels clunky, and deployment is manual.',
+        agents: [
+          {
+            name: 'Tech Router',
+            system_prompt: 'You are a technical routing agent. Analyze the task and identify which specialist(s) would be most helpful. Consider: backend engineers, frontend developers, DevOps engineers, database experts, etc.',
+            role: 'manager'
+          },
+          {
+            name: 'Backend Specialist',
+            system_prompt: 'You are a backend optimization expert. Focus on database query optimization, caching strategies, API performance, and backend architecture.',
+            role: 'specialist'
+          },
+          {
+            name: 'Frontend Specialist',
+            system_prompt: 'You are a frontend expert. Focus on UI/UX improvements, React/Vue optimization, bundle size reduction, and client-side performance.',
+            role: 'specialist'
+          },
+          {
+            name: 'DevOps Specialist',
+            system_prompt: 'You are a DevOps engineer. Focus on CI/CD pipelines, containerization, automated deployment, monitoring, and infrastructure as code.',
+            role: 'specialist'
+          }
+        ],
+        rounds: 3
+      };
+
+    default:
+      return {
+        task: '',
+        agents: [{ name: 'Agent1', system_prompt: '', role: 'worker' }],
+        rounds: 3
+      };
+  }
+};
+
 const AgentOrchestrationPage: React.FC = () => {
+  // Initialize with sample data for demonstration
+  const initialSampleData = getSampleDataForPattern('sequential');
+  
   const [selectedPattern, setSelectedPattern] = useState<OrchestrationPattern>('sequential');
-  const [task, setTask] = useState('');
-  const [agents, setAgents] = useState<Agent[]>([
-    { name: 'Agent1', system_prompt: '', role: 'worker' }
-  ]);
-  const [rounds, setRounds] = useState(3);
+  const [task, setTask] = useState(initialSampleData.task);
+  const [agents, setAgents] = useState<Agent[]>(initialSampleData.agents);
+  const [rounds, setRounds] = useState(initialSampleData.rounds);
   const [executing, setExecuting] = useState(false);
   const [result, setResult] = useState<OrchestrationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +270,23 @@ const AgentOrchestrationPage: React.FC = () => {
     const updatedAgents = [...agents];
     updatedAgents[index] = { ...updatedAgents[index], [field]: value };
     setAgents(updatedAgents);
+  };
+
+  const loadSampleData = () => {
+    const sampleData = getSampleDataForPattern(selectedPattern);
+    setTask(sampleData.task);
+    setAgents(sampleData.agents);
+    setRounds(sampleData.rounds);
+    setResult(null);
+    setError(null);
+  };
+
+  const resetToEmpty = () => {
+    setTask('');
+    setAgents([{ name: 'Agent1', system_prompt: '', role: 'worker' }]);
+    setRounds(3);
+    setResult(null);
+    setError(null);
   };
 
   const getPatternSpecificFields = () => {
@@ -504,9 +665,33 @@ const AgentOrchestrationPage: React.FC = () => {
         {/* Configuration */}
         <Grid item xs={12}>
           <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Configuration
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6">
+                Configuration
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Tooltip title="Reset all fields to empty">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<RefreshIcon />}
+                    onClick={resetToEmpty}
+                  >
+                    Reset to Empty
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Load sample data for current pattern">
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<PsychologyIcon />}
+                    onClick={loadSampleData}
+                  >
+                    Load Sample Data
+                  </Button>
+                </Tooltip>
+              </Box>
+            </Box>
 
             {/* Task/Topic Input */}
             <TextField
