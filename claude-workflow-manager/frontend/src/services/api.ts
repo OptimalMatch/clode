@@ -519,17 +519,6 @@ export const orchestrationApi = {
   ): Promise<OrchestrationResult> => {
     return new Promise((resolve, reject) => {
       const token = localStorage.getItem('access_token');
-      const eventSource = new EventSource(
-        `${API_URL}/api/orchestration/sequential/stream?` + 
-        new URLSearchParams({
-          task: request.task,
-          agents: JSON.stringify(request.agents),
-          agent_sequence: JSON.stringify(request.agent_sequence),
-        })
-      );
-
-      // For POST requests with SSE, we need to use fetch with EventSource polyfill
-      // Or use a library like eventsource. For now, let's use fetch with manual parsing
       const controller = new AbortController();
       
       fetch(`${API_URL}/api/orchestration/sequential/stream`, {
@@ -542,6 +531,10 @@ export const orchestrationApi = {
         signal: controller.signal,
       })
         .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
           const reader = response.body?.getReader();
           const decoder = new TextDecoder();
           
@@ -592,9 +585,6 @@ export const orchestrationApi = {
             reject(error);
           }
         });
-      
-      // Return cleanup function wrapped in promise
-      return () => controller.abort();
     });
   },
 };
