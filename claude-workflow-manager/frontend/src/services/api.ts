@@ -497,6 +497,64 @@ export const orchestrationApi = {
     return response.data;
   },
 
+  executeDebateStream: async (
+    request: DebateRequest,
+    onEvent: (event: StreamEvent) => void
+  ): Promise<void> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/orchestration/debate/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(request),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+
+        if (!reader) {
+          throw new Error('Response body is null');
+        }
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const jsonStr = line.substring(6); // Remove 'data: ' prefix
+                const event: StreamEvent = JSON.parse(jsonStr);
+                onEvent(event);
+
+                if (event.type === 'complete') {
+                  resolve();
+                  return;
+                } else if (event.type === 'error') {
+                  reject(new Error(event.error || 'Unknown error'));
+                  return;
+                }
+              } catch (e) {
+                console.warn('Failed to parse SSE event:', line, e);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        reject(error);
+      }
+    });
+  },
+
   executeHierarchical: async (request: HierarchicalRequest): Promise<OrchestrationResult> => {
     const response = await api.post('/api/orchestration/hierarchical', request);
     return response.data;

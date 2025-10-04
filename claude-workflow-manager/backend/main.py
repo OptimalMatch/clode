@@ -2629,6 +2629,108 @@ async def execute_debate(request: DebateRequest):
         raise HTTPException(status_code=500, detail=f"Debate execution failed: {str(e)}")
 
 @app.post(
+    "/api/orchestration/debate/stream",
+    summary="Execute Debate with Streaming",
+    description="Execute debate pattern with real-time SSE streaming of agent outputs.",
+    tags=["Agent Orchestration"]
+)
+async def execute_debate_stream(request: DebateRequest):
+    """Execute debate with Server-Sent Events streaming."""
+    
+    async def event_generator():
+        try:
+            # Send initial status
+            yield f"data: {json.dumps({'type': 'start', 'pattern': 'debate', 'agents': request.participant_names, 'rounds': request.rounds})}\n\n"
+            
+            model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+            await ensure_orchestration_credentials()
+            
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+            
+            # Add agents
+            for agent in request.agents:
+                orchestrator.add_agent(
+                    name=agent.name,
+                    system_prompt=agent.system_prompt,
+                    role=OrchestratorAgentRole(agent.role.value)
+                )
+            
+            # Create queue for streaming events
+            event_queue = asyncio.Queue()
+            
+            # Stream callback
+            async def stream_callback(agent_name: str, chunk: str):
+                await event_queue.put({
+                    'type': 'chunk',
+                    'agent': agent_name,
+                    'data': chunk,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            # Execute in background task
+            async def execute_orchestration():
+                try:
+                    # Send status updates for each agent
+                    for agent_name in request.participant_names:
+                        await event_queue.put({
+                            'type': 'status',
+                            'agent': agent_name,
+                            'data': 'waiting',
+                            'timestamp': datetime.now().isoformat()
+                        })
+                    
+                    result = await orchestrator.debate_stream(request.topic, request.participant_names, 
+                                                             request.rounds, stream_callback)
+                    await event_queue.put({'type': '__complete__', 'result': result})
+                except Exception as e:
+                    await event_queue.put({'type': '__error__', 'error': str(e)})
+            
+            task = asyncio.create_task(execute_orchestration())
+            start_time = datetime.now()
+            
+            # Track current agent for status updates
+            current_agent = None
+            
+            # Stream events as they come
+            while True:
+                event = await event_queue.get()
+                
+                if event['type'] == '__complete__':
+                    # Mark last agent as completed
+                    if current_agent:
+                        yield f"data: {json.dumps({'type': 'status', 'agent': current_agent, 'data': 'completed', 'timestamp': datetime.now().isoformat()})}\n\n"
+                    
+                    end_time = datetime.now()
+                    final_data = {
+                        'type': 'complete',
+                        'pattern': 'debate',
+                        'result': event['result'],
+                        'duration_ms': int((end_time - start_time).total_seconds() * 1000)
+                    }
+                    yield f"data: {json.dumps(final_data)}\n\n"
+                    break
+                elif event['type'] == '__error__':
+                    yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
+                    break
+                elif event['type'] == 'chunk':
+                    # If new agent, mark previous as completed and new as executing
+                    if current_agent != event['agent']:
+                        if current_agent:
+                            yield f"data: {json.dumps({'type': 'status', 'agent': current_agent, 'data': 'completed', 'timestamp': datetime.now().isoformat()})}\n\n"
+                        current_agent = event['agent']
+                        yield f"data: {json.dumps({'type': 'status', 'agent': current_agent, 'data': 'executing', 'timestamp': datetime.now().isoformat()})}\n\n"
+                    
+                    yield f"data: {json.dumps(event)}\n\n"
+                else:
+                    yield f"data: {json.dumps(event)}\n\n"
+            
+            await task
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post(
     "/api/orchestration/hierarchical",
     response_model=OrchestrationResult,
     summary="Execute Hierarchical Pattern",

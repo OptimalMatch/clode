@@ -481,12 +481,41 @@ const AgentOrchestrationPage: React.FC = () => {
           break;
 
         case 'debate':
-          response = await orchestrationApi.executeDebate({
-            topic: task,
-            agents,
-            participant_names: agents.map(a => a.name),
-            rounds
-          });
+          if (enableStreaming) {
+            // Use streaming API for debate
+            await orchestrationApi.executeDebateStream(
+              {
+                topic: task,
+                agents,
+                participant_names: agents.map(a => a.name),
+                rounds
+              },
+              (event) => {
+                if (event.type === 'status') {
+                  const status = event.data as 'waiting' | 'executing' | 'completed';
+                  updateAgentStatus(event.agent!, status);
+                } else if (event.type === 'chunk') {
+                  appendStreamingOutput(event.agent!, event.data);
+                } else if (event.type === 'complete') {
+                  response = {
+                    pattern: 'debate',
+                    execution_id: 'stream-exec',
+                    status: 'completed',
+                    result: event.result,
+                    duration_ms: event.duration_ms || 0,
+                    created_at: new Date().toISOString()
+                  };
+                }
+              }
+            );
+          } else {
+            response = await orchestrationApi.executeDebate({
+              topic: task,
+              agents,
+              participant_names: agents.map(a => a.name),
+              rounds
+            });
+          }
           break;
 
         case 'hierarchical':
@@ -1017,7 +1046,7 @@ const AgentOrchestrationPage: React.FC = () => {
                 <Typography variant="h6">
                   Configuration
                 </Typography>
-                {selectedPattern === 'sequential' && (
+                {(selectedPattern === 'sequential' || selectedPattern === 'debate') && (
                   <FormControlLabel
                     control={
                       <Switch 
