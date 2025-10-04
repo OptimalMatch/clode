@@ -575,20 +575,36 @@ Synthesize these results into a coherent final output."""
         """
         logger.info(f"Starting PARALLEL AGGREGATION with {len(agents)} agents")
         
-        # All agents work on same task independently
-        results = {}
-        agent_steps = []
-        
-        for agent_name in agents:
+        # Define async function for each agent to run in parallel
+        async def run_agent(agent_name: str):
             agent_start = datetime.now()
             response = await self.send_message("system", agent_name, task, MessageType.TASK)
             agent_end = datetime.now()
+            duration_ms = int((agent_end - agent_start).total_seconds() * 1000)
+            
+            return {
+                "agent": agent_name,
+                "response": response,
+                "duration_ms": duration_ms
+            }
+        
+        # Run all agents in parallel using asyncio.gather
+        agent_results = await asyncio.gather(*[run_agent(agent_name) for agent_name in agents])
+        
+        # Organize results
+        results = {}
+        agent_steps = []
+        
+        for agent_result in agent_results:
+            agent_name = agent_result["agent"]
+            response = agent_result["response"]
+            duration_ms = agent_result["duration_ms"]
             
             results[agent_name] = response
             agent_steps.append({
                 "agent": agent_name,
-                "result": response[:200] + "..." if len(response) > 200 else response,
-                "duration_ms": int((agent_end - agent_start).total_seconds() * 1000)
+                "result": response,  # No truncation - include full result
+                "duration_ms": duration_ms
             })
         
         # Aggregate results
@@ -623,16 +639,13 @@ Synthesize the best elements from each response into a comprehensive answer."""
                                        aggregator: Optional[str] = None,
                                        stream_callback: Optional[Callable[[str, str, str], Awaitable[None]]] = None) -> Dict[str, Any]:
         """
-        Multiple agents work on the same task independently (sequentially in implementation),
+        Multiple agents work on the same task independently in parallel,
         then results are aggregated. Streams output in real-time.
         """
         logger.info(f"Starting PARALLEL AGGREGATION (streaming) with {len(agents)} agents")
         
-        # All agents work on same task independently
-        results = {}
-        agent_steps = []
-        
-        for agent_name in agents:
+        # Define async function for each agent to run in parallel
+        async def run_agent(agent_name: str):
             if stream_callback:
                 await stream_callback('status', agent_name, 'executing')
             
@@ -653,15 +666,33 @@ Synthesize the best elements from each response into a comprehensive answer."""
             agent_end = datetime.now()
             duration_ms = int((agent_end - agent_start).total_seconds() * 1000)
             
+            if stream_callback:
+                await stream_callback('status', agent_name, f'completed:{duration_ms}')
+            
+            return {
+                "agent": agent_name,
+                "response": response,
+                "duration_ms": duration_ms
+            }
+        
+        # Run all agents in parallel using asyncio.gather
+        agent_results = await asyncio.gather(*[run_agent(agent_name) for agent_name in agents])
+        
+        # Organize results
+        results = {}
+        agent_steps = []
+        
+        for agent_result in agent_results:
+            agent_name = agent_result["agent"]
+            response = agent_result["response"]
+            duration_ms = agent_result["duration_ms"]
+            
             results[agent_name] = response
             agent_steps.append({
                 "agent": agent_name,
-                "result": response[:200] + "..." if len(response) > 200 else response,
+                "result": response,  # No truncation - include full result
                 "duration_ms": duration_ms
             })
-            
-            if stream_callback:
-                await stream_callback('status', agent_name, f'completed:{duration_ms}')
         
         # Aggregate results
         aggregated_result = None
