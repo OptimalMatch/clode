@@ -495,7 +495,7 @@ const AgentOrchestrationPage: React.FC = () => {
                   const status = event.data as 'waiting' | 'executing' | 'completed';
                   updateAgentStatus(event.agent!, status);
                 } else if (event.type === 'chunk') {
-                  appendStreamingOutput(event.agent!, event.data);
+                  appendStreamingOutput(event.agent!, event.data || '');
                 } else if (event.type === 'complete') {
                   response = {
                     pattern: 'debate',
