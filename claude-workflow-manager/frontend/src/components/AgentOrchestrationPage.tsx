@@ -110,17 +110,17 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
         agents: [
           {
             name: 'Remote Advocate',
-            system_prompt: 'You advocate for remote work. Make ONE concise argument per response (maximum 5 sentences, ideally 3-4). Focus on flexibility, work-life balance, reduced commute time, cost savings, and productivity gains. Be specific and persuasive but brief. Output only your argument, no meta-discussion.',
+            system_prompt: 'You are participating in a structured debate. Your role is Remote Work Advocate. The previous agent\'s response is the context you\'re responding to. Make ONE concise argument supporting remote work (maximum 5 sentences). Focus on flexibility, work-life balance, reduced commute, cost savings, and productivity. Be specific and persuasive. Output ONLY your debate argument - nothing else.',
             role: 'worker'
           },
           {
             name: 'Office Advocate',
-            system_prompt: 'You advocate for office work. Make ONE concise argument per response (maximum 5 sentences, ideally 3-4). Focus on collaboration, spontaneous creativity, clearer boundaries, team building, and structured environment. Be specific and persuasive but brief. Output only your argument, no meta-discussion.',
+            system_prompt: 'You are participating in a structured debate. Your role is Office Work Advocate. The previous agent\'s response is the context you\'re responding to. Make ONE concise argument supporting office work (maximum 5 sentences). Focus on collaboration, spontaneous creativity, boundaries, team building, and structure. Be specific and persuasive. Output ONLY your debate argument - nothing else.',
             role: 'worker'
           },
           {
             name: 'Moderator',
-            system_prompt: 'You are a neutral moderator. Provide a brief summary (maximum 5 sentences, ideally 3-4). Identify one key point from each side and note any common ground. Be concise and balanced. Output only your analysis, no meta-discussion.',
+            system_prompt: 'You are participating in a structured debate as the neutral Moderator. The previous messages contain arguments from both sides. Provide a brief, balanced summary (maximum 5 sentences). Identify one key point from each side and note common ground. Output ONLY your moderation summary - nothing else.',
             role: 'moderator'
           }
         ],
@@ -1118,6 +1118,27 @@ const AgentOrchestrationPage: React.FC = () => {
               </Box>
             </Box>
 
+            {/* Authentication Mode General Info */}
+            <Alert severity="info" icon={false} sx={{ mb: 3, mt: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  Current Mode:
+                </Typography>
+                <Chip 
+                  label="Max Plan (Claude Agent SDK)" 
+                  size="small" 
+                  color="primary" 
+                  variant="outlined"
+                />
+                <Typography variant="body2" color="text.secondary">
+                  • Full tool capabilities • Message-level streaming
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Set <code>ANTHROPIC_API_KEY</code> environment variable for token-level streaming (better for debate patterns)
+              </Typography>
+            </Alert>
+
             {/* Task/Topic Input */}
             <TextField
               fullWidth
@@ -1136,6 +1157,30 @@ const AgentOrchestrationPage: React.FC = () => {
 
             {/* Pattern-specific fields */}
             {getPatternSpecificFields()}
+
+            {/* Authentication Mode Info */}
+            {selectedPattern === 'debate' && (
+              <Alert severity="info" sx={{ mt: 3, mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  💡 Authentication Mode Impact
+                </Typography>
+                <Typography variant="body2" component="div">
+                  <strong>Max Plan Mode</strong> (OAuth, no API key):
+                  <ul style={{ marginTop: 4, marginBottom: 4 }}>
+                    <li>Uses Claude Agent SDK with full tool capabilities (file operations, bash, web search)</li>
+                    <li>Message-level streaming (~30s chunks)</li>
+                    <li>⚠️ For debate patterns: Agents may occasionally refuse or ask for clarification due to Claude Code's built-in behaviors</li>
+                  </ul>
+                  <strong>API Key Mode</strong> (set ANTHROPIC_API_KEY):
+                  <ul style={{ marginTop: 4, marginBottom: 4 }}>
+                    <li>Uses Anthropic SDK with true token-level streaming (word-by-word)</li>
+                    <li>Better for pure text generation patterns like debates</li>
+                    <li>✓ More reliable for multi-turn conversations without tool use</li>
+                  </ul>
+                  <strong>Recommendation:</strong> For debate/discussion patterns, setting an API key provides the best experience with real-time streaming and more consistent responses.
+                </Typography>
+              </Alert>
+            )}
 
             {/* Agents Configuration */}
             <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
