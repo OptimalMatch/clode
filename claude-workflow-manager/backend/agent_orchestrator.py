@@ -4,7 +4,7 @@ Implements 5 key patterns for agent collaboration
 Uses Claude Agent SDK for Max Plan compatibility
 """
 
-from claude_agent_sdk import query, ClaudeSDKClient, ClaudeAgentOptions
+from claude_agent_sdk import query, ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
 from typing import List, Dict, Optional, Callable, Any, AsyncIterator
 import json
 from datetime import datetime
@@ -161,26 +161,25 @@ class MultiAgentOrchestrator:
                 cwd=self.cwd
             )
             
-            # Use query() for one-off agent interactions
+            # Use ClaudeSDKClient for true streaming
             reply_parts = []
-            async for msg in query(prompt=full_message, options=options):
-                # Extract text content from messages
-                if hasattr(msg, 'content'):
-                    if isinstance(msg.content, list):
+            async with ClaudeSDKClient(options=options) as client:
+                # Send the query
+                await client.query(full_message)
+                
+                # Stream responses as they arrive
+                async for msg in client.receive_response():
+                    # Extract text content from AssistantMessage
+                    if isinstance(msg, AssistantMessage):
                         for block in msg.content:
-                            if hasattr(block, 'text'):
+                            if isinstance(block, TextBlock):
                                 chunk = block.text
                                 reply_parts.append(chunk)
                                 # Stream callback for real-time updates
                                 if stream_callback:
                                     await stream_callback(agent.name, chunk)
-                    elif isinstance(msg.content, str):
-                        chunk = msg.content
-                        reply_parts.append(chunk)
-                        if stream_callback:
-                            await stream_callback(agent.name, chunk)
             
-            reply = "\n".join(reply_parts) if reply_parts else "No response"
+            reply = "".join(reply_parts) if reply_parts else "No response"
             
             # Update history
             agent.add_to_history("user", full_message)
