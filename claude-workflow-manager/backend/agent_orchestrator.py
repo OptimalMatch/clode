@@ -639,9 +639,9 @@ Synthesize the best elements from each response into a comprehensive answer."""
             agent_start = datetime.now()
             
             # Stream callback wrapper
-            async def agent_stream_callback(chunk: str):
+            async def agent_stream_callback(name: str, chunk: str):
                 if stream_callback:
-                    await stream_callback('chunk', agent_name, chunk)
+                    await stream_callback('chunk', name, chunk)
             
             response = await self.send_message(
                 "system", 
@@ -681,9 +681,9 @@ Synthesize the best elements from each response into a comprehensive answer."""
             aggregation_start = datetime.now()
             
             # Stream callback wrapper for aggregator
-            async def aggregator_stream_callback(chunk: str):
+            async def aggregator_stream_callback(name: str, chunk: str):
                 if stream_callback:
-                    await stream_callback('chunk', aggregator, chunk)
+                    await stream_callback('chunk', name, chunk)
             
             aggregated_result = await self.send_message(
                 "system", 
