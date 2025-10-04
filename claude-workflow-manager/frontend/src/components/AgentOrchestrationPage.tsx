@@ -73,6 +73,8 @@ interface AgentStatus {
   output?: string;
   streamingOutput?: string;  // Real-time streaming output
   duration_ms?: number;
+  startTime?: number;  // Timestamp when agent started executing
+  elapsedMs?: number;  // Live elapsed time in milliseconds
 }
 
 // Sample data for different orchestration patterns
@@ -231,6 +233,23 @@ const AgentOrchestrationPage: React.FC = () => {
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>([]);
   const [enableStreaming, setEnableStreaming] = useState(true);  // Enable streaming by default
 
+  // Real-time stopwatch effect: Update elapsed time for executing agents
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setAgentStatuses(prev => 
+        prev.map(as => {
+          if (as.status === 'executing' && as.startTime) {
+            const elapsedMs = Date.now() - as.startTime;
+            return { ...as, elapsedMs };
+          }
+          return as;
+        })
+      );
+    }, 100); // Update every 100ms for smooth counter
+
+    return () => clearInterval(interval);
+  }, []);
+
   const patterns = [
     {
       id: 'sequential',
@@ -365,11 +384,17 @@ const AgentOrchestrationPage: React.FC = () => {
 
   const updateAgentStatus = (agentName: string, status: AgentExecutionStatus, output?: string, duration_ms?: number) => {
     setAgentStatuses(prev => 
-      prev.map(as => 
-        as.name === agentName 
-          ? { ...as, status, output, duration_ms }
-          : as
-      )
+      prev.map(as => {
+        if (as.name === agentName) {
+          // When agent starts executing, record start time
+          const startTime = status === 'executing' ? Date.now() : as.startTime;
+          // Clear elapsed time when starting or reset when completed
+          const elapsedMs = status === 'executing' ? 0 : (status === 'completed' ? duration_ms : as.elapsedMs);
+          
+          return { ...as, status, output, duration_ms, startTime, elapsedMs };
+        }
+        return as;
+      })
     );
   };
 
@@ -616,7 +641,12 @@ const AgentOrchestrationPage: React.FC = () => {
                       </Box>
                       <Typography variant="caption" color="text.secondary">
                         {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
-                        {agentStatus.duration_ms && ` (${agentStatus.duration_ms}ms)`}
+                        {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
+                          <span style={{ fontWeight: 'bold', color: '#ff9800' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
+                        )}
+                        {agentStatus.status === 'completed' && agentStatus.duration_ms && (
+                          <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
+                        )}
                       </Typography>
                       {enableStreaming && agentStatus.streamingOutput && (
                         <Box sx={{ mt: 1, p: 1, bgcolor: 'background.paper', borderRadius: 1, maxHeight: 150, overflow: 'auto' }}>
@@ -659,7 +689,12 @@ const AgentOrchestrationPage: React.FC = () => {
                       </Box>
                       <Typography variant="caption" color="text.secondary">
                         {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
-                        {agentStatus.duration_ms && ` (${agentStatus.duration_ms}ms)`}
+                        {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
+                          <span style={{ fontWeight: 'bold', color: '#ff9800' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
+                        )}
+                        {agentStatus.status === 'completed' && agentStatus.duration_ms && (
+                          <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
+                        )}
                       </Typography>
                     </CardContent>
                   </Card>
@@ -689,7 +724,12 @@ const AgentOrchestrationPage: React.FC = () => {
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
-                      {agentStatus.duration_ms && ` (${agentStatus.duration_ms}ms)`}
+                      {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
+                        <span style={{ fontWeight: 'bold', color: '#ff9800' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
+                      )}
+                      {agentStatus.status === 'completed' && agentStatus.duration_ms && (
+                        <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
+                      )}
                     </Typography>
                   </CardContent>
                 </Card>
