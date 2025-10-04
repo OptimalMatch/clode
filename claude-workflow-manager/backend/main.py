@@ -3101,6 +3101,112 @@ async def execute_dynamic_routing(request: DynamicRoutingRequest):
 
 # STREAMING ORCHESTRATION ENDPOINTS (SSE)
 @app.post(
+    "/api/orchestration/routing/stream",
+    summary="Execute Dynamic Routing with Streaming",
+    description="Execute dynamic routing with real-time SSE streaming of agent outputs.",
+    tags=["Agent Orchestration"]
+)
+async def execute_dynamic_routing_stream(request: DynamicRoutingRequest):
+    """Execute dynamic routing with Server-Sent Events streaming."""
+    
+    async def event_generator():
+        try:
+            model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+            
+            # Restore fresh credentials for orchestration
+            await ensure_orchestration_credentials()
+            
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+            
+            # Add router
+            orchestrator.add_agent(
+                name=request.router.name,
+                system_prompt=request.router.system_prompt,
+                role=OrchestratorAgentRole(request.router.role.value)
+            )
+            
+            # Add specialists
+            for specialist in request.specialists:
+                orchestrator.add_agent(
+                    name=specialist.name,
+                    system_prompt=specialist.system_prompt,
+                    role=OrchestratorAgentRole(specialist.role.value)
+                )
+            
+            # Send initial status
+            agent_names = [request.router.name] + request.specialist_names
+            
+            yield f"data: {json.dumps({'type': 'start', 'pattern': 'routing', 'agents': agent_names})}\n\n"
+            
+            # Initialize agent statuses
+            yield f"data: {json.dumps({'type': 'status', 'agent': request.router.name, 'data': 'waiting', 'timestamp': datetime.now().isoformat()})}\n\n"
+            
+            for specialist_name in request.specialist_names:
+                yield f"data: {json.dumps({'type': 'status', 'agent': specialist_name, 'data': 'waiting', 'timestamp': datetime.now().isoformat()})}\n\n"
+            
+            # Event queue for streaming
+            event_queue = asyncio.Queue()
+            
+            # Stream callback
+            async def stream_callback(event_type: str, agent_name: str, data: str):
+                await event_queue.put({
+                    'type': event_type,
+                    'agent': agent_name,
+                    'data': data,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            # Execute dynamic routing in background
+            async def execute_orchestration():
+                try:
+                    result = await orchestrator.dynamic_routing_stream(
+                        request.task, request.router.name, request.specialist_names, stream_callback
+                    )
+                    await event_queue.put({'type': '__complete__', 'result': result})
+                except Exception as e:
+                    await event_queue.put({'type': '__error__', 'error': str(e)})
+            
+            task = asyncio.create_task(execute_orchestration())
+            start_time = datetime.now()
+            
+            # Yield events from queue
+            while True:
+                try:
+                    event = await asyncio.wait_for(event_queue.get(), timeout=0.1)
+                    
+                    if event['type'] == '__complete__':
+                        result = event['result']
+                        end_time = datetime.now()
+                        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+                        result['duration_ms'] = duration_ms
+                        yield f"data: {json.dumps({'type': 'complete', 'pattern': 'routing', 'result': result, 'duration_ms': duration_ms})}\n\n"
+                        break
+                    elif event['type'] == '__error__':
+                        yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
+                        break
+                    elif event['type'] == 'status':
+                        # Handle status events with duration parsing
+                        status_data = event['data']
+                        if ':' in status_data and (status_data.startswith('completed:') or status_data.startswith('routing_complete:')):
+                            duration_ms = int(status_data.split(':')[1])
+                            actual_status = status_data.split(':')[0]
+                            yield f"data: {json.dumps({'type': 'status', 'agent': event['agent'], 'data': actual_status, 'duration_ms': duration_ms, 'timestamp': event['timestamp']})}\n\n"
+                        else:
+                            yield f"data: {json.dumps(event)}\n\n"
+                    else:
+                        yield f"data: {json.dumps(event)}\n\n"
+                
+                except asyncio.TimeoutError:
+                    if task.done():
+                        break
+                    continue
+        
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post(
     "/api/orchestration/sequential/stream",
     summary="Execute Sequential Pipeline with Streaming",
     description="Execute sequential pipeline with real-time SSE streaming of agent outputs.",

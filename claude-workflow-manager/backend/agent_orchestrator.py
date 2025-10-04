@@ -798,6 +798,93 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
             "results": results
         }
     
+    async def dynamic_routing_stream(self, task: str, router: str, specialists: List[str],
+                                    stream_callback: Optional[Callable[[str, str, str], Awaitable[None]]] = None) -> Dict[str, Any]:
+        """
+        Router agent analyzes the task and routes it to the most appropriate specialist(s).
+        Streams output in real-time.
+        """
+        logger.info(f"Starting DYNAMIC ROUTING (streaming) with router {router} and {len(specialists)} specialists")
+        
+        # Router decides which specialist(s) to use
+        routing_prompt = f"""Task: {task}
+
+Available specialists: {', '.join(specialists)}
+Analyze the task and decide which specialist(s) should handle it.
+Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"""
+        
+        if stream_callback:
+            await stream_callback('status', router, 'routing')
+        
+        routing_start = datetime.now()
+        
+        # Stream callback wrapper for router
+        async def router_stream_callback(name: str, chunk: str):
+            if stream_callback:
+                await stream_callback('chunk', name, chunk)
+        
+        routing_decision = await self.send_message("system", router, routing_prompt, MessageType.ROUTING,
+                                                   stream_callback=router_stream_callback)
+        routing_end = datetime.now()
+        routing_duration_ms = int((routing_end - routing_start).total_seconds() * 1000)
+        
+        if stream_callback:
+            await stream_callback('status', router, f'routing_complete:{routing_duration_ms}')
+        
+        # Parse routing decision
+        try:
+            decision = json.loads(routing_decision)
+            selected = decision.get("selected_agents", specialists[:1])
+            reasoning = decision.get("reasoning", "No reasoning provided")
+        except Exception as e:
+            logger.warning(f"Failed to parse routing decision JSON: {e}")
+            selected = specialists[:1]
+            reasoning = "Default routing (JSON parsing failed)"
+        
+        # Execute task with selected agents
+        results = {}
+        execution_steps = []
+        
+        for agent_name in selected:
+            if agent_name in self.agents:
+                if stream_callback:
+                    await stream_callback('status', agent_name, 'executing')
+                
+                exec_start = datetime.now()
+                
+                # Stream callback wrapper for specialist
+                async def specialist_stream_callback(name: str, chunk: str):
+                    if stream_callback:
+                        await stream_callback('chunk', name, chunk)
+                
+                response = await self.send_message(router, agent_name, task, MessageType.TASK,
+                                                  stream_callback=specialist_stream_callback)
+                exec_end = datetime.now()
+                exec_duration_ms = int((exec_end - exec_start).total_seconds() * 1000)
+                
+                if stream_callback:
+                    await stream_callback('status', agent_name, f'completed:{exec_duration_ms}')
+                
+                results[agent_name] = response
+                execution_steps.append({
+                    "agent": agent_name,
+                    "result": response,  # Full result, no truncation
+                    "duration_ms": exec_duration_ms
+                })
+        
+        return {
+            "pattern": "dynamic_routing",
+            "task": task,
+            "router": router,
+            "available_specialists": specialists,
+            "routing_decision": routing_decision,
+            "selected_agents": selected,
+            "reasoning": reasoning,
+            "routing_duration_ms": routing_duration_ms,
+            "execution_steps": execution_steps,
+            "results": results
+        }
+    
     # UTILITY METHODS
     async def broadcast(self, from_agent: str, message: str, exclude: Optional[List[str]] = None) -> Dict[str, str]:
         """Broadcast message to all agents except those in exclude list"""
