@@ -586,7 +586,7 @@ const AgentOrchestrationPage: React.FC = () => {
       case 'waiting':
         return <RadioButtonUncheckedIcon sx={{ color: 'info.main' }} />;
       case 'executing':
-        return <HourglassEmptyIcon sx={{ color: 'warning.main', animation: 'pulse 1.5s ease-in-out infinite' }} />;
+        return <HourglassEmptyIcon sx={{ color: '#000000', animation: 'pulse 1.5s ease-in-out infinite' }} />;
       case 'completed':
         return <CheckCircleIcon sx={{ color: 'success.main' }} />;
       case 'error':
@@ -642,7 +642,7 @@ const AgentOrchestrationPage: React.FC = () => {
                       <Typography variant="caption" color="text.secondary">
                         {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
                         {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
-                          <span style={{ fontWeight: 'bold', color: '#ff9800' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
+                          <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
                         {agentStatus.status === 'completed' && agentStatus.duration_ms && (
                           <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
@@ -690,7 +690,7 @@ const AgentOrchestrationPage: React.FC = () => {
                       <Typography variant="caption" color="text.secondary">
                         {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
                         {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
-                          <span style={{ fontWeight: 'bold', color: '#ff9800' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
+                          <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
                         {agentStatus.status === 'completed' && agentStatus.duration_ms && (
                           <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
@@ -725,7 +725,7 @@ const AgentOrchestrationPage: React.FC = () => {
                     <Typography variant="caption" color="text.secondary">
                       {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
                       {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
-                        <span style={{ fontWeight: 'bold', color: '#ff9800' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
+                        <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                       )}
                       {agentStatus.status === 'completed' && agentStatus.duration_ms && (
                         <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
