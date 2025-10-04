@@ -483,7 +483,7 @@ const AgentOrchestrationPage: React.FC = () => {
         case 'debate':
           if (enableStreaming) {
             // Use streaming API for debate
-            await orchestrationApi.executeDebateStream(
+            response = await orchestrationApi.executeDebateStream(
               {
                 topic: task,
                 agents,
@@ -496,15 +496,6 @@ const AgentOrchestrationPage: React.FC = () => {
                   updateAgentStatus(event.agent!, status);
                 } else if (event.type === 'chunk') {
                   appendStreamingOutput(event.agent!, event.data || '');
-                } else if (event.type === 'complete') {
-                  response = {
-                    pattern: 'debate',
-                    execution_id: 'stream-exec',
-                    status: 'completed',
-                    result: event.result,
-                    duration_ms: event.duration_ms || 0,
-                    created_at: new Date().toISOString()
-                  };
                 }
               }
             );
