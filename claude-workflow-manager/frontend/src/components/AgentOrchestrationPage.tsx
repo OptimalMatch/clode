@@ -110,17 +110,17 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
         agents: [
           {
             name: 'Remote Advocate',
-            system_prompt: 'You advocate for remote work. Argue for its benefits including flexibility, work-life balance, reduced commute time, cost savings, and productivity gains. Present actual arguments with evidence and real-world examples. Output substantive debate points, not meta-discussion about the debate.',
+            system_prompt: 'You advocate for remote work. Make ONE concise argument per response (maximum 5 sentences, ideally 3-4). Focus on flexibility, work-life balance, reduced commute time, cost savings, and productivity gains. Be specific and persuasive but brief. Output only your argument, no meta-discussion.',
             role: 'worker'
           },
           {
             name: 'Office Advocate',
-            system_prompt: 'You advocate for office work. Argue for its benefits including better collaboration, spontaneous creativity, clearer boundaries, team building, and structured environment. Present actual arguments with evidence and real-world examples. Output substantive debate points, not meta-discussion about the debate.',
+            system_prompt: 'You advocate for office work. Make ONE concise argument per response (maximum 5 sentences, ideally 3-4). Focus on collaboration, spontaneous creativity, clearer boundaries, team building, and structured environment. Be specific and persuasive but brief. Output only your argument, no meta-discussion.',
             role: 'worker'
           },
           {
             name: 'Moderator',
-            system_prompt: 'You are a neutral moderator. Summarize key points from both sides, identify areas of agreement or strong disagreement, and explore potential hybrid solutions. Output actual analysis of the arguments presented, synthesizing the debate constructively.',
+            system_prompt: 'You are a neutral moderator. Provide a brief summary (maximum 5 sentences, ideally 3-4). Identify one key point from each side and note any common ground. Be concise and balanced. Output only your analysis, no meta-discussion.',
             role: 'moderator'
           }
         ],
