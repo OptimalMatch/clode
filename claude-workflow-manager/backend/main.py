@@ -2887,6 +2887,115 @@ async def execute_hierarchical(request: HierarchicalRequest):
         raise HTTPException(status_code=500, detail=f"Hierarchical execution failed: {str(e)}")
 
 @app.post(
+    "/api/orchestration/parallel/stream",
+    summary="Execute Parallel Aggregation with Streaming",
+    description="Execute parallel aggregation with real-time SSE streaming of agent outputs.",
+    tags=["Agent Orchestration"]
+)
+async def execute_parallel_stream(request: ParallelAggregateRequest):
+    """Execute parallel aggregation with Server-Sent Events streaming."""
+    
+    async def event_generator():
+        try:
+            model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+            
+            # Restore fresh credentials for orchestration
+            await ensure_orchestration_credentials()
+            
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+            
+            # Add agents
+            for agent in request.agents:
+                orchestrator.add_agent(
+                    name=agent.name,
+                    system_prompt=agent.system_prompt,
+                    role=OrchestratorAgentRole(agent.role.value)
+                )
+            
+            # Add aggregator if provided
+            if request.aggregator:
+                orchestrator.add_agent(
+                    name=request.aggregator.name,
+                    system_prompt=request.aggregator.system_prompt,
+                    role=OrchestratorAgentRole(request.aggregator.role.value)
+                )
+            
+            # Send initial status
+            agent_names = request.agent_names.copy()
+            if request.aggregator_name:
+                agent_names.append(request.aggregator_name)
+            
+            yield f"data: {json.dumps({'type': 'start', 'pattern': 'parallel', 'agents': agent_names})}\n\n"
+            
+            # Initialize agent statuses
+            for agent_name in request.agent_names:
+                yield f"data: {json.dumps({'type': 'status', 'agent': agent_name, 'data': 'waiting', 'timestamp': datetime.now().isoformat()})}\n\n"
+            
+            if request.aggregator_name:
+                yield f"data: {json.dumps({'type': 'status', 'agent': request.aggregator_name, 'data': 'waiting', 'timestamp': datetime.now().isoformat()})}\n\n"
+            
+            # Event queue for streaming
+            event_queue = asyncio.Queue()
+            
+            # Stream callback
+            async def stream_callback(event_type: str, agent_name: str, data: str):
+                await event_queue.put({
+                    'type': event_type,
+                    'agent': agent_name,
+                    'data': data,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            # Execute parallel aggregation in background
+            async def execute_orchestration():
+                try:
+                    result = await orchestrator.parallel_aggregate_stream(
+                        request.task, request.agent_names, request.aggregator_name, stream_callback
+                    )
+                    await event_queue.put({'type': '__complete__', 'result': result})
+                except Exception as e:
+                    await event_queue.put({'type': '__error__', 'error': str(e)})
+            
+            task = asyncio.create_task(execute_orchestration())
+            start_time = datetime.now()
+            
+            # Yield events from queue
+            while True:
+                try:
+                    event = await asyncio.wait_for(event_queue.get(), timeout=0.1)
+                    
+                    if event['type'] == '__complete__':
+                        result = event['result']
+                        end_time = datetime.now()
+                        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+                        result['duration_ms'] = duration_ms
+                        yield f"data: {json.dumps({'type': 'complete', 'pattern': 'parallel', 'result': result, 'duration_ms': duration_ms})}\n\n"
+                        break
+                    elif event['type'] == '__error__':
+                        yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
+                        break
+                    elif event['type'] == 'status':
+                        # Handle status events with duration parsing
+                        status_data = event['data']
+                        if ':' in status_data and status_data.startswith('completed:'):
+                            duration_ms = int(status_data.split(':')[1])
+                            yield f"data: {json.dumps({'type': 'status', 'agent': event['agent'], 'data': 'completed', 'duration_ms': duration_ms, 'timestamp': event['timestamp']})}\n\n"
+                        else:
+                            yield f"data: {json.dumps(event)}\n\n"
+                    else:
+                        yield f"data: {json.dumps(event)}\n\n"
+                
+                except asyncio.TimeoutError:
+                    if task.done():
+                        break
+                    continue
+        
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post(
     "/api/orchestration/parallel",
     response_model=OrchestrationResult,
     summary="Execute Parallel Aggregation",

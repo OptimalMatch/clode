@@ -619,6 +619,96 @@ Synthesize the best elements from each response into a comprehensive answer."""
             "aggregation_duration_ms": aggregation_duration_ms
         }
     
+    async def parallel_aggregate_stream(self, task: str, agents: List[str], 
+                                       aggregator: Optional[str] = None,
+                                       stream_callback: Optional[Callable[[str, str, str], Awaitable[None]]] = None) -> Dict[str, Any]:
+        """
+        Multiple agents work on the same task independently (sequentially in implementation),
+        then results are aggregated. Streams output in real-time.
+        """
+        logger.info(f"Starting PARALLEL AGGREGATION (streaming) with {len(agents)} agents")
+        
+        # All agents work on same task independently
+        results = {}
+        agent_steps = []
+        
+        for agent_name in agents:
+            if stream_callback:
+                await stream_callback('status', agent_name, 'executing')
+            
+            agent_start = datetime.now()
+            
+            # Stream callback wrapper
+            async def agent_stream_callback(chunk: str):
+                if stream_callback:
+                    await stream_callback('chunk', agent_name, chunk)
+            
+            response = await self.send_message(
+                "system", 
+                agent_name, 
+                task, 
+                MessageType.TASK,
+                stream_callback=agent_stream_callback
+            )
+            agent_end = datetime.now()
+            duration_ms = int((agent_end - agent_start).total_seconds() * 1000)
+            
+            results[agent_name] = response
+            agent_steps.append({
+                "agent": agent_name,
+                "result": response[:200] + "..." if len(response) > 200 else response,
+                "duration_ms": duration_ms
+            })
+            
+            if stream_callback:
+                await stream_callback('status', agent_name, f'completed:{duration_ms}')
+        
+        # Aggregate results
+        aggregated_result = None
+        aggregation_duration_ms = None
+        
+        if aggregator and aggregator in self.agents:
+            if stream_callback:
+                await stream_callback('status', aggregator, 'aggregating')
+            
+            aggregation_prompt = f"""Task: {task}
+
+Multiple agents provided these responses:
+{json.dumps(results, indent=2)}
+
+Synthesize the best elements from each response into a comprehensive answer."""
+            
+            aggregation_start = datetime.now()
+            
+            # Stream callback wrapper for aggregator
+            async def aggregator_stream_callback(chunk: str):
+                if stream_callback:
+                    await stream_callback('chunk', aggregator, chunk)
+            
+            aggregated_result = await self.send_message(
+                "system", 
+                aggregator, 
+                aggregation_prompt, 
+                MessageType.SYNTHESIS,
+                stream_callback=aggregator_stream_callback
+            )
+            aggregation_end = datetime.now()
+            aggregation_duration_ms = int((aggregation_end - aggregation_start).total_seconds() * 1000)
+            
+            if stream_callback:
+                await stream_callback('status', aggregator, f'completed:{aggregation_duration_ms}')
+        
+        return {
+            "pattern": "parallel",
+            "task": task,
+            "agents": agents,
+            "aggregator": aggregator,
+            "agent_steps": agent_steps,
+            "individual_results": results,
+            "aggregated_result": aggregated_result,
+            "aggregation_duration_ms": aggregation_duration_ms
+        }
+    
     # PATTERN 5: DYNAMIC ROUTING
     async def dynamic_routing(self, task: str, router: str, specialists: List[str]) -> Dict[str, Any]:
         """

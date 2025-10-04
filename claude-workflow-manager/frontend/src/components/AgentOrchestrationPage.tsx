@@ -66,7 +66,7 @@ interface OrchestrationResult {
   created_at: string;
 }
 
-type AgentExecutionStatus = 'idle' | 'waiting' | 'executing' | 'completed' | 'error' | 'delegating' | 'delegation_complete' | 'synthesizing';
+type AgentExecutionStatus = 'idle' | 'waiting' | 'executing' | 'completed' | 'error' | 'delegating' | 'delegation_complete' | 'synthesizing' | 'aggregating';
 
 interface AgentStatus {
   name: string;
@@ -240,7 +240,7 @@ const AgentOrchestrationPage: React.FC = () => {
     const interval = setInterval(() => {
       setAgentStatuses(prev => 
         prev.map(as => {
-          if (as.status === 'executing' && as.startTime) {
+          if ((as.status === 'executing' || as.status === 'delegating' || as.status === 'synthesizing' || as.status === 'aggregating') && as.startTime) {
             const elapsedMs = Date.now() - as.startTime;
             return { ...as, elapsedMs };
           }
@@ -388,10 +388,14 @@ const AgentOrchestrationPage: React.FC = () => {
     setAgentStatuses(prev => 
       prev.map(as => {
         if (as.name === agentName) {
-          // When agent starts executing, record start time
-          const startTime = status === 'executing' ? Date.now() : as.startTime;
+          // When agent starts any active phase (executing, delegating, synthesizing, aggregating), record start time
+          const startTime = (status === 'executing' || status === 'delegating' || status === 'synthesizing' || status === 'aggregating') 
+            ? Date.now() 
+            : as.startTime;
           // Clear elapsed time when starting or reset when completed
-          const elapsedMs = status === 'executing' ? 0 : (status === 'completed' ? duration_ms : as.elapsedMs);
+          const elapsedMs = (status === 'executing' || status === 'delegating' || status === 'synthesizing' || status === 'aggregating') 
+            ? 0 
+            : (status === 'completed' ? duration_ms : as.elapsedMs);
           
           return { ...as, status, output, duration_ms, startTime, elapsedMs };
         }
@@ -574,13 +578,40 @@ const AgentOrchestrationPage: React.FC = () => {
           break;
 
         case 'parallel':
-          response = await orchestrationApi.executeParallel({
-            task,
-            agents,
-            agent_names: agents.map(a => a.name),
-            aggregator: null,
-            aggregator_name: null
-          });
+          if (enableStreaming) {
+            initializeAgentStatuses();
+            response = await orchestrationApi.executeParallelStream(
+              {
+                task,
+                agents,
+                agent_names: agents.map(a => a.name),
+                aggregator: null,
+                aggregator_name: null
+              },
+              (event) => {
+                if (event.type === 'status') {
+                  if (event.data === 'executing' || event.data === 'aggregating') {
+                    updateAgentStatus(event.agent!, event.data as AgentExecutionStatus);
+                  } else if (event.data === 'completed' && event.duration_ms) {
+                    updateAgentStatus(event.agent!, 'completed', undefined, event.duration_ms);
+                  } else {
+                    updateAgentStatus(event.agent!, event.data as AgentExecutionStatus);
+                  }
+                } else if (event.type === 'chunk') {
+                  appendStreamingOutput(event.agent!, event.data || '');
+                }
+              },
+              controller.signal
+            );
+          } else {
+            response = await orchestrationApi.executeParallel({
+              task,
+              agents,
+              agent_names: agents.map(a => a.name),
+              aggregator: null,
+              aggregator_name: null
+            });
+          }
           break;
 
         case 'routing':
@@ -719,7 +750,7 @@ const AgentOrchestrationPage: React.FC = () => {
                       </Box>
                       <Typography variant="caption" color="text.secondary">
                         {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1).replace(/_/g, ' ')}
-                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing') && agentStatus.elapsedMs !== undefined && (
+                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing' || agentStatus.status === 'aggregating') && agentStatus.elapsedMs !== undefined && (
                           <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
                         {agentStatus.status === 'completed' && agentStatus.duration_ms && (
@@ -767,7 +798,7 @@ const AgentOrchestrationPage: React.FC = () => {
                       </Box>
                       <Typography variant="caption" color="text.secondary">
                         {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1).replace(/_/g, ' ')}
-                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing') && agentStatus.elapsedMs !== undefined && (
+                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing' || agentStatus.status === 'aggregating') && agentStatus.elapsedMs !== undefined && (
                           <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
                         {agentStatus.status === 'completed' && agentStatus.duration_ms && (
@@ -803,7 +834,7 @@ const AgentOrchestrationPage: React.FC = () => {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1).replace(/_/g, ' ')}
-                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing') && agentStatus.elapsedMs !== undefined && (
+                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing' || agentStatus.status === 'aggregating') && agentStatus.elapsedMs !== undefined && (
                           <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
                         {agentStatus.status === 'completed' && agentStatus.duration_ms && (
