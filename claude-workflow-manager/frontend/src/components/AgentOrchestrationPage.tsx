@@ -66,7 +66,7 @@ interface OrchestrationResult {
   created_at: string;
 }
 
-type AgentExecutionStatus = 'idle' | 'waiting' | 'executing' | 'completed' | 'error';
+type AgentExecutionStatus = 'idle' | 'waiting' | 'executing' | 'completed' | 'error' | 'delegating' | 'delegation_complete' | 'synthesizing';
 
 interface AgentStatus {
   name: string;
@@ -537,12 +537,40 @@ const AgentOrchestrationPage: React.FC = () => {
           if (agents.length < 2) {
             throw new Error('Hierarchical pattern requires at least 2 agents (1 manager + 1 worker)');
           }
-          response = await orchestrationApi.executeHierarchical({
-            task,
-            manager: agents[0],
-            workers: agents.slice(1),
-            worker_names: agents.slice(1).map(a => a.name)
-          });
+          
+          if (enableStreaming) {
+            // Initialize agent statuses for hierarchical
+            initializeAgentStatuses();
+            
+            response = await orchestrationApi.executeHierarchicalStream(
+              {
+                task,
+                manager: agents[0],
+                workers: agents.slice(1),
+                worker_names: agents.slice(1).map(a => a.name)
+              },
+              (event: StreamEvent) => {
+                console.log('Hierarchical stream event:', event);
+                
+                if (event.type === 'status' && event.agent) {
+                  updateAgentStatus(event.agent, event.data as 'waiting' | 'executing' | 'completed' | 'delegating' | 'delegation_complete' | 'synthesizing');
+                } else if (event.type === 'chunk' && event.agent) {
+                  appendStreamingOutput(event.agent, event.data || '');
+                } else if (event.type === 'complete' && event.result) {
+                  // Mark all agents as completed
+                  agents.forEach(agent => updateAgentStatus(agent.name, 'completed'));
+                }
+              },
+              controller.signal
+            );
+          } else {
+            response = await orchestrationApi.executeHierarchical({
+              task,
+              manager: agents[0],
+              workers: agents.slice(1),
+              worker_names: agents.slice(1).map(a => a.name)
+            });
+          }
           break;
 
         case 'parallel':
@@ -1076,7 +1104,7 @@ const AgentOrchestrationPage: React.FC = () => {
                 <Typography variant="h6">
                   Configuration
                 </Typography>
-                {(selectedPattern === 'sequential' || selectedPattern === 'debate') && (
+                {(selectedPattern === 'sequential' || selectedPattern === 'debate' || selectedPattern === 'hierarchical') && (
                   <FormControlLabel
                     control={
                       <Switch 

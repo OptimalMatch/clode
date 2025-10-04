@@ -565,6 +565,73 @@ export const orchestrationApi = {
     });
   },
 
+  executeHierarchicalStream: async (
+    request: HierarchicalRequest,
+    onEvent: (event: StreamEvent) => void,
+    signal?: AbortSignal
+  ): Promise<OrchestrationResult> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const response = await fetch(`${API_URL}/api/orchestration/hierarchical/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(request),
+          signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+
+        if (!reader) {
+          throw new Error('Response body is null');
+        }
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const jsonStr = line.substring(6); // Remove 'data: ' prefix
+                const event: StreamEvent = JSON.parse(jsonStr);
+                onEvent(event);
+
+                if (event.type === 'complete' && event.result) {
+                  resolve({
+                    pattern: 'hierarchical',
+                    execution_id: 'stream-exec',
+                    status: 'completed',
+                    result: event.result,
+                    duration_ms: event.duration_ms || 0,
+                    created_at: new Date().toISOString()
+                  });
+                  return;
+                } else if (event.type === 'error') {
+                  reject(new Error(event.error || 'Unknown error'));
+                  return;
+                }
+              } catch (e) {
+                console.warn('Failed to parse SSE event:', line, e);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        reject(error);
+      }
+    });
+  },
+
   executeHierarchical: async (request: HierarchicalRequest): Promise<OrchestrationResult> => {
     const response = await api.post('/api/orchestration/hierarchical', request);
     return response.data;
