@@ -525,12 +525,16 @@ export const orchestrationApi = {
           throw new Error('Response body is null');
         }
 
+        let buffer = '';
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          
+          // Keep the last incomplete line in the buffer
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
             if (line.startsWith('data: ')) {
@@ -554,7 +558,7 @@ export const orchestrationApi = {
                   return;
                 }
               } catch (e) {
-                console.warn('Failed to parse SSE event:', line, e);
+                console.warn('Failed to parse SSE event:', line.substring(0, 100) + '...', e);
               }
             }
           }
@@ -592,12 +596,16 @@ export const orchestrationApi = {
           throw new Error('Response body is null');
         }
 
+        let buffer = '';
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          
+          // Keep the last incomplete line in the buffer
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
             if (line.startsWith('data: ')) {
@@ -621,7 +629,7 @@ export const orchestrationApi = {
                   return;
                 }
               } catch (e) {
-                console.warn('Failed to parse SSE event:', line, e);
+                console.warn('Failed to parse SSE event:', line.substring(0, 100) + '...', e);
               }
             }
           }

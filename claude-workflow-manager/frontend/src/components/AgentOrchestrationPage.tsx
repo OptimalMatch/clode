@@ -718,8 +718,8 @@ const AgentOrchestrationPage: React.FC = () => {
                         </Typography>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
-                        {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
-                        {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
+                        {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1).replace(/_/g, ' ')}
+                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing') && agentStatus.elapsedMs !== undefined && (
                           <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
                         {agentStatus.status === 'completed' && agentStatus.duration_ms && (
@@ -766,8 +766,8 @@ const AgentOrchestrationPage: React.FC = () => {
                         </Typography>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
-                        {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
-                        {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
+                        {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1).replace(/_/g, ' ')}
+                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing') && agentStatus.elapsedMs !== undefined && (
                           <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
                         {agentStatus.status === 'completed' && agentStatus.duration_ms && (
@@ -802,8 +802,8 @@ const AgentOrchestrationPage: React.FC = () => {
                         {agentStatus.name}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
-                        {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
+                        {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1).replace(/_/g, ' ')}
+                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing') && agentStatus.elapsedMs !== undefined && (
                           <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
                         {agentStatus.status === 'completed' && agentStatus.duration_ms && (
