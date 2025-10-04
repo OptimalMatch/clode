@@ -107,12 +107,24 @@ class Message:
 
 
 class Agent:
-    def __init__(self, name: str, system_prompt: str, role: AgentRole = AgentRole.WORKER):
+    def __init__(self, name: str, system_prompt: str, role: AgentRole = AgentRole.WORKER, use_tools: bool = None):
         self.name = name
         self.system_prompt = system_prompt
         self.role = role
         self.history: List[Dict[str, str]] = []
         self.metadata: Dict[str, Any] = {}
+        # Auto-detect if tools are needed, or use explicit setting
+        self.use_tools = use_tools if use_tools is not None else self._should_use_tools()
+        
+    def _should_use_tools(self) -> bool:
+        """Auto-detect if this agent needs tool capabilities based on system prompt"""
+        tool_keywords = [
+            'file', 'bash', 'command', 'execute', 'run code', 'terminal',
+            'search web', 'fetch', 'download', 'upload', 'create file', 'read file',
+            'write file', 'edit file', 'directory', 'folder', 'script'
+        ]
+        prompt_lower = self.system_prompt.lower()
+        return any(keyword in prompt_lower for keyword in tool_keywords)
         
     def add_to_history(self, role: str, content: str):
         self.history.append({"role": role, "content": content})
@@ -141,15 +153,24 @@ class MultiAgentOrchestrator:
         self.message_log: List[Message] = []
         self.execution_log: List[Dict] = []
         
-    def add_agent(self, name: str, system_prompt: str, role: AgentRole = AgentRole.WORKER) -> Agent:
-        """Add an agent to the system"""
-        self.agents[name] = Agent(name, system_prompt, role)
-        logger.info(f"Added agent: {name} with role {role}")
+    def add_agent(self, name: str, system_prompt: str, role: AgentRole = AgentRole.WORKER, use_tools: bool = None) -> Agent:
+        """
+        Add an agent to the system.
+        
+        Args:
+            name: Agent name
+            system_prompt: System prompt defining agent behavior
+            role: Agent role (COORDINATOR, WORKER, SPECIALIST)
+            use_tools: Explicitly enable/disable tools (None = auto-detect from system prompt)
+        """
+        self.agents[name] = Agent(name, system_prompt, role, use_tools)
+        tool_status = "auto-detected" if use_tools is None else ("enabled" if use_tools else "disabled")
+        logger.info(f"Added agent: {name} with role {role}, tools: {tool_status}")
         return self.agents[name]
     
-    async def _call_claude(self, agent: Agent, message: str, context: Optional[str] = None, 
-                          stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
-        """Internal method to call Claude via Anthropic SDK with true token-level streaming"""
+    async def _call_claude_streaming(self, agent: Agent, message: str, context: Optional[str] = None,
+                                     stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
+        """Call Claude via Anthropic SDK for true token-level streaming (no tools)"""
         full_message = message
         if context:
             full_message = f"Context:\n{context}\n\nTask:\n{message}"
@@ -182,9 +203,66 @@ class MultiAgentOrchestrator:
             
             return reply
         except Exception as e:
-            logger.error(f"Error calling Claude for agent {agent.name}: {e}", exc_info=True)
-            # Re-raise with more context
+            logger.error(f"Error calling Claude (streaming) for agent {agent.name}: {e}", exc_info=True)
             raise Exception(f"Agent {agent.name} failed: {str(e)}")
+    
+    async def _call_claude_with_tools(self, agent: Agent, message: str, context: Optional[str] = None,
+                                      stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
+        """Call Claude via Agent SDK for tool use capabilities (message-level streaming)"""
+        full_message = message
+        if context:
+            full_message = f"Context:\n{context}\n\nTask:\n{message}"
+        
+        try:
+            # Configure options for this agent
+            options = ClaudeAgentOptions(
+                system_prompt=agent.system_prompt,
+                permission_mode='bypassPermissions',  # Auto-accept for orchestration
+                cwd=self.cwd
+            )
+            
+            # Use ClaudeSDKClient for tool capabilities
+            reply_parts = []
+            async with ClaudeSDKClient(options=options) as client:
+                # Send the query
+                await client.query(full_message)
+                
+                # Stream responses as they arrive (message-level)
+                async for msg in client.receive_response():
+                    # Extract text content from AssistantMessage
+                    if isinstance(msg, AssistantMessage):
+                        for block in msg.content:
+                            if isinstance(block, TextBlock):
+                                chunk = block.text
+                                reply_parts.append(chunk)
+                                # Stream callback for updates
+                                if stream_callback:
+                                    await stream_callback(agent.name, chunk)
+            
+            reply = "".join(reply_parts) if reply_parts else "No response"
+            
+            # Update history
+            agent.add_to_history("user", full_message)
+            agent.add_to_history("assistant", reply)
+            
+            return reply
+        except Exception as e:
+            logger.error(f"Error calling Claude (with tools) for agent {agent.name}: {e}", exc_info=True)
+            raise Exception(f"Agent {agent.name} failed: {str(e)}")
+    
+    async def _call_claude(self, agent: Agent, message: str, context: Optional[str] = None, 
+                          stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
+        """
+        Hybrid routing: Choose the best Claude SDK based on agent needs.
+        - Anthropic SDK: True token-level streaming for text-only agents
+        - Claude Agent SDK: Tool use capabilities for agents that need file/bash/web tools
+        """
+        if agent.use_tools:
+            logger.info(f"Agent {agent.name}: Using Claude Agent SDK (tools enabled)")
+            return await self._call_claude_with_tools(agent, message, context, stream_callback)
+        else:
+            logger.info(f"Agent {agent.name}: Using Anthropic SDK (token streaming)")
+            return await self._call_claude_streaming(agent, message, context, stream_callback)
     
     async def send_message(self, from_agent: str, to_agent: str, message: str, 
                           message_type: MessageType = MessageType.TASK,
