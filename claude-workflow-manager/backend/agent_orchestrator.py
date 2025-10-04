@@ -417,6 +417,44 @@ class MultiAgentOrchestrator:
             "debate_history": debate_history
         }
     
+    async def debate_stream(self, topic: str, agents: List[str], rounds: int = 3,
+                           stream_callback: Optional[Callable[[str, str], None]] = None) -> Dict[str, Any]:
+        """
+        Agents debate a topic with streaming output.
+        Each agent responds to the previous agent's argument in real-time.
+        """
+        logger.info(f"Starting DEBATE STREAM with {len(agents)} agents for {rounds} rounds")
+        
+        debate_history = []
+        current_statement = f"Initial topic: {topic}. Please provide your perspective."
+        
+        for round_num in range(rounds):
+            logger.info(f"Debate round {round_num + 1}/{rounds}")
+            
+            for agent_name in agents:
+                round_start = datetime.now()
+                response = await self.send_message("moderator", agent_name, current_statement, 
+                                                  MessageType.TASK, stream_callback)
+                round_end = datetime.now()
+                
+                debate_entry = {
+                    "round": round_num + 1,
+                    "agent": agent_name,
+                    "statement": response,
+                    "duration_ms": int((round_end - round_start).total_seconds() * 1000)
+                }
+                debate_history.append(debate_entry)
+                
+                current_statement = f"Respond to {agent_name}'s argument: {response}"
+        
+        return {
+            "pattern": "debate",
+            "topic": topic,
+            "participants": agents,
+            "rounds": rounds,
+            "debate_history": debate_history
+        }
+    
     # PATTERN 3: HIERARCHICAL
     async def hierarchical_execution(self, task: str, manager: str, workers: List[str]) -> Dict[str, Any]:
         """
