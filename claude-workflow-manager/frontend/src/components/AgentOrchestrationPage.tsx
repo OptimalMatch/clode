@@ -43,6 +43,7 @@ import {
   HourglassEmpty as HourglassEmptyIcon,
   RadioButtonUnchecked as RadioButtonUncheckedIcon,
   TrendingFlat as TrendingFlatIcon,
+  Stop as StopIcon,
 } from '@mui/icons-material';
 import { orchestrationApi, StreamEvent } from '../services/api';
 
@@ -232,6 +233,7 @@ const AgentOrchestrationPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>([]);
   const [enableStreaming, setEnableStreaming] = useState(true);  // Enable streaming by default
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   // Real-time stopwatch effect: Update elapsed time for executing agents
   React.useEffect(() => {
@@ -435,11 +437,32 @@ const AgentOrchestrationPage: React.FC = () => {
     }
   };
 
+  const cancelExecution = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+      setExecuting(false);
+      setError('Execution cancelled by user');
+      
+      // Mark all executing agents as idle
+      setAgentStatuses(prev => 
+        prev.map(as => ({
+          ...as,
+          status: as.status === 'executing' ? 'idle' : as.status
+        }))
+      );
+    }
+  };
+
   const executeOrchestration = async () => {
     setExecuting(true);
     setError(null);
     setResult(null);
     initializeAgentStatuses();
+
+    // Create abort controller for this execution
+    const controller = new AbortController();
+    setAbortController(controller);
 
     // Don't simulate if streaming is enabled
     if (!enableStreaming) {
@@ -470,7 +493,7 @@ const AgentOrchestrationPage: React.FC = () => {
                 // Make sure agent is in executing state
                 updateAgentStatus(event.agent, 'executing');
               }
-            });
+            }, controller.signal);
           } else {
             response = await orchestrationApi.executeSequential({
               task,
@@ -497,7 +520,8 @@ const AgentOrchestrationPage: React.FC = () => {
                 } else if (event.type === 'chunk') {
                   appendStreamingOutput(event.agent!, event.data || '');
                 }
-              }
+              },
+              controller.signal
             );
           } else {
             response = await orchestrationApi.executeDebate({
@@ -589,13 +613,19 @@ const AgentOrchestrationPage: React.FC = () => {
         }
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Execution failed');
-      // Mark all as error
-      agentStatuses.forEach(status => {
-        updateAgentStatus(status.name, 'error');
-      });
+      // Don't show error if it was an intentional cancellation
+      if (err.name === 'AbortError') {
+        console.log('Execution cancelled by user');
+      } else {
+        setError(err.response?.data?.detail || err.message || 'Execution failed');
+        // Mark all as error
+        agentStatuses.forEach(status => {
+          updateAgentStatus(status.name, 'error');
+        });
+      }
     } finally {
       setExecuting(false);
+      setAbortController(null);
     }
   };
 
@@ -1184,7 +1214,7 @@ const AgentOrchestrationPage: React.FC = () => {
             </Button>
 
             {/* Execute Button */}
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
               <Button
                 variant="contained"
                 size="large"
@@ -1195,6 +1225,18 @@ const AgentOrchestrationPage: React.FC = () => {
               >
                 {executing ? 'Executing...' : 'Execute Orchestration'}
               </Button>
+              {executing && (
+                <Button
+                  variant="outlined"
+                  size="large"
+                  color="error"
+                  startIcon={<StopIcon />}
+                  onClick={cancelExecution}
+                  sx={{ px: 4, py: 1.5 }}
+                >
+                  Stop
+                </Button>
+              )}
             </Box>
           </Paper>
         </Grid>
