@@ -747,7 +747,7 @@ const AgentOrchestrationPage: React.FC = () => {
           <Divider sx={{ mb: 2 }} />
           
           {/* Sequential/Hierarchical: Show flow */}
-          {(selectedPattern === 'sequential' || selectedPattern === 'hierarchical' || selectedPattern === 'routing') && (
+          {(selectedPattern === 'sequential' || selectedPattern === 'hierarchical') && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
               {agentStatuses.map((agentStatus, index) => (
                 <React.Fragment key={agentStatus.name}>
@@ -792,6 +792,105 @@ const AgentOrchestrationPage: React.FC = () => {
                   )}
                 </React.Fragment>
               ))}
+            </Box>
+          )}
+
+          {/* Routing: Show branching structure (Router at top, specialists below) */}
+          {selectedPattern === 'routing' && agentStatuses.length > 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              {/* Router (first agent) */}
+              <Card
+                sx={{
+                  minWidth: 200,
+                  maxWidth: enableStreaming ? 450 : 200,
+                  bgcolor: getStatusColor(agentStatuses[0].status),
+                  border: 2,
+                  borderColor: agentStatuses[0].status === 'executing' || agentStatuses[0].status === 'routing' ? 'warning.main' : 'transparent',
+                  transition: 'all 0.3s ease',
+                  transform: agentStatuses[0].status === 'executing' || agentStatuses[0].status === 'routing' ? 'scale(1.05)' : 'scale(1)',
+                }}
+              >
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    {getStatusIcon(agentStatuses[0].status)}
+                    <Typography variant="subtitle2" sx={{ ml: 1, fontWeight: 'bold' }}>
+                      {agentStatuses[0].name} 🧭
+                    </Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    {agentStatuses[0].status.charAt(0).toUpperCase() + agentStatuses[0].status.slice(1).replace(/_/g, ' ')}
+                    {(agentStatuses[0].status === 'executing' || agentStatuses[0].status === 'routing') && agentStatuses[0].elapsedMs !== undefined && (
+                      <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatuses[0].elapsedMs}ms</span>
+                    )}
+                    {(agentStatuses[0].status === 'completed' || agentStatuses[0].status === 'routing_complete') && agentStatuses[0].duration_ms && (
+                      <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatuses[0].duration_ms}ms</span>
+                    )}
+                  </Typography>
+                  {enableStreaming && agentStatuses[0].streamingOutput && (
+                    <Box sx={{ mt: 1, p: 1, bgcolor: 'background.paper', borderRadius: 1, maxHeight: 150, overflow: 'auto' }}>
+                      <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                        {agentStatuses[0].streamingOutput}
+                      </Typography>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Arrows pointing down to specialists */}
+              {agentStatuses.length > 1 && (
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                  {agentStatuses.slice(1).map((_, index) => (
+                    <Box key={index} sx={{ fontSize: 40, color: 'grey.400', transform: 'rotate(90deg)' }}>
+                      ↓
+                    </Box>
+                  ))}
+                </Box>
+              )}
+
+              {/* Specialists (remaining agents) */}
+              {agentStatuses.length > 1 && (
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {agentStatuses.slice(1).map((agentStatus) => (
+                    <Card
+                      key={agentStatus.name}
+                      sx={{
+                        minWidth: 180,
+                        maxWidth: enableStreaming ? 350 : 180,
+                        bgcolor: getStatusColor(agentStatus.status),
+                        border: 2,
+                        borderColor: agentStatus.status === 'executing' ? 'warning.main' : 'transparent',
+                        transition: 'all 0.3s ease',
+                        transform: agentStatus.status === 'executing' ? 'scale(1.05)' : 'scale(1)',
+                      }}
+                    >
+                      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          {getStatusIcon(agentStatus.status)}
+                          <Typography variant="subtitle2" sx={{ ml: 1, fontWeight: 'bold' }}>
+                            {agentStatus.name}
+                          </Typography>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1).replace(/_/g, ' ')}
+                          {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
+                            <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
+                          )}
+                          {agentStatus.status === 'completed' && agentStatus.duration_ms && (
+                            <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
+                          )}
+                        </Typography>
+                        {enableStreaming && agentStatus.streamingOutput && (
+                          <Box sx={{ mt: 1, p: 1, bgcolor: 'background.paper', borderRadius: 1, maxHeight: 150, overflow: 'auto' }}>
+                            <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                              {agentStatus.streamingOutput}
+                            </Typography>
+                          </Box>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+              )}
             </Box>
           )}
 

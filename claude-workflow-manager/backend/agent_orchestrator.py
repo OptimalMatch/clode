@@ -758,13 +758,24 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
         routing_decision = await self.send_message("system", router, routing_prompt, MessageType.ROUTING)
         routing_end = datetime.now()
         
-        # Parse routing decision
+        # Parse routing decision (strip markdown code fences if present)
         try:
-            decision = json.loads(routing_decision)
+            # Remove markdown code fences (```json ... ``` or ``` ... ```)
+            cleaned_decision = routing_decision.strip()
+            if cleaned_decision.startswith('```'):
+                # Find the first newline after opening fence
+                start_idx = cleaned_decision.find('\n')
+                if start_idx != -1:
+                    # Find the closing fence
+                    end_idx = cleaned_decision.rfind('```')
+                    if end_idx > start_idx:
+                        cleaned_decision = cleaned_decision[start_idx+1:end_idx].strip()
+            
+            decision = json.loads(cleaned_decision)
             selected = decision.get("selected_agents", specialists[:1])
             reasoning = decision.get("reasoning", "No reasoning provided")
         except Exception as e:
-            logger.warning(f"Failed to parse routing decision JSON: {e}")
+            logger.warning(f"Failed to parse routing decision JSON: {e}. Raw response: {routing_decision[:200]}")
             selected = specialists[:1]
             reasoning = "Default routing (JSON parsing failed)"
         
@@ -831,13 +842,24 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
         if stream_callback:
             await stream_callback('status', router, f'routing_complete:{routing_duration_ms}')
         
-        # Parse routing decision
+        # Parse routing decision (strip markdown code fences if present)
         try:
-            decision = json.loads(routing_decision)
+            # Remove markdown code fences (```json ... ``` or ``` ... ```)
+            cleaned_decision = routing_decision.strip()
+            if cleaned_decision.startswith('```'):
+                # Find the first newline after opening fence
+                start_idx = cleaned_decision.find('\n')
+                if start_idx != -1:
+                    # Find the closing fence
+                    end_idx = cleaned_decision.rfind('```')
+                    if end_idx > start_idx:
+                        cleaned_decision = cleaned_decision[start_idx+1:end_idx].strip()
+            
+            decision = json.loads(cleaned_decision)
             selected = decision.get("selected_agents", specialists[:1])
             reasoning = decision.get("reasoning", "No reasoning provided")
         except Exception as e:
-            logger.warning(f"Failed to parse routing decision JSON: {e}")
+            logger.warning(f"Failed to parse routing decision JSON: {e}. Raw response: {routing_decision[:200]}")
             selected = specialists[:1]
             reasoning = "Default routing (JSON parsing failed)"
         
