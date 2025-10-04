@@ -89,12 +89,12 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
           },
           {
             name: 'Writer',
-            system_prompt: 'You are a creative writer. You will receive research content from the previous agent. Take that research and craft it into an engaging, well-structured blog post narrative with clear sections, flowing paragraphs, and compelling language. Focus on clarity and readability. IMPORTANT: Output the complete blog post text directly - not a description of what you would write.',
+            system_prompt: 'You are a creative writer (NOT Claude Code). You WILL receive research content from the Researcher agent - that content is your input to transform. Take that research and craft it into an engaging, well-structured blog post with an introduction, body sections with clear headings, and a conclusion. Use flowing paragraphs and compelling language. IMPORTANT: Output ONLY the complete blog post text. Do NOT ask questions, do NOT say you need more information - the input content provided IS your material to work with.',
             role: 'worker'
           },
           {
             name: 'Editor',
-            system_prompt: 'You are an editor. You will receive a draft blog post from the previous agent. Review and improve it for grammar, style, coherence, flow, and impact. IMPORTANT: Output the complete polished final version of the blog post directly - not just feedback or suggestions.',
+            system_prompt: 'You are an editor (NOT Claude Code). You WILL receive a draft blog post from the Writer agent - that draft is your input to polish. Review and improve it for grammar, style, coherence, flow, and impact. Fix any issues and enhance the writing. IMPORTANT: Output ONLY the complete polished final version. Do NOT ask for the draft - the input provided IS the draft.',
             role: 'worker'
           }
         ],

@@ -206,7 +206,11 @@ class MultiAgentOrchestrator:
         
         # Get response from target agent
         target = self.agents[to_agent]
-        context = f"Message from {from_agent}"
+        # For sequential pipeline, make it clear this is input content
+        if from_agent == "system":
+            context = None  # No additional context needed for first agent
+        else:
+            context = f"The following is output from the previous agent ({from_agent}). This is your input content to work with:"
         response = await self._call_claude(target, message, context, stream_callback)
         
         # Log response
@@ -226,16 +230,18 @@ class MultiAgentOrchestrator:
         results = {}
         current_input = task
         steps = []
+        previous_agent = "system"
         
         for i, agent_name in enumerate(agent_sequence):
             logger.info(f"Sequential step {i+1}/{len(agent_sequence)}: {agent_name}")
             
             step_start = datetime.now()
-            response = await self.send_message("system", agent_name, current_input, MessageType.TASK)
+            response = await self.send_message(previous_agent, agent_name, current_input, MessageType.TASK)
             step_end = datetime.now()
             
             results[agent_name] = response
             current_input = response  # Output becomes next input
+            previous_agent = agent_name  # Track who sent this content
             
             steps.append({
                 "step": i + 1,
@@ -510,18 +516,20 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
         results = {}
         current_input = task
         steps = []
+        previous_agent = "system"
         
         for i, agent_name in enumerate(agent_sequence):
             logger.info(f"Sequential step {i+1}/{len(agent_sequence)}: {agent_name}")
             await stream_callback("status", agent_name, "executing")
             
             step_start = datetime.now()
-            response = await self.send_message("system", agent_name, current_input, MessageType.TASK, 
+            response = await self.send_message(previous_agent, agent_name, current_input, MessageType.TASK, 
                                              lambda name, chunk: stream_callback("chunk", name, chunk))
             step_end = datetime.now()
             
             results[agent_name] = response
             current_input = response
+            previous_agent = agent_name  # Next agent will know who sent the content
             
             await stream_callback("status", agent_name, "completed")
             
