@@ -146,8 +146,9 @@ class MultiAgentOrchestrator:
         logger.info(f"Added agent: {name} with role {role}")
         return self.agents[name]
     
-    async def _call_claude(self, agent: Agent, message: str, context: Optional[str] = None) -> str:
-        """Internal method to call Claude via Agent SDK"""
+    async def _call_claude(self, agent: Agent, message: str, context: Optional[str] = None, 
+                          stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
+        """Internal method to call Claude via Agent SDK with optional streaming"""
         full_message = message
         if context:
             full_message = f"Context:\n{context}\n\nTask:\n{message}"
@@ -168,9 +169,16 @@ class MultiAgentOrchestrator:
                     if isinstance(msg.content, list):
                         for block in msg.content:
                             if hasattr(block, 'text'):
-                                reply_parts.append(block.text)
+                                chunk = block.text
+                                reply_parts.append(chunk)
+                                # Stream callback for real-time updates
+                                if stream_callback:
+                                    await stream_callback(agent.name, chunk)
                     elif isinstance(msg.content, str):
-                        reply_parts.append(msg.content)
+                        chunk = msg.content
+                        reply_parts.append(chunk)
+                        if stream_callback:
+                            await stream_callback(agent.name, chunk)
             
             reply = "\n".join(reply_parts) if reply_parts else "No response"
             
@@ -185,7 +193,8 @@ class MultiAgentOrchestrator:
             raise Exception(f"Agent {agent.name} failed: {str(e)}")
     
     async def send_message(self, from_agent: str, to_agent: str, message: str, 
-                          message_type: MessageType = MessageType.TASK) -> str:
+                          message_type: MessageType = MessageType.TASK,
+                          stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
         """Send a message from one agent to another"""
         if to_agent not in self.agents:
             raise ValueError(f"Agent {to_agent} not found")
@@ -198,7 +207,7 @@ class MultiAgentOrchestrator:
         # Get response from target agent
         target = self.agents[to_agent]
         context = f"Message from {from_agent}"
-        response = await self._call_claude(target, message, context)
+        response = await self._call_claude(target, message, context, stream_callback)
         
         # Log response
         response_msg = Message(to_agent, from_agent, response, MessageType.RESPONSE)
@@ -490,5 +499,45 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
             "total_messages": len(self.message_log),
             "message_log": [msg.to_dict() for msg in self.message_log],
             "execution_log": self.execution_log
+        }
+    
+    # STREAMING VERSIONS OF PATTERNS
+    async def sequential_pipeline_stream(self, task: str, agent_sequence: List[str],
+                                        stream_callback: Callable[[str, str, str], None]) -> Dict[str, Any]:
+        """Sequential pipeline with streaming support"""
+        logger.info(f"Starting STREAMING SEQUENTIAL PIPELINE with {len(agent_sequence)} agents")
+        
+        results = {}
+        current_input = task
+        steps = []
+        
+        for i, agent_name in enumerate(agent_sequence):
+            logger.info(f"Sequential step {i+1}/{len(agent_sequence)}: {agent_name}")
+            await stream_callback("status", agent_name, "executing")
+            
+            step_start = datetime.now()
+            response = await self.send_message("system", agent_name, current_input, MessageType.TASK, 
+                                             lambda name, chunk: stream_callback("chunk", name, chunk))
+            step_end = datetime.now()
+            
+            results[agent_name] = response
+            current_input = response
+            
+            await stream_callback("status", agent_name, "completed")
+            
+            steps.append({
+                "step": i + 1,
+                "agent": agent_name,
+                "output": response,
+                "duration_ms": int((step_end - step_start).total_seconds() * 1000)
+            })
+        
+        return {
+            "pattern": "sequential",
+            "task": task,
+            "agents": agent_sequence,
+            "steps": steps,
+            "final_result": current_input,
+            "agent_results": results
         }
 

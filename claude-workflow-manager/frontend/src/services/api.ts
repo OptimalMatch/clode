@@ -477,6 +477,15 @@ export interface OrchestrationResult {
   created_at: string;
 }
 
+export interface StreamEvent {
+  type: 'start' | 'status' | 'chunk' | 'complete' | 'error';
+  agent?: string;
+  data?: string;
+  result?: any;
+  error?: string;
+  timestamp?: string;
+}
+
 export const orchestrationApi = {
   executeSequential: async (request: SequentialPipelineRequest): Promise<OrchestrationResult> => {
     const response = await api.post('/api/orchestration/sequential', request);
@@ -501,6 +510,92 @@ export const orchestrationApi = {
   executeRouting: async (request: DynamicRoutingRequest): Promise<OrchestrationResult> => {
     const response = await api.post('/api/orchestration/routing', request);
     return response.data;
+  },
+
+  // Streaming version for sequential
+  executeSequentialStream: (
+    request: SequentialPipelineRequest, 
+    onEvent: (event: StreamEvent) => void
+  ): Promise<OrchestrationResult> => {
+    return new Promise((resolve, reject) => {
+      const token = localStorage.getItem('access_token');
+      const eventSource = new EventSource(
+        `${API_URL}/api/orchestration/sequential/stream?` + 
+        new URLSearchParams({
+          task: request.task,
+          agents: JSON.stringify(request.agents),
+          agent_sequence: JSON.stringify(request.agent_sequence),
+        })
+      );
+
+      // For POST requests with SSE, we need to use fetch with EventSource polyfill
+      // Or use a library like eventsource. For now, let's use fetch with manual parsing
+      const controller = new AbortController();
+      
+      fetch(`${API_URL}/api/orchestration/sequential/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+          
+          if (!reader) {
+            reject(new Error('No response body'));
+            return;
+          }
+
+          let buffer = '';
+          
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                try {
+                  const event: StreamEvent = JSON.parse(data);
+                  onEvent(event);
+                  
+                  if (event.type === 'complete' && event.result) {
+                    resolve({
+                      pattern: 'sequential',
+                      execution_id: '',
+                      status: 'completed',
+                      result: event.result,
+                      duration_ms: 0,
+                      created_at: new Date().toISOString(),
+                    });
+                  } else if (event.type === 'error') {
+                    reject(new Error(event.error || 'Execution failed'));
+                  }
+                } catch (e) {
+                  console.error('Failed to parse SSE event:', e);
+                }
+              }
+            }
+          }
+        })
+        .catch((error) => {
+          if (error.name !== 'AbortError') {
+            reject(error);
+          }
+        });
+      
+      // Return cleanup function wrapped in promise
+      return () => controller.abort();
+    });
   },
 };
 

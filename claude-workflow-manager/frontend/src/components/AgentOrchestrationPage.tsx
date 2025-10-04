@@ -24,6 +24,8 @@ import {
   Grid,
   Divider,
   Tooltip,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -37,8 +39,12 @@ import {
   Speed as SpeedIcon,
   Hub as HubIcon,
   Refresh as RefreshIcon,
+  CheckCircle as CheckCircleIcon,
+  HourglassEmpty as HourglassEmptyIcon,
+  RadioButtonUnchecked as RadioButtonUncheckedIcon,
+  TrendingFlat as TrendingFlatIcon,
 } from '@mui/icons-material';
-import { orchestrationApi } from '../services/api';
+import { orchestrationApi, StreamEvent } from '../services/api';
 
 type AgentRole = 'manager' | 'worker' | 'specialist' | 'moderator';
 
@@ -57,6 +63,16 @@ interface OrchestrationResult {
   result: any;
   duration_ms: number;
   created_at: string;
+}
+
+type AgentExecutionStatus = 'idle' | 'waiting' | 'executing' | 'completed' | 'error';
+
+interface AgentStatus {
+  name: string;
+  status: AgentExecutionStatus;
+  output?: string;
+  streamingOutput?: string;  // Real-time streaming output
+  duration_ms?: number;
 }
 
 // Sample data for different orchestration patterns
@@ -212,6 +228,8 @@ const AgentOrchestrationPage: React.FC = () => {
   const [executing, setExecuting] = useState(false);
   const [result, setResult] = useState<OrchestrationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>([]);
+  const [enableStreaming, setEnableStreaming] = useState(true);  // Enable streaming by default
 
   const patterns = [
     {
@@ -279,6 +297,7 @@ const AgentOrchestrationPage: React.FC = () => {
     setRounds(sampleData.rounds);
     setResult(null);
     setError(null);
+    setAgentStatuses([]);
   };
 
   const resetToEmpty = () => {
@@ -287,6 +306,7 @@ const AgentOrchestrationPage: React.FC = () => {
     setRounds(3);
     setResult(null);
     setError(null);
+    setAgentStatuses([]);
   };
 
   const getPatternSpecificFields = () => {
@@ -335,21 +355,104 @@ const AgentOrchestrationPage: React.FC = () => {
     }
   };
 
+  const initializeAgentStatuses = () => {
+    const statuses: AgentStatus[] = agents.map(agent => ({
+      name: agent.name,
+      status: 'waiting' as AgentExecutionStatus
+    }));
+    setAgentStatuses(statuses);
+  };
+
+  const updateAgentStatus = (agentName: string, status: AgentExecutionStatus, output?: string, duration_ms?: number) => {
+    setAgentStatuses(prev => 
+      prev.map(as => 
+        as.name === agentName 
+          ? { ...as, status, output, duration_ms }
+          : as
+      )
+    );
+  };
+
+  const appendStreamingOutput = (agentName: string, chunk: string) => {
+    setAgentStatuses(prev => 
+      prev.map(as => 
+        as.name === agentName 
+          ? { ...as, streamingOutput: (as.streamingOutput || '') + chunk }
+          : as
+      )
+    );
+  };
+
+  const simulateProgressiveExecution = async () => {
+    // Simulate agents working by showing "executing" status progressively
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    
+    if (selectedPattern === 'sequential' || selectedPattern === 'hierarchical' || selectedPattern === 'routing') {
+      // Sequential patterns: show agents executing one by one
+      for (let i = 0; i < agents.length; i++) {
+        await delay(300); // Small delay between agents
+        updateAgentStatus(agents[i].name, 'executing');
+      }
+    } else if (selectedPattern === 'parallel') {
+      // Parallel pattern: show all agents executing at once
+      await delay(200);
+      agents.forEach(agent => {
+        updateAgentStatus(agent.name, 'executing');
+      });
+    } else if (selectedPattern === 'debate') {
+      // Debate pattern: alternate between agents
+      for (let round = 0; round < rounds; round++) {
+        for (let i = 0; i < agents.length; i++) {
+          await delay(300);
+          updateAgentStatus(agents[i].name, 'executing');
+        }
+      }
+    }
+  };
+
   const executeOrchestration = async () => {
     setExecuting(true);
     setError(null);
     setResult(null);
+    initializeAgentStatuses();
+
+    // Don't simulate if streaming is enabled
+    if (!enableStreaming) {
+      simulateProgressiveExecution();
+    }
 
     try {
       let response: OrchestrationResult;
 
       switch (selectedPattern) {
         case 'sequential':
-          response = await orchestrationApi.executeSequential({
-            task,
-            agents,
-            agent_sequence: agents.map(a => a.name)
-          });
+          // Use streaming API if enabled
+          if (enableStreaming) {
+            response = await orchestrationApi.executeSequentialStream({
+              task,
+              agents,
+              agent_sequence: agents.map(a => a.name)
+            }, (event: StreamEvent) => {
+              // Handle streaming events
+              if (event.type === 'status' && event.agent) {
+                if (event.data === 'executing') {
+                  updateAgentStatus(event.agent, 'executing');
+                } else if (event.data === 'completed') {
+                  updateAgentStatus(event.agent, 'completed');
+                }
+              } else if (event.type === 'chunk' && event.agent && event.data) {
+                appendStreamingOutput(event.agent, event.data);
+                // Make sure agent is in executing state
+                updateAgentStatus(event.agent, 'executing');
+              }
+            });
+          } else {
+            response = await orchestrationApi.executeSequential({
+              task,
+              agents,
+              agent_sequence: agents.map(a => a.name)
+            });
+          }
           break;
 
         case 'debate':
@@ -400,11 +503,202 @@ const AgentOrchestrationPage: React.FC = () => {
       }
 
       setResult(response);
+      
+      // Update agent statuses based on results
+      if (response.result) {
+        const resultData = response.result;
+        
+        // Update statuses based on pattern and results
+        if (selectedPattern === 'sequential' && resultData.steps) {
+          resultData.steps.forEach((step: any) => {
+            updateAgentStatus(step.agent, 'completed', step.output, step.duration_ms);
+          });
+        } else if (selectedPattern === 'debate' && resultData.debate_history) {
+          // Mark all agents as completed for debate
+          const participantNames = new Set(resultData.debate_history.map((entry: any) => entry.agent));
+          participantNames.forEach((name: any) => {
+            updateAgentStatus(name, 'completed');
+          });
+        } else if (selectedPattern === 'hierarchical' && resultData.worker_steps) {
+          // Mark manager as completed
+          if (agents.length > 0) {
+            updateAgentStatus(agents[0].name, 'completed');
+          }
+          // Mark workers as completed
+          resultData.worker_steps.forEach((step: any) => {
+            updateAgentStatus(step.worker, 'completed', step.result, step.duration_ms);
+          });
+        } else if (selectedPattern === 'parallel' && resultData.agent_steps) {
+          resultData.agent_steps.forEach((step: any) => {
+            updateAgentStatus(step.agent, 'completed', step.result, step.duration_ms);
+          });
+        } else if (selectedPattern === 'routing' && resultData.execution_steps) {
+          // Mark router as completed
+          if (agents.length > 0) {
+            updateAgentStatus(agents[0].name, 'completed');
+          }
+          // Mark specialists as completed
+          resultData.execution_steps.forEach((step: any) => {
+            updateAgentStatus(step.agent, 'completed', step.result, step.duration_ms);
+          });
+        }
+      }
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Execution failed');
+      // Mark all as error
+      agentStatuses.forEach(status => {
+        updateAgentStatus(status.name, 'error');
+      });
     } finally {
       setExecuting(false);
     }
+  };
+
+  const getStatusIcon = (status: AgentExecutionStatus) => {
+    switch (status) {
+      case 'idle':
+        return <RadioButtonUncheckedIcon sx={{ color: 'grey.400' }} />;
+      case 'waiting':
+        return <RadioButtonUncheckedIcon sx={{ color: 'info.main' }} />;
+      case 'executing':
+        return <HourglassEmptyIcon sx={{ color: 'warning.main', animation: 'pulse 1.5s ease-in-out infinite' }} />;
+      case 'completed':
+        return <CheckCircleIcon sx={{ color: 'success.main' }} />;
+      case 'error':
+        return <CheckCircleIcon sx={{ color: 'error.main' }} />;
+    }
+  };
+
+  const getStatusColor = (status: AgentExecutionStatus) => {
+    switch (status) {
+      case 'idle': return 'grey.100';
+      case 'waiting': return 'info.light';
+      case 'executing': return 'warning.light';
+      case 'completed': return 'success.light';
+      case 'error': return 'error.light';
+    }
+  };
+
+  const renderAgentVisualization = () => {
+    if (agentStatuses.length === 0) return null;
+
+    return (
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+            <PsychologyIcon sx={{ mr: 1 }} />
+            Agent Execution Status
+          </Typography>
+          <Divider sx={{ mb: 2 }} />
+          
+          {/* Sequential/Hierarchical: Show flow */}
+          {(selectedPattern === 'sequential' || selectedPattern === 'hierarchical' || selectedPattern === 'routing') && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+              {agentStatuses.map((agentStatus, index) => (
+                <React.Fragment key={agentStatus.name}>
+                  <Card
+                    sx={{
+                      minWidth: 150,
+                      maxWidth: enableStreaming ? 400 : 150,
+                      bgcolor: getStatusColor(agentStatus.status),
+                      border: 2,
+                      borderColor: agentStatus.status === 'executing' ? 'warning.main' : 'transparent',
+                      transition: 'all 0.3s ease',
+                      transform: agentStatus.status === 'executing' ? 'scale(1.05)' : 'scale(1)',
+                    }}
+                  >
+                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        {getStatusIcon(agentStatus.status)}
+                        <Typography variant="subtitle2" sx={{ ml: 1, fontWeight: 'bold' }}>
+                          {agentStatus.name}
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
+                        {agentStatus.duration_ms && ` (${agentStatus.duration_ms}ms)`}
+                      </Typography>
+                      {enableStreaming && agentStatus.streamingOutput && (
+                        <Box sx={{ mt: 1, p: 1, bgcolor: 'background.paper', borderRadius: 1, maxHeight: 150, overflow: 'auto' }}>
+                          <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                            {agentStatus.streamingOutput}
+                          </Typography>
+                        </Box>
+                      )}
+                    </CardContent>
+                  </Card>
+                  {index < agentStatuses.length - 1 && (
+                    <TrendingFlatIcon sx={{ color: 'grey.400', fontSize: 30 }} />
+                  )}
+                </React.Fragment>
+              ))}
+            </Box>
+          )}
+
+          {/* Parallel: Show grid */}
+          {selectedPattern === 'parallel' && (
+            <Grid container spacing={2}>
+              {agentStatuses.map((agentStatus) => (
+                <Grid item xs={12} sm={6} md={3} key={agentStatus.name}>
+                  <Card
+                    sx={{
+                      height: '100%',
+                      bgcolor: getStatusColor(agentStatus.status),
+                      border: 2,
+                      borderColor: agentStatus.status === 'executing' ? 'warning.main' : 'transparent',
+                      transition: 'all 0.3s ease',
+                      transform: agentStatus.status === 'executing' ? 'scale(1.05)' : 'scale(1)',
+                    }}
+                  >
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        {getStatusIcon(agentStatus.status)}
+                        <Typography variant="subtitle2" sx={{ ml: 1, fontWeight: 'bold' }}>
+                          {agentStatus.name}
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
+                        {agentStatus.duration_ms && ` (${agentStatus.duration_ms}ms)`}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          )}
+
+          {/* Debate: Show conversation style */}
+          {selectedPattern === 'debate' && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {agentStatuses.map((agentStatus) => (
+                <Card
+                  key={agentStatus.name}
+                  sx={{
+                    bgcolor: getStatusColor(agentStatus.status),
+                    border: 2,
+                    borderColor: agentStatus.status === 'executing' ? 'warning.main' : 'transparent',
+                    transition: 'all 0.3s ease',
+                    transform: agentStatus.status === 'executing' ? 'scale(1.02)' : 'scale(1)',
+                  }}
+                >
+                  <CardContent sx={{ display: 'flex', alignItems: 'center' }}>
+                    {getStatusIcon(agentStatus.status)}
+                    <Typography variant="subtitle1" sx={{ ml: 2, fontWeight: 'bold', flex: 1 }}>
+                      {agentStatus.name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
+                      {agentStatus.duration_ms && ` (${agentStatus.duration_ms}ms)`}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+    );
   };
 
   const renderResultDetails = () => {
@@ -602,7 +896,20 @@ const AgentOrchestrationPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      '@keyframes pulse': {
+        '0%': {
+          transform: 'rotate(0deg)',
+        },
+        '50%': {
+          transform: 'rotate(180deg)',
+        },
+        '100%': {
+          transform: 'rotate(360deg)',
+        },
+      }
+    }}>
       <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
         <PsychologyIcon sx={{ mr: 2, fontSize: 40 }} />
         Agent Orchestration
@@ -666,9 +973,28 @@ const AgentOrchestrationPage: React.FC = () => {
         <Grid item xs={12}>
           <Paper sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                Configuration
-              </Typography>
+              <Box>
+                <Typography variant="h6">
+                  Configuration
+                </Typography>
+                {selectedPattern === 'sequential' && (
+                  <FormControlLabel
+                    control={
+                      <Switch 
+                        checked={enableStreaming} 
+                        onChange={(e) => setEnableStreaming(e.target.checked)}
+                        color="primary"
+                      />
+                    }
+                    label={
+                      <Typography variant="caption">
+                        Enable Real-time Streaming Output
+                      </Typography>
+                    }
+                    sx={{ mt: 0.5 }}
+                  />
+                )}
+              </Box>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Tooltip title="Reset all fields to empty">
                   <Button
@@ -803,6 +1129,13 @@ const AgentOrchestrationPage: React.FC = () => {
             </Box>
           </Paper>
         </Grid>
+
+        {/* Agent Visualization */}
+        {(executing || result) && (
+          <Grid item xs={12}>
+            {renderAgentVisualization()}
+          </Grid>
+        )}
 
         {/* Error Display */}
         {error && (

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
 import os
@@ -2781,6 +2781,96 @@ async def execute_dynamic_routing(request: DynamicRoutingRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Dynamic routing execution failed: {str(e)}")
+
+
+# STREAMING ORCHESTRATION ENDPOINTS (SSE)
+@app.post(
+    "/api/orchestration/sequential/stream",
+    summary="Execute Sequential Pipeline with Streaming",
+    description="Execute sequential pipeline with real-time SSE streaming of agent outputs.",
+    tags=["Agent Orchestration"]
+)
+async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest):
+    """Execute sequential pipeline with Server-Sent Events streaming."""
+    
+    async def event_generator():
+        try:
+            # Send initial status
+            yield f"data: {json.dumps({'type': 'start', 'pattern': 'sequential', 'agents': request.agent_sequence})}\n\n"
+            
+            model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+            await ensure_orchestration_credentials()
+            
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+            
+            # Add agents
+            for agent in request.agents:
+                orchestrator.add_agent(
+                    name=agent.name,
+                    system_prompt=agent.system_prompt,
+                    role=OrchestratorAgentRole(agent.role.value)
+                )
+            
+            # Create queue for streaming events
+            event_queue = asyncio.Queue()
+            
+            # Stream callback to put events in queue
+            async def stream_callback(event_type: str, agent_name: str, data: str):
+                await event_queue.put({
+                    'type': event_type,
+                    'agent': agent_name,
+                    'data': data,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            # Execute in background task
+            async def execute_orchestration():
+                try:
+                    result = await orchestrator.sequential_pipeline_stream(request.task, request.agent_sequence, stream_callback)
+                    await event_queue.put({'type': '__complete__', 'result': result})
+                except Exception as e:
+                    await event_queue.put({'type': '__error__', 'error': str(e)})
+            
+            task = asyncio.create_task(execute_orchestration())
+            start_time = datetime.now()
+            
+            # Stream events as they come
+            while True:
+                event = await event_queue.get()
+                
+                if event['type'] == '__complete__':
+                    end_time = datetime.now()
+                    final_data = {
+                        'type': 'complete',
+                        'pattern': 'sequential',
+                        'result': event['result'],
+                        'duration_ms': int((end_time - start_time).total_seconds() * 1000)
+                    }
+                    yield f"data: {json.dumps(final_data)}\n\n"
+                    break
+                elif event['type'] == '__error__':
+                    error_data = {'type': 'error', 'error': event['error']}
+                    yield f"data: {json.dumps(error_data)}\n\n"
+                    break
+                else:
+                    yield f"data: {json.dumps(event)}\n\n"
+            
+            await task
+            
+        except Exception as e:
+            error_data = {'type': 'error', 'error': str(e)}
+            yield f"data: {json.dumps(error_data)}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
+
 
 if __name__ == "__main__":
     import uvicorn
