@@ -6,7 +6,7 @@ Uses Claude Agent SDK for Max Plan compatibility
 
 from claude_agent_sdk import query, ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
 import anthropic
-from typing import List, Dict, Optional, Callable, Any, AsyncIterator
+from typing import List, Dict, Optional, Callable, Any, AsyncIterator, Awaitable
 import json
 from datetime import datetime
 from enum import Enum
