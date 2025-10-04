@@ -840,7 +840,7 @@ const AgentOrchestrationPage: React.FC = () => {
               {agentStatuses.length > 1 && (
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                   {agentStatuses.slice(1).map((_, index) => (
-                    <Box key={index} sx={{ fontSize: 40, color: 'grey.400', transform: 'rotate(90deg)' }}>
+                    <Box key={index} sx={{ fontSize: 40, color: 'grey.400' }}>
                       ↓
                     </Box>
                   ))}
