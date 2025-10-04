@@ -484,6 +484,7 @@ export interface StreamEvent {
   result?: any;
   error?: string;
   timestamp?: string;
+  duration_ms?: number;
 }
 
 export const orchestrationApi = {
