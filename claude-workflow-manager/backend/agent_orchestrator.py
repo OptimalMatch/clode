@@ -5,6 +5,7 @@ Uses Claude Agent SDK for Max Plan compatibility
 """
 
 from claude_agent_sdk import query, ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
+import anthropic
 from typing import List, Dict, Optional, Callable, Any, AsyncIterator
 import json
 from datetime import datetime
@@ -148,36 +149,30 @@ class MultiAgentOrchestrator:
     
     async def _call_claude(self, agent: Agent, message: str, context: Optional[str] = None, 
                           stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
-        """Internal method to call Claude via Agent SDK with optional streaming"""
+        """Internal method to call Claude via Anthropic SDK with true token-level streaming"""
         full_message = message
         if context:
             full_message = f"Context:\n{context}\n\nTask:\n{message}"
         
         try:
-            # Configure options for this agent
-            options = ClaudeAgentOptions(
-                system_prompt=agent.system_prompt,
-                permission_mode='bypassPermissions',  # Auto-accept for orchestration (valid option)
-                cwd=self.cwd
-            )
+            # Use Anthropic SDK directly for true token-level streaming
+            client = anthropic.AsyncAnthropic()
             
-            # Use ClaudeSDKClient for true streaming
             reply_parts = []
-            async with ClaudeSDKClient(options=options) as client:
-                # Send the query
-                await client.query(full_message)
-                
-                # Stream responses as they arrive
-                async for msg in client.receive_response():
-                    # Extract text content from AssistantMessage
-                    if isinstance(msg, AssistantMessage):
-                        for block in msg.content:
-                            if isinstance(block, TextBlock):
-                                chunk = block.text
-                                reply_parts.append(chunk)
-                                # Stream callback for real-time updates
-                                if stream_callback:
-                                    await stream_callback(agent.name, chunk)
+            
+            # Stream with the Anthropic SDK
+            async with client.messages.stream(
+                model="claude-sonnet-4-20250514",  # Latest Sonnet 4.5
+                max_tokens=4096,
+                system=agent.system_prompt,
+                messages=[{"role": "user", "content": full_message}]
+            ) as stream:
+                # Stream text deltas as they arrive in real-time
+                async for text in stream.text_stream:
+                    reply_parts.append(text)
+                    # Stream callback for real-time updates
+                    if stream_callback:
+                        await stream_callback(agent.name, text)
             
             reply = "".join(reply_parts) if reply_parts else "No response"
             
