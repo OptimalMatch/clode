@@ -746,4 +746,84 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
             "final_result": current_input,
             "agent_results": results
         }
+    
+    async def hierarchical_execution_stream(self, task: str, manager: str, workers: List[str],
+                                           stream_callback: Callable[[str, str, str], None]) -> Dict[str, Any]:
+        """
+        Manager agent delegates subtasks to worker agents and synthesizes results - with streaming.
+        """
+        logger.info(f"Starting STREAMING HIERARCHICAL execution with manager {manager} and {len(workers)} workers")
+        
+        # Manager breaks down task
+        delegation_prompt = f"""Task: {task}
+
+Break this down into {len(workers)} subtasks, one for each worker: {', '.join(workers)}.
+Format your response as JSON:
+{{"subtasks": [{{"worker": "name", "task": "description"}}]}}"""
+        
+        await stream_callback("status", manager, "delegating")
+        delegation_start = datetime.now()
+        delegation = await self.send_message("system", manager, delegation_prompt, MessageType.DELEGATION,
+                                            lambda name, chunk: stream_callback("chunk", name, chunk))
+        delegation_end = datetime.now()
+        await stream_callback("status", manager, "delegation_complete")
+        
+        # Parse subtasks
+        try:
+            subtasks_data = json.loads(delegation)
+            subtasks = subtasks_data.get("subtasks", [])
+        except Exception as e:
+            logger.warning(f"Failed to parse delegation JSON: {e}")
+            # Fallback if JSON parsing fails
+            subtasks = [{"worker": w, "task": task} for w in workers]
+        
+        # Workers execute subtasks
+        worker_results = {}
+        worker_steps = []
+        
+        for subtask in subtasks:
+            worker = subtask["worker"]
+            if worker in self.agents:
+                await stream_callback("status", worker, "executing")
+                worker_start = datetime.now()
+                result = await self.send_message(manager, worker, subtask["task"], MessageType.TASK,
+                                               lambda name, chunk: stream_callback("chunk", name, chunk))
+                worker_end = datetime.now()
+                await stream_callback("status", worker, "completed")
+                
+                worker_results[worker] = result
+                worker_steps.append({
+                    "worker": worker,
+                    "task": subtask["task"],
+                    "result": result[:200] + "..." if len(result) > 200 else result,
+                    "duration_ms": int((worker_end - worker_start).total_seconds() * 1000)
+                })
+        
+        # Manager synthesizes results
+        synthesis_prompt = f"""Original task: {task}
+
+Worker results:
+{json.dumps(worker_results, indent=2)}
+
+Synthesize these results into a coherent final output."""
+        
+        await stream_callback("status", manager, "synthesizing")
+        synthesis_start = datetime.now()
+        final_result = await self.send_message("system", manager, synthesis_prompt, MessageType.SYNTHESIS,
+                                              lambda name, chunk: stream_callback("chunk", name, chunk))
+        synthesis_end = datetime.now()
+        await stream_callback("status", manager, "completed")
+        
+        return {
+            "pattern": "hierarchical",
+            "task": task,
+            "manager": manager,
+            "workers": workers,
+            "delegation": delegation,
+            "delegation_duration_ms": int((delegation_end - delegation_start).total_seconds() * 1000),
+            "worker_steps": worker_steps,
+            "worker_results": worker_results,
+            "synthesis_duration_ms": int((synthesis_end - synthesis_start).total_seconds() * 1000),
+            "final_result": final_result
+        }
 

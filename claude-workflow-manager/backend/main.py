@@ -2731,6 +2731,111 @@ async def execute_debate_stream(request: DebateRequest):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post(
+    "/api/orchestration/hierarchical/stream",
+    summary="Execute Hierarchical with Streaming",
+    description="Execute hierarchical pattern with real-time SSE streaming of agent outputs.",
+    tags=["Agent Orchestration"]
+)
+async def execute_hierarchical_stream(request: HierarchicalRequest):
+    """Execute hierarchical orchestration with Server-Sent Events streaming."""
+    
+    async def event_generator():
+        try:
+            # Send initial status
+            agent_names = [request.manager.name] + [w.name for w in request.workers]
+            yield f"data: {json.dumps({'type': 'start', 'pattern': 'hierarchical', 'agents': agent_names, 'manager': request.manager.name})}\n\n"
+            
+            model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
+            await ensure_orchestration_credentials()
+            
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+            
+            # Add manager
+            orchestrator.add_agent(
+                name=request.manager.name,
+                system_prompt=request.manager.system_prompt,
+                role=OrchestratorAgentRole(request.manager.role.value)
+            )
+            
+            # Add workers
+            worker_names = []
+            for worker in request.workers:
+                orchestrator.add_agent(
+                    name=worker.name,
+                    system_prompt=worker.system_prompt,
+                    role=OrchestratorAgentRole(worker.role.value)
+                )
+                worker_names.append(worker.name)
+            
+            # Create queue for streaming events
+            event_queue = asyncio.Queue()
+            
+            # Stream callback
+            async def stream_callback(event_type: str, agent_name: str, data: str):
+                await event_queue.put({
+                    'type': event_type,
+                    'agent': agent_name,
+                    'data': data,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            # Execute in background task
+            async def execute_orchestration():
+                try:
+                    # Send initial status updates
+                    await event_queue.put({
+                        'type': 'status',
+                        'agent': request.manager.name,
+                        'data': 'waiting',
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    for worker_name in worker_names:
+                        await event_queue.put({
+                            'type': 'status',
+                            'agent': worker_name,
+                            'data': 'waiting',
+                            'timestamp': datetime.now().isoformat()
+                        })
+                    
+                    result = await orchestrator.hierarchical_execution_stream(
+                        request.task, request.manager.name, worker_names, stream_callback
+                    )
+                    await event_queue.put({'type': '__complete__', 'result': result})
+                except Exception as e:
+                    await event_queue.put({'type': '__error__', 'error': str(e)})
+            
+            task = asyncio.create_task(execute_orchestration())
+            start_time = datetime.now()
+            
+            # Yield events from queue
+            while True:
+                try:
+                    event = await asyncio.wait_for(event_queue.get(), timeout=0.1)
+                    
+                    if event['type'] == '__complete__':
+                        result = event['result']
+                        end_time = datetime.now()
+                        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+                        result['duration_ms'] = duration_ms
+                        yield f"data: {json.dumps({'type': 'complete', 'pattern': 'hierarchical', 'result': result, 'duration_ms': duration_ms})}\n\n"
+                        break
+                    elif event['type'] == '__error__':
+                        yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
+                        break
+                    else:
+                        yield f"data: {json.dumps(event)}\n\n"
+                
+                except asyncio.TimeoutError:
+                    if task.done():
+                        break
+                    continue
+        
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post(
     "/api/orchestration/hierarchical",
     response_model=OrchestrationResult,
     summary="Execute Hierarchical Pattern",
