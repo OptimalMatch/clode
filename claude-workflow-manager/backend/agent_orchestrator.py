@@ -394,7 +394,10 @@ class MultiAgentOrchestrator:
         for round_num in range(rounds):
             logger.info(f"Debate round {round_num + 1}/{rounds}")
             
-            for agent_name in agents:
+            # Track all responses in this round for context accumulation
+            round_responses = []
+            
+            for idx, agent_name in enumerate(agents):
                 round_start = datetime.now()
                 response = await self.send_message("moderator", agent_name, current_statement, MessageType.TASK)
                 round_end = datetime.now()
@@ -406,8 +409,20 @@ class MultiAgentOrchestrator:
                     "duration_ms": int((round_end - round_start).total_seconds() * 1000)
                 }
                 debate_history.append(debate_entry)
+                round_responses.append((agent_name, response))
                 
-                current_statement = f"Respond to {agent_name}'s argument: {response}"
+                # Update statement for next agent in this round
+                # If this is the last agent (moderator), give them all context from this round
+                if idx == len(agents) - 1:
+                    # Last agent (typically moderator) - provide full round context
+                    if len(round_responses) > 1:
+                        context_parts = [f"{name}'s argument: {resp}" for name, resp in round_responses[:-1]]
+                        current_statement = f"Round {round_num + 1} arguments:\n" + "\n\n".join(context_parts)
+                    else:
+                        current_statement = f"Round {round_num + 1}: {agent_name}'s argument: {response}"
+                else:
+                    # Not the last agent - give them the previous agent's response
+                    current_statement = f"Respond to {agent_name}'s argument: {response}"
         
         return {
             "pattern": "debate",
@@ -431,7 +446,10 @@ class MultiAgentOrchestrator:
         for round_num in range(rounds):
             logger.info(f"Debate round {round_num + 1}/{rounds}")
             
-            for agent_name in agents:
+            # Track all responses in this round for context accumulation
+            round_responses = []
+            
+            for idx, agent_name in enumerate(agents):
                 round_start = datetime.now()
                 response = await self.send_message("moderator", agent_name, current_statement, 
                                                   MessageType.TASK, stream_callback)
@@ -444,8 +462,20 @@ class MultiAgentOrchestrator:
                     "duration_ms": int((round_end - round_start).total_seconds() * 1000)
                 }
                 debate_history.append(debate_entry)
+                round_responses.append((agent_name, response))
                 
-                current_statement = f"Respond to {agent_name}'s argument: {response}"
+                # Update statement for next agent in this round
+                # If this is the last agent (moderator), give them all context from this round
+                if idx == len(agents) - 1:
+                    # Last agent (typically moderator) - provide full round context
+                    if len(round_responses) > 1:
+                        context_parts = [f"{name}'s argument: {resp}" for name, resp in round_responses[:-1]]
+                        current_statement = f"Round {round_num + 1} arguments:\n" + "\n\n".join(context_parts)
+                    else:
+                        current_statement = f"Round {round_num + 1}: {agent_name}'s argument: {response}"
+                else:
+                    # Not the last agent - give them the previous agent's response
+                    current_statement = f"Respond to {agent_name}'s argument: {response}"
         
         return {
             "pattern": "debate",
