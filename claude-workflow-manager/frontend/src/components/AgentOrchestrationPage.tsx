@@ -84,17 +84,17 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
         agents: [
           {
             name: 'Researcher',
-            system_prompt: 'You are a research specialist. Your role is to gather and present key facts, statistics, and evidence about the given topic. Focus on accuracy and credibility.',
+            system_prompt: 'You are a research specialist. Your role is to gather and present key facts, statistics, and evidence about the given topic. Focus on accuracy and credibility. IMPORTANT: Output the actual research content directly in your response as structured bullet points or paragraphs. Do NOT just describe what you would write or save to files - provide the actual research content that the next agent can work with.',
             role: 'worker'
           },
           {
             name: 'Writer',
-            system_prompt: 'You are a creative writer. Take the research provided and craft it into an engaging, well-structured narrative. Focus on clarity and readability.',
+            system_prompt: 'You are a creative writer. You will receive research content from the previous agent. Take that research and craft it into an engaging, well-structured blog post narrative with clear sections, flowing paragraphs, and compelling language. Focus on clarity and readability. IMPORTANT: Output the complete blog post text directly - not a description of what you would write.',
             role: 'worker'
           },
           {
             name: 'Editor',
-            system_prompt: 'You are an editor. Review the written content for grammar, style, coherence, and impact. Provide a polished final version.',
+            system_prompt: 'You are an editor. You will receive a draft blog post from the previous agent. Review and improve it for grammar, style, coherence, flow, and impact. IMPORTANT: Output the complete polished final version of the blog post directly - not just feedback or suggestions.',
             role: 'worker'
           }
         ],
@@ -107,17 +107,17 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
         agents: [
           {
             name: 'Advocate',
-            system_prompt: 'You support AI regulation. Argue for stronger oversight, safety measures, and ethical frameworks. Use evidence and real-world examples.',
+            system_prompt: 'You support AI regulation. Argue for stronger oversight, safety measures, and ethical frameworks. Present actual arguments with evidence and real-world examples. Output substantive debate points, not meta-discussion about the debate.',
             role: 'worker'
           },
           {
             name: 'Skeptic',
-            system_prompt: 'You oppose heavy AI regulation. Argue for innovation freedom, market-driven solutions, and minimal government intervention. Use evidence and real-world examples.',
+            system_prompt: 'You oppose heavy AI regulation. Argue for innovation freedom, market-driven solutions, and minimal government intervention. Present actual arguments with evidence and real-world examples. Output substantive debate points, not meta-discussion about the debate.',
             role: 'worker'
           },
           {
             name: 'Moderator',
-            system_prompt: 'You are a neutral moderator. After each round, summarize key points from both sides and identify areas of agreement or strong disagreement.',
+            system_prompt: 'You are a neutral moderator. Summarize key points from both sides and identify areas of agreement or strong disagreement. Output actual analysis of the arguments presented, synthesizing the debate constructively.',
             role: 'moderator'
           }
         ],
@@ -130,22 +130,22 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
         agents: [
           {
             name: 'Marketing Director',
-            system_prompt: 'You are a marketing director. Analyze the task, break it down into specific subtasks for your team (content, social media, analytics), and later synthesize their work into a cohesive strategy.',
+            system_prompt: 'You are a marketing director. Analyze the task and break it down into specific subtasks for your team. When delegating, output actual task descriptions. When synthesizing results, output a complete cohesive strategy document. IMPORTANT: Always output actual content, not descriptions of what you would do.',
             role: 'manager'
           },
           {
             name: 'Content Specialist',
-            system_prompt: 'You create compelling content. Focus on messaging, copywriting, and brand storytelling.',
+            system_prompt: 'You create compelling content. When given a task, output actual content deliverables: messaging frameworks, sample copy, brand story elements, taglines, etc. Focus on concrete, usable content that can be implemented.',
             role: 'worker'
           },
           {
             name: 'Social Media Manager',
-            system_prompt: 'You manage social media strategy. Focus on platform selection, posting schedules, and audience engagement tactics.',
+            system_prompt: 'You manage social media strategy. When given a task, output actual deliverables: platform recommendations, sample post ideas, posting schedule tables, engagement tactics, etc. Provide concrete, actionable social media plans.',
             role: 'worker'
           },
           {
             name: 'Analytics Expert',
-            system_prompt: 'You focus on metrics and measurement. Define KPIs, tracking methods, and success criteria.',
+            system_prompt: 'You focus on metrics and measurement. When given a task, output actual deliverables: specific KPI lists, measurement frameworks, tracking implementation plans, success criteria tables, etc. Provide concrete metrics and methods.',
             role: 'worker'
           }
         ],
@@ -158,22 +158,22 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
         agents: [
           {
             name: 'Creative Thinker',
-            system_prompt: 'You are a creative brainstormer. Generate bold, innovative ideas without worrying about constraints. Think outside the box.',
+            system_prompt: 'You are a creative brainstormer. Generate 3-5 bold, innovative startup ideas with descriptions. Think outside the box and be specific about features and concepts. Output actual idea descriptions, not meta-commentary.',
             role: 'worker'
           },
           {
             name: 'Practical Engineer',
-            system_prompt: 'You are a pragmatic engineer. Focus on technically feasible solutions that can be built with existing technology.',
+            system_prompt: 'You are a pragmatic engineer. Generate 3-5 technically feasible startup ideas with implementation approaches. Focus on what can be built with existing technology. Output actual technical concepts and architectures.',
             role: 'worker'
           },
           {
             name: 'Business Analyst',
-            system_prompt: 'You are a business-minded analyst. Focus on market viability, monetization, and customer acquisition strategies.',
+            system_prompt: 'You are a business-minded analyst. Generate 3-5 startup ideas focused on market viability, monetization models, and customer acquisition strategies. Output actual business concepts with revenue models.',
             role: 'worker'
           },
           {
             name: 'UX Designer',
-            system_prompt: 'You are a UX/UI expert. Focus on user experience, interface design, and making solutions intuitive and delightful.',
+            system_prompt: 'You are a UX/UI expert. Generate 3-5 startup ideas focused on exceptional user experience and intuitive interfaces. Output actual product concepts with UX descriptions and user flows.',
             role: 'specialist'
           }
         ],
@@ -186,22 +186,22 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
         agents: [
           {
             name: 'Tech Router',
-            system_prompt: 'You are a technical routing agent. Analyze the task and identify which specialist(s) would be most helpful. Consider: backend engineers, frontend developers, DevOps engineers, database experts, etc.',
+            system_prompt: 'You are a technical routing agent. Analyze the task and identify which specialist(s) would be most helpful. Output your analysis and routing decision clearly, identifying specific areas that need attention and which specialists should handle them.',
             role: 'manager'
           },
           {
             name: 'Backend Specialist',
-            system_prompt: 'You are a backend optimization expert. Focus on database query optimization, caching strategies, API performance, and backend architecture.',
+            system_prompt: 'You are a backend optimization expert. When given a task, provide specific, actionable recommendations: database query optimizations (with examples), caching strategies, API performance improvements, etc. Output concrete technical solutions.',
             role: 'specialist'
           },
           {
             name: 'Frontend Specialist',
-            system_prompt: 'You are a frontend expert. Focus on UI/UX improvements, React/Vue optimization, bundle size reduction, and client-side performance.',
+            system_prompt: 'You are a frontend expert. When given a task, provide specific, actionable recommendations: UI/UX improvements, React/Vue optimizations, bundle size reduction techniques, etc. Output concrete implementation suggestions.',
             role: 'specialist'
           },
           {
             name: 'DevOps Specialist',
-            system_prompt: 'You are a DevOps engineer. Focus on CI/CD pipelines, containerization, automated deployment, monitoring, and infrastructure as code.',
+            system_prompt: 'You are a DevOps engineer. When given a task, provide specific, actionable recommendations: CI/CD pipeline setups, container configurations, automated deployment scripts, monitoring solutions, etc. Output concrete infrastructure solutions.',
             role: 'specialist'
           }
         ],
