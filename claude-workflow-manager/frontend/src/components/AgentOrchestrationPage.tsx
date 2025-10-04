@@ -43,6 +43,7 @@ import {
   HourglassEmpty as HourglassEmptyIcon,
   RadioButtonUnchecked as RadioButtonUncheckedIcon,
   TrendingFlat as TrendingFlatIcon,
+  Stop as StopIcon,
 } from '@mui/icons-material';
 import { orchestrationApi, StreamEvent } from '../services/api';
 
@@ -105,25 +106,25 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
 
     case 'debate':
       return {
-        task: 'Should artificial intelligence development be more heavily regulated?',
+        task: 'Which is better for productivity: working from home or working in an office?',
         agents: [
           {
-            name: 'Advocate',
-            system_prompt: 'You support AI regulation. Argue for stronger oversight, safety measures, and ethical frameworks. Present actual arguments with evidence and real-world examples. Output substantive debate points, not meta-discussion about the debate.',
+            name: 'Remote Advocate',
+            system_prompt: 'You advocate for remote work. Make ONE concise argument per response (maximum 5 sentences, ideally 3-4). Focus on flexibility, work-life balance, reduced commute time, cost savings, and productivity gains. Be specific and persuasive but brief. Output only your argument, no meta-discussion.',
             role: 'worker'
           },
           {
-            name: 'Skeptic',
-            system_prompt: 'You oppose heavy AI regulation. Argue for innovation freedom, market-driven solutions, and minimal government intervention. Present actual arguments with evidence and real-world examples. Output substantive debate points, not meta-discussion about the debate.',
+            name: 'Office Advocate',
+            system_prompt: 'You advocate for office work. Make ONE concise argument per response (maximum 5 sentences, ideally 3-4). Focus on collaboration, spontaneous creativity, clearer boundaries, team building, and structured environment. Be specific and persuasive but brief. Output only your argument, no meta-discussion.',
             role: 'worker'
           },
           {
             name: 'Moderator',
-            system_prompt: 'You are a neutral moderator. Summarize key points from both sides and identify areas of agreement or strong disagreement. Output actual analysis of the arguments presented, synthesizing the debate constructively.',
+            system_prompt: 'You are a neutral moderator. Provide a brief summary (maximum 5 sentences, ideally 3-4). Identify one key point from each side and note any common ground. Be concise and balanced. Output only your analysis, no meta-discussion.',
             role: 'moderator'
           }
         ],
-        rounds: 4
+        rounds: 3
       };
 
     case 'hierarchical':
@@ -232,6 +233,7 @@ const AgentOrchestrationPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>([]);
   const [enableStreaming, setEnableStreaming] = useState(true);  // Enable streaming by default
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   // Real-time stopwatch effect: Update elapsed time for executing agents
   React.useEffect(() => {
@@ -435,11 +437,32 @@ const AgentOrchestrationPage: React.FC = () => {
     }
   };
 
+  const cancelExecution = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+      setExecuting(false);
+      setError('Execution cancelled by user');
+      
+      // Mark all executing agents as idle
+      setAgentStatuses(prev => 
+        prev.map(as => ({
+          ...as,
+          status: as.status === 'executing' ? 'idle' : as.status
+        }))
+      );
+    }
+  };
+
   const executeOrchestration = async () => {
     setExecuting(true);
     setError(null);
     setResult(null);
     initializeAgentStatuses();
+
+    // Create abort controller for this execution
+    const controller = new AbortController();
+    setAbortController(controller);
 
     // Don't simulate if streaming is enabled
     if (!enableStreaming) {
@@ -470,7 +493,7 @@ const AgentOrchestrationPage: React.FC = () => {
                 // Make sure agent is in executing state
                 updateAgentStatus(event.agent, 'executing');
               }
-            });
+            }, controller.signal);
           } else {
             response = await orchestrationApi.executeSequential({
               task,
@@ -497,7 +520,8 @@ const AgentOrchestrationPage: React.FC = () => {
                 } else if (event.type === 'chunk') {
                   appendStreamingOutput(event.agent!, event.data || '');
                 }
-              }
+              },
+              controller.signal
             );
           } else {
             response = await orchestrationApi.executeDebate({
@@ -589,13 +613,19 @@ const AgentOrchestrationPage: React.FC = () => {
         }
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Execution failed');
-      // Mark all as error
-      agentStatuses.forEach(status => {
-        updateAgentStatus(status.name, 'error');
-      });
+      // Don't show error if it was an intentional cancellation
+      if (err.name === 'AbortError') {
+        console.log('Execution cancelled by user');
+      } else {
+        setError(err.response?.data?.detail || err.message || 'Execution failed');
+        // Mark all as error
+        agentStatuses.forEach(status => {
+          updateAgentStatus(status.name, 'error');
+        });
+      }
     } finally {
       setExecuting(false);
+      setAbortController(null);
     }
   };
 
@@ -737,20 +767,29 @@ const AgentOrchestrationPage: React.FC = () => {
                     transform: agentStatus.status === 'executing' ? 'scale(1.02)' : 'scale(1)',
                   }}
                 >
-                  <CardContent sx={{ display: 'flex', alignItems: 'center' }}>
-                    {getStatusIcon(agentStatus.status)}
-                    <Typography variant="subtitle1" sx={{ ml: 2, fontWeight: 'bold', flex: 1 }}>
-                      {agentStatus.name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
-                      {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
-                        <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
-                      )}
-                      {agentStatus.status === 'completed' && agentStatus.duration_ms && (
-                        <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
-                      )}
-                    </Typography>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: enableStreaming && agentStatus.streamingOutput ? 1 : 0 }}>
+                      {getStatusIcon(agentStatus.status)}
+                      <Typography variant="subtitle1" sx={{ ml: 2, fontWeight: 'bold', flex: 1 }}>
+                        {agentStatus.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1)}
+                        {agentStatus.status === 'executing' && agentStatus.elapsedMs !== undefined && (
+                          <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
+                        )}
+                        {agentStatus.status === 'completed' && agentStatus.duration_ms && (
+                          <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
+                        )}
+                      </Typography>
+                    </Box>
+                    {enableStreaming && agentStatus.streamingOutput && (
+                      <Box sx={{ mt: 1, p: 1, bgcolor: 'background.paper', borderRadius: 1, maxHeight: 200, overflow: 'auto' }}>
+                        <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                          {agentStatus.streamingOutput}
+                        </Typography>
+                      </Box>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -1175,7 +1214,7 @@ const AgentOrchestrationPage: React.FC = () => {
             </Button>
 
             {/* Execute Button */}
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
               <Button
                 variant="contained"
                 size="large"
@@ -1186,6 +1225,18 @@ const AgentOrchestrationPage: React.FC = () => {
               >
                 {executing ? 'Executing...' : 'Execute Orchestration'}
               </Button>
+              {executing && (
+                <Button
+                  variant="outlined"
+                  size="large"
+                  color="error"
+                  startIcon={<StopIcon />}
+                  onClick={cancelExecution}
+                  sx={{ px: 4, py: 1.5 }}
+                >
+                  Stop
+                </Button>
+              )}
             </Box>
           </Paper>
         </Grid>

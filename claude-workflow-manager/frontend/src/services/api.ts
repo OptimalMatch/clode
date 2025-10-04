@@ -500,7 +500,8 @@ export const orchestrationApi = {
 
   executeDebateStream: async (
     request: DebateRequest,
-    onEvent: (event: StreamEvent) => void
+    onEvent: (event: StreamEvent) => void,
+    signal?: AbortSignal
   ): Promise<OrchestrationResult> => {
     return new Promise(async (resolve, reject) => {
       try {
@@ -510,6 +511,7 @@ export const orchestrationApi = {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(request),
+          signal,
         });
 
         if (!response.ok) {
@@ -581,11 +583,11 @@ export const orchestrationApi = {
   // Streaming version for sequential
   executeSequentialStream: (
     request: SequentialPipelineRequest, 
-    onEvent: (event: StreamEvent) => void
+    onEvent: (event: StreamEvent) => void,
+    signal?: AbortSignal
   ): Promise<OrchestrationResult> => {
     return new Promise((resolve, reject) => {
       const token = localStorage.getItem('access_token');
-      const controller = new AbortController();
       
       fetch(`${API_URL}/api/orchestration/sequential/stream`, {
         method: 'POST',
@@ -594,7 +596,7 @@ export const orchestrationApi = {
           'Authorization': token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify(request),
-        signal: controller.signal,
+        signal,
       })
         .then(async (response) => {
           if (!response.ok) {
