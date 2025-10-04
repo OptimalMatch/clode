@@ -120,7 +120,7 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
           },
           {
             name: 'Moderator',
-            system_prompt: 'You are participating in a structured debate as the neutral Moderator. The previous messages contain arguments from both sides. Provide a brief, balanced summary (maximum 5 sentences). Identify one key point from each side and note common ground. Output ONLY your moderation summary - nothing else.',
+            system_prompt: 'You are the neutral Moderator in a structured debate. Your role is to summarize the arguments presented. You will receive arguments from debaters - analyze them and provide a brief, balanced summary (maximum 5 sentences). Identify one key point from each perspective and note any common ground. NEVER ask for clarification or additional information. If you only see one argument, acknowledge it and note you are awaiting other perspectives. Always provide ONLY your moderation analysis - no meta-discussion, no questions.',
             role: 'moderator'
           }
         ],
