@@ -66,7 +66,7 @@ interface OrchestrationResult {
   created_at: string;
 }
 
-type AgentExecutionStatus = 'idle' | 'waiting' | 'executing' | 'completed' | 'error' | 'delegating' | 'delegation_complete' | 'synthesizing' | 'aggregating';
+type AgentExecutionStatus = 'idle' | 'waiting' | 'executing' | 'completed' | 'error' | 'delegating' | 'delegation_complete' | 'synthesizing' | 'aggregating' | 'routing' | 'routing_complete';
 
 interface AgentStatus {
   name: string;
@@ -185,26 +185,21 @@ const getSampleDataForPattern = (pattern: OrchestrationPattern): { task: string;
 
     case 'routing':
       return {
-        task: 'I need help optimizing my Python web application. It\'s slow on database queries, the UI feels clunky, and deployment is manual.',
+        task: 'My website loads slowly. What should I check first?',
         agents: [
           {
-            name: 'Tech Router',
-            system_prompt: 'You are a technical routing agent. Analyze the task and identify which specialist(s) would be most helpful. Output your analysis and routing decision clearly, identifying specific areas that need attention and which specialists should handle them.',
+            name: 'Support Router',
+            system_prompt: 'You are a support routing agent. Analyze the user\'s issue and decide which specialist should help. Output: (1) Issue category, (2) Which specialist to route to, (3) Brief reason. Be concise (max 3 sentences).',
             role: 'manager'
           },
           {
-            name: 'Backend Specialist',
-            system_prompt: 'You are a backend optimization expert. When given a task, provide specific, actionable recommendations: database query optimizations (with examples), caching strategies, API performance improvements, etc. Output concrete technical solutions.',
+            name: 'Performance Expert',
+            system_prompt: 'You are a web performance specialist. Provide 3-5 quick actionable checks for the issue. Be concise and specific. Output only the checklist, no lengthy explanations.',
             role: 'specialist'
           },
           {
-            name: 'Frontend Specialist',
-            system_prompt: 'You are a frontend expert. When given a task, provide specific, actionable recommendations: UI/UX improvements, React/Vue optimizations, bundle size reduction techniques, etc. Output concrete implementation suggestions.',
-            role: 'specialist'
-          },
-          {
-            name: 'DevOps Specialist',
-            system_prompt: 'You are a DevOps engineer. When given a task, provide specific, actionable recommendations: CI/CD pipeline setups, container configurations, automated deployment scripts, monitoring solutions, etc. Output concrete infrastructure solutions.',
+            name: 'Code Expert',
+            system_prompt: 'You are a code quality specialist. Provide 3-5 quick code-related checks for the issue. Be concise and specific. Output only the checklist, no lengthy explanations.',
             role: 'specialist'
           }
         ],
@@ -240,7 +235,7 @@ const AgentOrchestrationPage: React.FC = () => {
     const interval = setInterval(() => {
       setAgentStatuses(prev => 
         prev.map(as => {
-          if ((as.status === 'executing' || as.status === 'delegating' || as.status === 'synthesizing' || as.status === 'aggregating') && as.startTime) {
+          if ((as.status === 'executing' || as.status === 'delegating' || as.status === 'synthesizing' || as.status === 'aggregating' || as.status === 'routing') && as.startTime) {
             const elapsedMs = Date.now() - as.startTime;
             return { ...as, elapsedMs };
           }
@@ -388,14 +383,14 @@ const AgentOrchestrationPage: React.FC = () => {
     setAgentStatuses(prev => 
       prev.map(as => {
         if (as.name === agentName) {
-          // When agent starts any active phase (executing, delegating, synthesizing, aggregating), record start time
-          const startTime = (status === 'executing' || status === 'delegating' || status === 'synthesizing' || status === 'aggregating') 
+          // When agent starts any active phase (executing, delegating, synthesizing, aggregating, routing), record start time
+          const startTime = (status === 'executing' || status === 'delegating' || status === 'synthesizing' || status === 'aggregating' || status === 'routing') 
             ? Date.now() 
             : as.startTime;
           // Clear elapsed time when starting or reset when completed
-          const elapsedMs = (status === 'executing' || status === 'delegating' || status === 'synthesizing' || status === 'aggregating') 
+          const elapsedMs = (status === 'executing' || status === 'delegating' || status === 'synthesizing' || status === 'aggregating' || status === 'routing') 
             ? 0 
-            : (status === 'completed' ? duration_ms : as.elapsedMs);
+            : (status === 'completed' || status === 'routing_complete' ? duration_ms : as.elapsedMs);
           
           return { ...as, status, output, duration_ms, startTime, elapsedMs };
         }
@@ -618,12 +613,38 @@ const AgentOrchestrationPage: React.FC = () => {
           if (agents.length < 2) {
             throw new Error('Routing pattern requires at least 2 agents (1 router + 1 specialist)');
           }
-          response = await orchestrationApi.executeRouting({
-            task,
-            router: agents[0],
-            specialists: agents.slice(1),
-            specialist_names: agents.slice(1).map(a => a.name)
-          });
+          if (enableStreaming) {
+            initializeAgentStatuses();
+            response = await orchestrationApi.executeRoutingStream(
+              {
+                task,
+                router: agents[0],
+                specialists: agents.slice(1),
+                specialist_names: agents.slice(1).map(a => a.name)
+              },
+              (event) => {
+                if (event.type === 'status') {
+                  if (event.data === 'routing' || event.data === 'executing') {
+                    updateAgentStatus(event.agent!, event.data as AgentExecutionStatus);
+                  } else if ((event.data === 'completed' || event.data === 'routing_complete') && event.duration_ms) {
+                    updateAgentStatus(event.agent!, event.data as AgentExecutionStatus, undefined, event.duration_ms);
+                  } else {
+                    updateAgentStatus(event.agent!, event.data as AgentExecutionStatus);
+                  }
+                } else if (event.type === 'chunk') {
+                  appendStreamingOutput(event.agent!, event.data || '');
+                }
+              },
+              controller.signal
+            );
+          } else {
+            response = await orchestrationApi.executeRouting({
+              task,
+              router: agents[0],
+              specialists: agents.slice(1),
+              specialist_names: agents.slice(1).map(a => a.name)
+            });
+          }
           break;
 
         default:
@@ -750,10 +771,10 @@ const AgentOrchestrationPage: React.FC = () => {
                       </Box>
                       <Typography variant="caption" color="text.secondary">
                         {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1).replace(/_/g, ' ')}
-                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing' || agentStatus.status === 'aggregating') && agentStatus.elapsedMs !== undefined && (
+                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing' || agentStatus.status === 'aggregating' || agentStatus.status === 'routing') && agentStatus.elapsedMs !== undefined && (
                           <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
-                        {agentStatus.status === 'completed' && agentStatus.duration_ms && (
+                        {(agentStatus.status === 'completed' || agentStatus.status === 'routing_complete') && agentStatus.duration_ms && (
                           <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
                         )}
                       </Typography>
@@ -798,10 +819,10 @@ const AgentOrchestrationPage: React.FC = () => {
                       </Box>
                       <Typography variant="caption" color="text.secondary">
                         {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1).replace(/_/g, ' ')}
-                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing' || agentStatus.status === 'aggregating') && agentStatus.elapsedMs !== undefined && (
+                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing' || agentStatus.status === 'aggregating' || agentStatus.status === 'routing') && agentStatus.elapsedMs !== undefined && (
                           <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
-                        {agentStatus.status === 'completed' && agentStatus.duration_ms && (
+                        {(agentStatus.status === 'completed' || agentStatus.status === 'routing_complete') && agentStatus.duration_ms && (
                           <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
                         )}
                       </Typography>
@@ -834,10 +855,10 @@ const AgentOrchestrationPage: React.FC = () => {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {agentStatus.status.charAt(0).toUpperCase() + agentStatus.status.slice(1).replace(/_/g, ' ')}
-                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing' || agentStatus.status === 'aggregating') && agentStatus.elapsedMs !== undefined && (
+                        {(agentStatus.status === 'executing' || agentStatus.status === 'delegating' || agentStatus.status === 'synthesizing' || agentStatus.status === 'aggregating' || agentStatus.status === 'routing') && agentStatus.elapsedMs !== undefined && (
                           <span style={{ fontWeight: 'bold', color: '#000000' }}> ⏱️ {agentStatus.elapsedMs}ms</span>
                         )}
-                        {agentStatus.status === 'completed' && agentStatus.duration_ms && (
+                        {(agentStatus.status === 'completed' || agentStatus.status === 'routing_complete') && agentStatus.duration_ms && (
                           <span style={{ fontWeight: 'bold', color: '#4caf50' }}> ✓ {agentStatus.duration_ms}ms</span>
                         )}
                       </Typography>
@@ -1135,7 +1156,7 @@ const AgentOrchestrationPage: React.FC = () => {
                 <Typography variant="h6">
                   Configuration
                 </Typography>
-                {(selectedPattern === 'sequential' || selectedPattern === 'debate' || selectedPattern === 'hierarchical') && (
+                {(selectedPattern === 'sequential' || selectedPattern === 'debate' || selectedPattern === 'hierarchical' || selectedPattern === 'parallel' || selectedPattern === 'routing') && (
                   <FormControlLabel
                     control={
                       <Switch 

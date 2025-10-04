@@ -726,6 +726,76 @@ export const orchestrationApi = {
     return response.data;
   },
 
+  executeRoutingStream: async (
+    request: DynamicRoutingRequest,
+    onEvent: (event: StreamEvent) => void,
+    signal?: AbortSignal
+  ): Promise<OrchestrationResult> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const response = await fetch(`${API_URL}/api/orchestration/routing/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(request),
+          signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+
+        if (!reader) {
+          throw new Error('Response body is null');
+        }
+
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const jsonStr = line.substring(6);
+                const event: StreamEvent = JSON.parse(jsonStr);
+                onEvent(event);
+
+                if (event.type === 'complete' && event.result) {
+                  resolve({
+                    pattern: 'routing',
+                    execution_id: 'stream-exec',
+                    status: 'completed',
+                    result: event.result,
+                    duration_ms: event.duration_ms || 0,
+                    created_at: new Date().toISOString()
+                  });
+                  return;
+                } else if (event.type === 'error') {
+                  reject(new Error(event.error || 'Unknown error'));
+                  return;
+                }
+              } catch (e) {
+                console.warn('Failed to parse SSE event:', line.substring(0, 100) + '...', e);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        reject(error);
+      }
+    });
+  },
+
   // Streaming version for sequential
   executeSequentialStream: (
     request: SequentialPipelineRequest, 
