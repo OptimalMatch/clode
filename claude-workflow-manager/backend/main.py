@@ -3394,16 +3394,37 @@ async def seed_orchestration_designs(force: bool = False):
         all_designs = await db.get_orchestration_designs()
         existing_sample_names = [d.get('name') for d in all_designs if d.get('name') in SAMPLE_DESIGN_NAMES]
         
-        if existing_sample_names and not force:
-            return {
-                "success": False,
-                "message": f"Sample designs already exist ({len(existing_sample_names)} found: {', '.join(existing_sample_names[:3])}{'...' if len(existing_sample_names) > 3 else ''}). Use force=true to add anyway.",
-                "existing_count": len(all_designs),
-                "existing_sample_count": len(existing_sample_names),
-                "seeded_count": 0
-            }
+        # Check if all sample designs are present
+        total_sample_designs = len(SAMPLE_DESIGN_NAMES)
+        missing_count = total_sample_designs - len(existing_sample_names)
         
-        # Run the seed function (pass the existing db instance, silent mode to avoid console spam)
+        if existing_sample_names and not force:
+            if missing_count > 0:
+                # Some samples exist but not all - seed only the missing ones
+                missing_names = [name for name in SAMPLE_DESIGN_NAMES if name not in existing_sample_names]
+                await seed_sample_designs(only_missing=True, silent=True, db=db)
+                
+                updated_designs = await db.get_orchestration_designs()
+                return {
+                    "success": True,
+                    "message": f"Added {missing_count} missing sample design(s): {', '.join(missing_names)}",
+                    "existing_count": len(all_designs),
+                    "existing_sample_count": len(existing_sample_names),
+                    "missing_sample_count": missing_count,
+                    "seeded_count": missing_count,
+                    "total_count": len(updated_designs)
+                }
+            else:
+                # All samples already exist
+                return {
+                    "success": False,
+                    "message": f"All {total_sample_designs} sample designs already exist. Use force=true to re-seed (will create duplicates).",
+                    "existing_count": len(all_designs),
+                    "existing_sample_count": len(existing_sample_names),
+                    "seeded_count": 0
+                }
+        
+        # Run the seed function with force=True (pass the existing db instance, silent mode to avoid console spam)
         await seed_sample_designs(force=True, silent=True, db=db)  # Pass the connected db instance
         
         # Get the new count

@@ -17,13 +17,14 @@ SAMPLE_DESIGN_NAMES = [
     "Self-Improving Prompt Optimization"
 ]
 
-async def seed_sample_designs(force=False, silent=False, db=None):
+async def seed_sample_designs(force=False, silent=False, db=None, only_missing=False):
     """Create sample orchestration designs demonstrating various patterns
     
     Args:
         force (bool): If True, will seed even if designs already exist
         silent (bool): If True, suppress console output (useful when called via API)
         db (Database): Optional database instance to use. If None, creates a new one.
+        only_missing (bool): If True, only seed designs that don't already exist (no duplicates)
     """
     if db is None:
         db = Database()
@@ -32,7 +33,7 @@ async def seed_sample_designs(force=False, silent=False, db=None):
     all_designs = await db.get_orchestration_designs()
     existing_sample_names = [d.get('name') for d in all_designs if d.get('name') in SAMPLE_DESIGN_NAMES]
     
-    if existing_sample_names and not force:
+    if existing_sample_names and not force and not only_missing:
         if not silent:
             print("⚠️  Sample orchestration designs already exist in the database!")
             print(f"   Found {len(existing_sample_names)} existing sample design(s):")
@@ -726,23 +727,35 @@ async def seed_sample_designs(force=False, silent=False, db=None):
     )
     
     # Insert all designs
-    designs = [design1, design2, design3, design4, design5, design6, design7, design8]
+    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8]
     
-    if not silent:
-        print("🌱 Seeding orchestration designs...")
+    # Filter to only missing designs if requested
+    if only_missing:
+        designs = [d for d in all_sample_designs if d.name not in existing_sample_names]
+        if not silent and len(designs) > 0:
+            print(f"🌱 Seeding {len(designs)} missing orchestration design(s)...")
+        elif not silent:
+            print("✅ All sample designs already exist!")
+            return
+    else:
+        designs = all_sample_designs
+        if not silent:
+            print("🌱 Seeding orchestration designs...")
     
     for i, design in enumerate(designs, 1):
         try:
             design_id = await db.create_orchestration_design(design)
             if not silent:
-                print(f"✅ Created design {i}/8: {design.name} (ID: {design_id})")
+                print(f"✅ Created design {i}/{len(designs)}: {design.name} (ID: {design_id})")
         except Exception as e:
             if not silent:
-                print(f"❌ Failed to create design {i}/8: {design.name} - {str(e)}")
+                print(f"❌ Failed to create design {i}/{len(designs)}: {design.name} - {str(e)}")
     
     if not silent:
         if force:
             print("\n🎉 Seeding complete (forced)!")
+        elif only_missing:
+            print("\n🎉 Missing designs added!")
         else:
             print("\n🎉 Seeding complete!")
         
