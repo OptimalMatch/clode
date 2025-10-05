@@ -18,6 +18,7 @@ import ClaudeAuthPage from './components/ClaudeAuthPage';
 import MultiAgentView from './components/MultiAgentView';
 import SettingsPage from './components/SettingsPage';
 import AgentOrchestrationPage from './components/AgentOrchestrationPage';
+import OrchestrationDesignerPage from './components/OrchestrationDesignerPage';
 
 const queryClient = new QueryClient();
 
@@ -60,6 +61,7 @@ function App() {
               <Route path="/ssh-keys" element={<Layout><SSHKeysPage /></Layout>} />
               <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
               <Route path="/orchestration" element={<Layout><AgentOrchestrationPage /></Layout>} />
+              <Route path="/orchestration-designer" element={<Layout><OrchestrationDesignerPage /></Layout>} />
               <Route path="/agents/:workflowId" element={<Layout><AgentsPage /></Layout>} />
               <Route path="/multi-agent" element={<Layout><MultiAgentView /></Layout>} />
             </Routes>

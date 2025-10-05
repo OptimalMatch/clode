@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
 from bson import ObjectId
-from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics
+from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics, OrchestrationDesign
 
 class Database:
     def __init__(self):
@@ -1057,3 +1057,77 @@ class Database:
             {"$set": {"model": model}}
         )
         return result.modified_count > 0
+    
+    # Orchestration Design Methods
+    async def create_orchestration_design(self, design: OrchestrationDesign) -> str:
+        """Create a new orchestration design"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        design_dict = design.dict()
+        design_dict["created_at"] = datetime.utcnow()
+        design_dict["updated_at"] = datetime.utcnow()
+        
+        result = await self.db.orchestration_designs.insert_one(design_dict)
+        return str(result.inserted_id)
+    
+    async def get_orchestration_designs(self) -> List[Dict]:
+        """Get all orchestration designs"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        cursor = self.db.orchestration_designs.find().sort("updated_at", -1)
+        designs = []
+        async for design in cursor:
+            design["id"] = str(design["_id"])
+            del design["_id"]
+            designs.append(design)
+        return designs
+    
+    async def get_orchestration_design(self, design_id: str) -> Optional[Dict]:
+        """Get a specific orchestration design"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(design_id) if ObjectId.is_valid(design_id) else design_id
+            design = await self.db.orchestration_designs.find_one({"_id": object_id})
+            if design:
+                design["id"] = str(design["_id"])
+                del design["_id"]
+            return design
+        except Exception as e:
+            print(f"Error retrieving orchestration design {design_id}: {e}")
+            return None
+    
+    async def update_orchestration_design(self, design_id: str, design: OrchestrationDesign) -> bool:
+        """Update an orchestration design"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            design_dict = design.dict()
+            design_dict["updated_at"] = datetime.utcnow()
+            
+            object_id = ObjectId(design_id) if ObjectId.is_valid(design_id) else design_id
+            result = await self.db.orchestration_designs.update_one(
+                {"_id": object_id},
+                {"$set": design_dict}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error updating orchestration design {design_id}: {e}")
+            return False
+    
+    async def delete_orchestration_design(self, design_id: str) -> bool:
+        """Delete an orchestration design"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(design_id) if ObjectId.is_valid(design_id) else design_id
+            result = await self.db.orchestration_designs.delete_one({"_id": object_id})
+            return result.deleted_count > 0
+        except Exception as e:
+            print(f"Error deleting orchestration design {design_id}: {e}")
+            return False

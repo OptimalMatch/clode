@@ -35,7 +35,7 @@ from models import (
     ModelSettingsRequest, ModelSettingsResponse, OrchestrationPattern,
     AgentRole, OrchestrationAgent, SequentialPipelineRequest,
     DebateRequest, HierarchicalRequest, ParallelAggregateRequest,
-    DynamicRoutingRequest, OrchestrationResult
+    DynamicRoutingRequest, OrchestrationResult, OrchestrationDesign
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -3293,6 +3293,91 @@ async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest)
         }
     )
 
+# Orchestration Design Endpoints
+@app.post(
+    "/api/orchestration-designs",
+    response_model=IdResponse,
+    summary="Create Orchestration Design",
+    description="Create a new orchestration design",
+    tags=["Orchestration Designer"]
+)
+async def create_orchestration_design(design: OrchestrationDesign):
+    """Create a new orchestration design"""
+    try:
+        design_id = await db.create_orchestration_design(design)
+        return IdResponse(id=design_id, message="Orchestration design created successfully")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create design: {str(e)}")
+
+@app.get(
+    "/api/orchestration-designs",
+    summary="Get All Orchestration Designs",
+    description="Retrieve all orchestration designs",
+    tags=["Orchestration Designer"]
+)
+async def get_orchestration_designs():
+    """Get all orchestration designs"""
+    try:
+        designs = await db.get_orchestration_designs()
+        return designs
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get designs: {str(e)}")
+
+@app.get(
+    "/api/orchestration-designs/{design_id}",
+    summary="Get Orchestration Design",
+    description="Retrieve a specific orchestration design by ID",
+    tags=["Orchestration Designer"]
+)
+async def get_orchestration_design(design_id: str):
+    """Get a specific orchestration design"""
+    try:
+        design = await db.get_orchestration_design(design_id)
+        if not design:
+            raise HTTPException(status_code=404, detail="Design not found")
+        return design
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get design: {str(e)}")
+
+@app.put(
+    "/api/orchestration-designs/{design_id}",
+    response_model=ApiResponse,
+    summary="Update Orchestration Design",
+    description="Update an existing orchestration design",
+    tags=["Orchestration Designer"]
+)
+async def update_orchestration_design(design_id: str, design: OrchestrationDesign):
+    """Update an orchestration design"""
+    try:
+        success = await db.update_orchestration_design(design_id, design)
+        if not success:
+            raise HTTPException(status_code=404, detail="Design not found")
+        return ApiResponse(success=True, message="Design updated successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update design: {str(e)}")
+
+@app.delete(
+    "/api/orchestration-designs/{design_id}",
+    response_model=ApiResponse,
+    summary="Delete Orchestration Design",
+    description="Delete an orchestration design",
+    tags=["Orchestration Designer"]
+)
+async def delete_orchestration_design(design_id: str):
+    """Delete an orchestration design"""
+    try:
+        success = await db.delete_orchestration_design(design_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Design not found")
+        return ApiResponse(success=True, message="Design deleted successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete design: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

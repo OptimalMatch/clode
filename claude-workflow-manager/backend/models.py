@@ -135,6 +135,17 @@ class InstanceLog(BaseModel):
     step_id: Optional[str] = None
     claude_mode: Optional[str] = None  # "max-plan" or "api-key"
 
+class OrchestrationDesign(BaseModel):
+    """Model for complex orchestration workflow designs"""
+    id: Optional[str] = None
+    name: str
+    description: str = ""
+    blocks: List[Dict[str, Any]] = []  # Orchestration blocks with agents and config
+    connections: List[Dict[str, Any]] = []  # Connections between blocks
+    git_repos: List[str] = []  # Git repositories assigned to agents
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
 class ClaudeAuthProfile(BaseModel):
     id: Optional[str] = None
     profile_name: str  # User-friendly name like "John's Account", "Team Account"
