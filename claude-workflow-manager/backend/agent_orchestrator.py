@@ -69,6 +69,7 @@ class AgentRole(str, Enum):
     WORKER = "worker"
     SPECIALIST = "specialist"
     MODERATOR = "moderator"
+    REFLECTOR = "reflector"
 
 
 class MessageType(str, Enum):
