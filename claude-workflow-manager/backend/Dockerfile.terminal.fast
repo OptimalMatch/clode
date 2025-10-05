@@ -8,6 +8,7 @@ USER root
 # Copy terminal server code (NEVER cached - always fresh)
 COPY terminal_server.py .
 COPY claude_profile_manager.py .
+COPY claude_mcp_config.json .
 COPY terminal_startup.sh /app/terminal_startup.sh
 RUN chmod +x /app/terminal_startup.sh
 

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "claude-workflow-manager": {
+      "command": "nc",
+      "args": ["claude-workflow-mcp", "8002"],
+      "description": "Claude Workflow Manager - Access workflows, orchestration patterns, and multi-agent tools"
+    }
+  }
+}
+
