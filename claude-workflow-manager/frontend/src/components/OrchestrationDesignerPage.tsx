@@ -59,7 +59,7 @@ import {
   DarkMode,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
-import { workflowApi, orchestrationDesignApi } from '../services/api';
+import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent } from '../services/api';
 import { Workflow } from '../types';
 
 // Orchestration pattern types
@@ -71,6 +71,8 @@ interface Agent {
   name: string;
   system_prompt: string;
   role: AgentRole;
+  streamingOutput?: string; // Real-time streaming output
+  status?: 'waiting' | 'executing' | 'completed' | 'delegating' | 'synthesizing' | 'aggregating' | 'routing';
 }
 
 interface OrchestrationBlock {
@@ -136,6 +138,8 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [executionResults, setExecutionResults] = useState<Map<string, any>>(new Map());
   const [currentlyExecutingBlock, setCurrentlyExecutingBlock] = useState<string | null>(null);
   const [resultsDialogOpen, setResultsDialogOpen] = useState(false);
+  const [enableStreaming, setEnableStreaming] = useState(true); // Enable streaming by default
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
   
   // UI state
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' }>({
@@ -528,6 +532,10 @@ const OrchestrationDesignerPage: React.FC = () => {
       return;
     }
 
+    // Create abort controller for this execution
+    const controller = new AbortController();
+    setAbortController(controller);
+
     setExecuting(true);
     const results = new Map<string, any>();
     
@@ -581,6 +589,7 @@ const OrchestrationDesignerPage: React.FC = () => {
       });
     } finally {
       setExecuting(false);
+      setAbortController(null);
     }
   };
 
@@ -659,6 +668,64 @@ const OrchestrationDesignerPage: React.FC = () => {
     return inputs.length > 0 ? inputs.join('\n\n---\n\n') : '';
   };
 
+  // Update agent status in a block
+  const updateAgentStatus = (blockId: string, agentName: string, status: Agent['status']) => {
+    setBlocks(prev => prev.map(block => {
+      if (block.id === blockId) {
+        return {
+          ...block,
+          data: {
+            ...block.data,
+            agents: block.data.agents.map(agent => 
+              agent.name === agentName ? { ...agent, status } : agent
+            )
+          }
+        };
+      }
+      return block;
+    }));
+  };
+
+  // Append streaming output to an agent
+  const appendStreamingOutput = (blockId: string, agentName: string, chunk: string) => {
+    setBlocks(prev => prev.map(block => {
+      if (block.id === blockId) {
+        return {
+          ...block,
+          data: {
+            ...block.data,
+            agents: block.data.agents.map(agent => 
+              agent.name === agentName 
+                ? { ...agent, streamingOutput: (agent.streamingOutput || '') + chunk }
+                : agent
+            )
+          }
+        };
+      }
+      return block;
+    }));
+  };
+
+  // Clear streaming outputs for a block
+  const clearBlockStreamingOutputs = (blockId: string) => {
+    setBlocks(prev => prev.map(block => {
+      if (block.id === blockId) {
+        return {
+          ...block,
+          data: {
+            ...block.data,
+            agents: block.data.agents.map(agent => ({
+              ...agent,
+              streamingOutput: '',
+              status: 'waiting' as Agent['status']
+            }))
+          }
+        };
+      }
+      return block;
+    }));
+  };
+
   // Execute a single orchestration block
   const executeBlock = async (block: OrchestrationBlock, inputs: any): Promise<any> => {
     const pattern = patterns.find(p => p.id === block.type);
@@ -693,41 +760,82 @@ const OrchestrationDesignerPage: React.FC = () => {
 
   // Execute sequential orchestration
   const executeSequential = async (block: OrchestrationBlock, task: string) => {
-    const response = await fetch('http://localhost:8000/api/orchestration/sequential', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        agents: block.data.agents.map(a => ({
-          name: a.name,
-          system_prompt: a.system_prompt,
-          role: a.role
-        })),
-        task
-      })
-    });
+    // Clear previous streaming outputs
+    clearBlockStreamingOutputs(block.id);
     
-    if (!response.ok) throw new Error(`Sequential execution failed: ${response.statusText}`);
-    return await response.json();
-  };
-
-  // Execute parallel orchestration
-  const executeParallel = async (block: OrchestrationBlock, task: string) => {
-    const response = await fetch('http://localhost:8000/api/orchestration/parallel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    if (enableStreaming) {
+      return await orchestrationApi.executeSequentialStream(
+        {
+          task,
+          agents: block.data.agents.map(a => ({
+            name: a.name,
+            system_prompt: a.system_prompt,
+            role: a.role
+          })),
+          agent_sequence: block.data.agents.map(a => a.name)
+        },
+        (event: StreamEvent) => {
+          if (event.type === 'status' && event.agent) {
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status']);
+          } else if (event.type === 'chunk' && event.agent && event.data) {
+            appendStreamingOutput(block.id, event.agent, event.data);
+          }
+        },
+        abortController?.signal
+      );
+    } else {
+      const response = await api.post('/api/orchestration/sequential', {
         agents: block.data.agents.map(a => ({
           name: a.name,
           system_prompt: a.system_prompt,
           role: a.role
         })),
         task,
-        aggregator_prompt: 'Synthesize all agent outputs into a cohesive summary.'
-      })
-    });
+        agent_sequence: block.data.agents.map(a => a.name)
+      });
+      return response.data;
+    }
+  };
+
+  // Execute parallel orchestration
+  const executeParallel = async (block: OrchestrationBlock, task: string) => {
+    // Clear previous streaming outputs
+    clearBlockStreamingOutputs(block.id);
     
-    if (!response.ok) throw new Error(`Parallel execution failed: ${response.statusText}`);
-    return await response.json();
+    if (enableStreaming) {
+      return await orchestrationApi.executeParallelStream(
+        {
+          task,
+          agents: block.data.agents.map(a => ({
+            name: a.name,
+            system_prompt: a.system_prompt,
+            role: a.role
+          })),
+          agent_names: block.data.agents.map(a => a.name),
+          aggregator: null
+        },
+        (event: StreamEvent) => {
+          if (event.type === 'status' && event.agent) {
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status']);
+          } else if (event.type === 'chunk' && event.agent && event.data) {
+            appendStreamingOutput(block.id, event.agent, event.data);
+          }
+        },
+        abortController?.signal
+      );
+    } else {
+      const response = await api.post('/api/orchestration/parallel', {
+        agents: block.data.agents.map(a => ({
+          name: a.name,
+          system_prompt: a.system_prompt,
+          role: a.role
+        })),
+        task,
+        agent_names: block.data.agents.map(a => a.name),
+        aggregator: null
+      });
+      return response.data;
+    }
   };
 
   // Execute hierarchical orchestration
@@ -737,10 +845,37 @@ const OrchestrationDesignerPage: React.FC = () => {
     
     if (!manager) throw new Error('Hierarchical orchestration requires a manager agent');
     
-    const response = await fetch('http://localhost:8000/api/orchestration/hierarchical', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    // Clear previous streaming outputs
+    clearBlockStreamingOutputs(block.id);
+    
+    if (enableStreaming) {
+      return await orchestrationApi.executeHierarchicalStream(
+        {
+          task,
+          manager: {
+            name: manager.name,
+            system_prompt: manager.system_prompt,
+            role: manager.role
+          },
+          workers: workers.map(w => ({
+            name: w.name,
+            system_prompt: w.system_prompt,
+            role: w.role
+          })),
+          worker_names: workers.map(w => w.name)
+        },
+        (event: StreamEvent) => {
+          if (event.type === 'status' && event.agent) {
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status']);
+          } else if (event.type === 'chunk' && event.agent && event.data) {
+            appendStreamingOutput(block.id, event.agent, event.data);
+          }
+        },
+        abortController?.signal
+      );
+    } else {
+      const response = await api.post('/api/orchestration/hierarchical', {
+        task,
         manager: {
           name: manager.name,
           system_prompt: manager.system_prompt,
@@ -751,13 +886,10 @@ const OrchestrationDesignerPage: React.FC = () => {
           system_prompt: w.system_prompt,
           role: w.role
         })),
-        task,
-        rounds: block.data.rounds || 2
-      })
-    });
-    
-    if (!response.ok) throw new Error(`Hierarchical execution failed: ${response.statusText}`);
-    return await response.json();
+        worker_names: workers.map(w => w.name)
+      });
+      return response.data;
+    }
   };
 
   // Execute debate orchestration
@@ -765,10 +897,28 @@ const OrchestrationDesignerPage: React.FC = () => {
     const debaters = block.data.agents.filter(a => a.role === 'specialist' || a.role === 'worker');
     const moderator = block.data.agents.find(a => a.role === 'moderator');
     
-    const response = await fetch('http://localhost:8000/api/orchestration/debate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    // Clear previous streaming outputs
+    clearBlockStreamingOutputs(block.id);
+    
+    if (enableStreaming) {
+      return await orchestrationApi.executeDebateStream(
+        {
+          topic: task,
+          agents: block.data.agents,
+          participant_names: debaters.map(d => d.name),
+          rounds: block.data.rounds || 3
+        },
+        (event: StreamEvent) => {
+          if (event.type === 'status' && event.agent) {
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status']);
+          } else if (event.type === 'chunk' && event.agent && event.data) {
+            appendStreamingOutput(block.id, event.agent, event.data);
+          }
+        },
+        abortController?.signal
+      );
+    } else {
+      const response = await api.post('/api/orchestration/debate', {
         debaters: debaters.map(d => ({
           name: d.name,
           system_prompt: d.system_prompt,
@@ -781,11 +931,9 @@ const OrchestrationDesignerPage: React.FC = () => {
         } : undefined,
         topic: task,
         rounds: block.data.rounds || 3
-      })
-    });
-    
-    if (!response.ok) throw new Error(`Debate execution failed: ${response.statusText}`);
-    return await response.json();
+      });
+      return response.data;
+    }
   };
 
   // Execute routing orchestration
@@ -795,10 +943,37 @@ const OrchestrationDesignerPage: React.FC = () => {
     
     if (!router) throw new Error('Routing orchestration requires a router agent');
     
-    const response = await fetch('http://localhost:8000/api/orchestration/routing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    // Clear previous streaming outputs
+    clearBlockStreamingOutputs(block.id);
+    
+    if (enableStreaming) {
+      return await orchestrationApi.executeRoutingStream(
+        {
+          task,
+          router: {
+            name: router.name,
+            system_prompt: router.system_prompt,
+            role: router.role
+          },
+          specialists: specialists.map(s => ({
+            name: s.name,
+            system_prompt: s.system_prompt,
+            role: s.role
+          })),
+          specialist_names: specialists.map(s => s.name)
+        },
+        (event: StreamEvent) => {
+          if (event.type === 'status' && event.agent) {
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status']);
+          } else if (event.type === 'chunk' && event.agent && event.data) {
+            appendStreamingOutput(block.id, event.agent, event.data);
+          }
+        },
+        abortController?.signal
+      );
+    } else {
+      const response = await api.post('/api/orchestration/routing', {
+        task,
         router: {
           name: router.name,
           system_prompt: router.system_prompt,
@@ -809,12 +984,10 @@ const OrchestrationDesignerPage: React.FC = () => {
           system_prompt: s.system_prompt,
           role: s.role
         })),
-        request: task
-      })
-    });
-    
-    if (!response.ok) throw new Error(`Routing execution failed: ${response.statusText}`);
-    return await response.json();
+        specialist_names: specialists.map(s => s.name)
+      });
+      return response.data;
+    }
   };
 
   // Render connections as SVG curved paths
@@ -1084,9 +1257,24 @@ const OrchestrationDesignerPage: React.FC = () => {
                   />
                 </Tooltip>
                 
-                <Typography variant="caption" sx={{ flex: 1, mx: 1, fontSize: '0.7rem' }}>
-                  {agent.name}
-                </Typography>
+                <Box sx={{ flex: 1, mx: 1 }}>
+                  <Typography variant="caption" sx={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    {agent.name}
+                    {agent.status === 'executing' && (
+                      <CircularProgress size={10} sx={{ ml: 0.5 }} />
+                    )}
+                    {agent.status === 'completed' && (
+                      <span style={{ color: '#4caf50', fontSize: '0.8rem' }}>✓</span>
+                    )}
+                  </Typography>
+                  {enableStreaming && agent.streamingOutput && (
+                    <Box sx={{ mt: 0.5, p: 0.5, bgcolor: darkMode ? '#0a0a0a' : '#fafafa', borderRadius: 0.5, maxHeight: 100, overflow: 'auto' }}>
+                      <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.65rem', color: darkMode ? '#aaa' : '#666' }}>
+                        {agent.streamingOutput}
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
                 
                 {/* Output handle (right) */}
                 <Tooltip title="Connect output from this agent">
@@ -1117,9 +1305,31 @@ const OrchestrationDesignerPage: React.FC = () => {
             ))}
             
             {connectionMode === 'simple' && (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                {block.data.agents.length} agent{block.data.agents.length !== 1 ? 's' : ''}
-              </Typography>
+              <>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  {block.data.agents.length} agent{block.data.agents.length !== 1 ? 's' : ''}
+                </Typography>
+                {enableStreaming && block.data.agents.some(a => a.streamingOutput) && (
+                  <Box sx={{ mb: 1 }}>
+                    {block.data.agents.filter(a => a.streamingOutput || a.status === 'executing').map((agent, idx) => (
+                      <Box key={idx} sx={{ mb: 0.5 }}>
+                        <Typography variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 'bold' }}>
+                          {agent.name}
+                          {agent.status === 'executing' && <CircularProgress size={8} sx={{ ml: 0.5 }} />}
+                          {agent.status === 'completed' && <span style={{ color: '#4caf50', fontSize: '0.7rem' }}>✓</span>}
+                        </Typography>
+                        {agent.streamingOutput && (
+                          <Box sx={{ mt: 0.3, p: 0.5, bgcolor: darkMode ? '#0a0a0a' : '#fafafa', borderRadius: 0.5, maxHeight: 80, overflow: 'auto' }}>
+                            <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.6rem', color: darkMode ? '#aaa' : '#666' }}>
+                              {agent.streamingOutput}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </>
             )}
             
             {block.data.git_repo && (
