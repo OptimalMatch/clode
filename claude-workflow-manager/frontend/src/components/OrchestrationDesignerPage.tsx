@@ -61,7 +61,7 @@ import {
   Restore,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent } from '../services/api';
+import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent, OrchestrationDesign } from '../services/api';
 import { Workflow } from '../types';
 
 // Orchestration pattern types
