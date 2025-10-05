@@ -44,6 +44,7 @@ import {
   Delete,
   PlayArrow,
   Save,
+  FolderOpen,
   ZoomIn,
   ZoomOut,
   CenterFocusStrong,
@@ -58,7 +59,7 @@ import {
   DarkMode,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
-import { workflowApi } from '../services/api';
+import { workflowApi, orchestrationDesignApi } from '../services/api';
 import { Workflow } from '../types';
 
 // Orchestration pattern types
@@ -141,6 +142,7 @@ const OrchestrationDesignerPage: React.FC = () => {
     severity: 'success'
   });
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [loadDialogOpen, setLoadDialogOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('orchestrationDesignerDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -157,6 +159,13 @@ const OrchestrationDesignerPage: React.FC = () => {
   const { data: workflows = [] } = useQuery({
     queryKey: ['workflows'],
     queryFn: workflowApi.getAll,
+  });
+
+  // Fetch saved orchestration designs
+  const { data: savedDesigns = [], refetch: refetchDesigns } = useQuery({
+    queryKey: ['orchestration-designs'],
+    queryFn: orchestrationDesignApi.getAll,
+    enabled: loadDialogOpen, // Only fetch when load dialog is open
   });
 
   // Available orchestration patterns
@@ -430,7 +439,7 @@ const OrchestrationDesignerPage: React.FC = () => {
   };
 
   // Save design
-  const saveDesign = () => {
+  const saveDesign = async () => {
     const design: OrchestrationDesign = {
       name: designName,
       description: designDescription,
@@ -439,16 +448,37 @@ const OrchestrationDesignerPage: React.FC = () => {
       git_repos: Array.from(new Set(blocks.map(b => b.data.git_repo).filter(Boolean))) as string[],
     };
 
-    // TODO: Save to backend
-    console.log('Saving design:', design);
-    localStorage.setItem(`orchestration-design-${Date.now()}`, JSON.stringify(design));
+    try {
+      await orchestrationDesignApi.create(design);
+      
+      setSnackbar({
+        open: true,
+        message: 'Design saved successfully',
+        severity: 'success'
+      });
+      setSaveDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving design:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to save design',
+        severity: 'error'
+      });
+    }
+  };
+
+  const loadDesign = (design: OrchestrationDesign) => {
+    setDesignName(design.name);
+    setDesignDescription(design.description);
+    setBlocks(design.blocks);
+    setConnections(design.connections);
     
     setSnackbar({
       open: true,
-      message: 'Design saved successfully',
+      message: `Loaded design: ${design.name}`,
       severity: 'success'
     });
-    setSaveDialogOpen(false);
+    setLoadDialogOpen(false);
   };
 
   // Execute orchestration workflow
@@ -886,6 +916,13 @@ const OrchestrationDesignerPage: React.FC = () => {
               </IconButton>
             </Tooltip>
             <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+            <Button
+              variant="outlined"
+              startIcon={<FolderOpen />}
+              onClick={() => setLoadDialogOpen(true)}
+            >
+              Load Design
+            </Button>
             <Button
               variant="outlined"
               startIcon={<Save />}
@@ -1376,6 +1413,112 @@ const OrchestrationDesignerPage: React.FC = () => {
             }}
           >
             Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Load Dialog */}
+      <Dialog 
+        open={loadDialogOpen} 
+        onClose={() => setLoadDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+          Load Orchestration Design
+        </DialogTitle>
+        <DialogContent>
+          {savedDesigns.length === 0 ? (
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <AccountTree sx={{ fontSize: 60, opacity: 0.3, mb: 2, color: darkMode ? '#666' : 'text.secondary' }} />
+              <Typography variant="body1" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
+                No saved designs found
+              </Typography>
+              <Typography variant="body2" sx={{ color: darkMode ? '#888' : 'text.secondary', mt: 1 }}>
+                Create and save a design to see it here
+              </Typography>
+            </Box>
+          ) : (
+            <List>
+              {savedDesigns.map((design: OrchestrationDesign) => (
+                <ListItem
+                  key={design.id}
+                  sx={{
+                    mb: 1,
+                    border: 1,
+                    borderColor: darkMode ? '#444' : 'divider',
+                    borderRadius: 1,
+                    cursor: 'pointer',
+                    backgroundColor: darkMode ? '#2d2d2d' : 'transparent',
+                    '&:hover': {
+                      backgroundColor: darkMode ? '#404040' : 'action.hover',
+                      borderColor: 'primary.main',
+                    }
+                  }}
+                  onClick={() => loadDesign(design)}
+                >
+                  <ListItemIcon>
+                    <AccountTree sx={{ color: darkMode ? '#bb86fc' : 'primary.main' }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                        {design.name}
+                      </Typography>
+                    }
+                    secondary={
+                      <Box>
+                        <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary', mb: 0.5 }}>
+                          {design.description || 'No description'}
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                          <Chip 
+                            size="small" 
+                            label={`${design.blocks.length} blocks`}
+                            sx={{ 
+                              backgroundColor: darkMode ? '#404040' : undefined,
+                              color: darkMode ? '#ffffff' : undefined 
+                            }}
+                          />
+                          <Chip 
+                            size="small" 
+                            label={`${design.connections.length} connections`}
+                            sx={{ 
+                              backgroundColor: darkMode ? '#404040' : undefined,
+                              color: darkMode ? '#ffffff' : undefined 
+                            }}
+                          />
+                          {design.git_repos && design.git_repos.length > 0 && (
+                            <Chip 
+                              size="small" 
+                              label={`${design.git_repos.length} repos`}
+                              sx={{ 
+                                backgroundColor: darkMode ? '#404040' : undefined,
+                                color: darkMode ? '#ffffff' : undefined 
+                              }}
+                            />
+                          )}
+                        </Box>
+                      </Box>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setLoadDialogOpen(false)}
+            sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+          >
+            Cancel
           </Button>
         </DialogActions>
       </Dialog>
