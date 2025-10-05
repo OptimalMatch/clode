@@ -5,10 +5,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (minimal - just curl for debugging)
 RUN apt-get update && apt-get install -y \
     curl \
-    netcat-traditional \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
@@ -42,9 +41,9 @@ ENV PYTHONPATH=/app
 # Expose MCP TCP port
 EXPOSE 8002
 
-# Health check (TCP port check)
+# Health check (Python-based TCP port check - faster than installing netcat)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD nc -z localhost 8002 || exit 1
+    CMD python -c "import socket; s=socket.socket(); s.settimeout(1); s.connect(('localhost',8002)); s.close()" || exit 1
 
 # Run MCP server
 CMD ["python", "mcp_server.py"]

@@ -22,7 +22,7 @@ Claude Code 2.x changed how MCP servers are configured:
 | `claude_manager.py` | Added `.mcp.json` copy after git clone | Instances now auto-configure MCP |
 | `terminal_startup.sh` | Updated MCP config documentation | Users understand new behavior |
 | `Dockerfile.terminal*` (5 files) | Changed `netcat-openbsd` → `netcat-traditional` | MCP connectivity works |
-| `Dockerfile.mcp` | Changed `netcat-openbsd` → `netcat-traditional` | Healthcheck works |
+| `Dockerfile.mcp` | Removed `netcat`, use Python healthcheck | Faster build, same functionality |
 
 ---
 
