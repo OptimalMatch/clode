@@ -3388,15 +3388,18 @@ async def delete_orchestration_design(design_id: str):
 async def seed_orchestration_designs(force: bool = False):
     """Seed sample orchestration designs"""
     try:
-        from seed_orchestration_designs import seed_sample_designs
+        from seed_orchestration_designs import seed_sample_designs, SAMPLE_DESIGN_NAMES
         
-        # Check if designs already exist
-        existing_designs = await db.get_orchestration_designs()
-        if existing_designs and not force:
+        # Check if SAMPLE designs already exist (not just any designs)
+        all_designs = await db.get_orchestration_designs()
+        existing_sample_names = [d.get('name') for d in all_designs if d.get('name') in SAMPLE_DESIGN_NAMES]
+        
+        if existing_sample_names and not force:
             return {
                 "success": False,
-                "message": f"Sample designs already exist ({len(existing_designs)} found). Use force=true to add anyway.",
-                "existing_count": len(existing_designs),
+                "message": f"Sample designs already exist ({len(existing_sample_names)} found: {', '.join(existing_sample_names[:3])}{'...' if len(existing_sample_names) > 3 else ''}). Use force=true to add anyway.",
+                "existing_count": len(all_designs),
+                "existing_sample_count": len(existing_sample_names),
                 "seeded_count": 0
             }
         
@@ -3404,15 +3407,15 @@ async def seed_orchestration_designs(force: bool = False):
         await seed_sample_designs(force=True, silent=True)  # Always force when called via API
         
         # Get the new count
-        all_designs = await db.get_orchestration_designs()
+        updated_designs = await db.get_orchestration_designs()
         seeded_count = 7  # We know we seed 7 designs
         
         return {
             "success": True,
             "message": f"Successfully seeded {seeded_count} sample orchestration designs",
-            "existing_count": len(existing_designs) if existing_designs else 0,
+            "existing_count": len(all_designs),
             "seeded_count": seeded_count,
-            "total_count": len(all_designs)
+            "total_count": len(updated_designs)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to seed designs: {str(e)}")

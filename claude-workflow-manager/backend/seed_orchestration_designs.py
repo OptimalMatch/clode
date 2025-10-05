@@ -5,6 +5,17 @@ import asyncio
 from database import Database
 from models import OrchestrationDesign
 
+# List of sample design names for duplicate checking
+SAMPLE_DESIGN_NAMES = [
+    "Data Processing Pipeline",
+    "Multi-Domain Analysis",
+    "Automated Code Review System",
+    "Technical Decision Framework",
+    "Customer Support Routing System",
+    "Research Paper Analysis Pipeline",
+    "Full-Stack Development Workflow"
+]
+
 async def seed_sample_designs(force=False, silent=False):
     """Create sample orchestration designs demonstrating various patterns
     
@@ -14,15 +25,20 @@ async def seed_sample_designs(force=False, silent=False):
     """
     db = Database()
     
-    # Check if designs already exist
-    existing_designs = await db.get_orchestration_designs()
-    if existing_designs and not force:
+    # Check if SAMPLE designs already exist (not just any designs)
+    all_designs = await db.get_orchestration_designs()
+    existing_sample_names = [d.get('name') for d in all_designs if d.get('name') in SAMPLE_DESIGN_NAMES]
+    
+    if existing_sample_names and not force:
         if not silent:
-            print("⚠️  Orchestration designs already exist in the database!")
-            print(f"   Found {len(existing_designs)} existing design(s)")
+            print("⚠️  Sample orchestration designs already exist in the database!")
+            print(f"   Found {len(existing_sample_names)} existing sample design(s):")
+            for name in existing_sample_names:
+                print(f"     - {name}")
+            print(f"\n   (You have {len(all_designs)} total designs, including {len(all_designs) - len(existing_sample_names)} custom designs)")
             print("\n   To re-seed anyway, run with --force flag:")
             print("   python seed_orchestration_designs.py --force")
-            print("\n   This will add the sample designs without removing existing ones.")
+            print("\n   This will add the sample designs again (creating duplicates).")
         return
     
     # Sample Design 1: Simple Sequential Pipeline
