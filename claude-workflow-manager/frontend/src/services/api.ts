@@ -1,6 +1,17 @@
 import axios from 'axios';
 import { Workflow, Prompt, ClaudeInstance, Subagent, InstanceLog, LogAnalytics, LogType } from '../types';
 
+export interface OrchestrationDesignVersion {
+  version: number;
+  name: string;
+  description: string;
+  blocks: any[];
+  connections: any[];
+  git_repos: string[];
+  saved_at: string;
+  saved_by?: string;
+}
+
 export interface OrchestrationDesign {
   id?: string;
   name: string;
@@ -10,6 +21,8 @@ export interface OrchestrationDesign {
   git_repos: string[];
   created_at?: string;
   updated_at?: string;
+  version?: number;
+  version_history?: OrchestrationDesignVersion[];
 }
 
 // Dynamically determine API URL based on current window location
@@ -908,6 +921,11 @@ export const orchestrationDesignApi = {
 
   delete: async (id: string) => {
     const response = await api.delete(`/api/orchestration-designs/${id}`);
+    return response.data;
+  },
+
+  restore: async (id: string, version: number) => {
+    const response = await api.post(`/api/orchestration-designs/${id}/restore/${version}`);
     return response.data;
   },
 

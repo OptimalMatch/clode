@@ -135,6 +135,17 @@ class InstanceLog(BaseModel):
     step_id: Optional[str] = None
     claude_mode: Optional[str] = None  # "max-plan" or "api-key"
 
+class OrchestrationDesignVersion(BaseModel):
+    """Model for a snapshot of an orchestration design"""
+    version: int
+    name: str
+    description: str = ""
+    blocks: List[Dict[str, Any]] = []
+    connections: List[Dict[str, Any]] = []
+    git_repos: List[str] = []
+    saved_at: datetime
+    saved_by: Optional[str] = None  # Future: track who saved this version
+
 class OrchestrationDesign(BaseModel):
     """Model for complex orchestration workflow designs"""
     id: Optional[str] = None
@@ -145,6 +156,8 @@ class OrchestrationDesign(BaseModel):
     git_repos: List[str] = []  # Git repositories assigned to agents
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    version: int = 1  # Current version number
+    version_history: List[OrchestrationDesignVersion] = []  # Previous versions
 
 class ClaudeAuthProfile(BaseModel):
     id: Optional[str] = None
