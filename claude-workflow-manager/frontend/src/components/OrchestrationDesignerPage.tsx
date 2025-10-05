@@ -136,7 +136,7 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [executionResults, setExecutionResults] = useState<Map<string, any>>(new Map());
   
   // UI state
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' }>({
     open: false,
     message: '',
     severity: 'success'
@@ -496,10 +496,11 @@ const OrchestrationDesignerPage: React.FC = () => {
         // Refresh the designs list
         refetchDesigns();
       } else {
+        // Sample designs already exist - show as warning, not error
         setSnackbar({
           open: true,
-          message: result.message,
-          severity: 'error'
+          message: result.message || 'Sample designs already exist',
+          severity: 'warning'
         });
       }
     } catch (error: any) {
