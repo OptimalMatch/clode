@@ -135,6 +135,7 @@ const OrchestrationDesignerPage: React.FC = () => {
   // Design metadata
   const [designName, setDesignName] = useState('Untitled Orchestration');
   const [designDescription, setDesignDescription] = useState('');
+  const [currentDesignId, setCurrentDesignId] = useState<string | null>(null);
   
   // Execution state
   const [executing, setExecuting] = useState(false);
@@ -538,14 +539,27 @@ const OrchestrationDesignerPage: React.FC = () => {
     };
 
     try {
-      await orchestrationDesignApi.create(design);
+      if (currentDesignId) {
+        // Update existing design
+        await orchestrationDesignApi.update(currentDesignId, design);
+        setSnackbar({
+          open: true,
+          message: 'Design updated successfully',
+          severity: 'success'
+        });
+      } else {
+        // Create new design
+        const result = await orchestrationDesignApi.create(design);
+        setCurrentDesignId(result.id); // Set the ID after creation
+        setSnackbar({
+          open: true,
+          message: 'Design created successfully',
+          severity: 'success'
+        });
+      }
       
-      setSnackbar({
-        open: true,
-        message: 'Design saved successfully',
-        severity: 'success'
-      });
       setSaveDialogOpen(false);
+      refetchDesigns(); // Refresh the designs list
     } catch (error) {
       console.error('Error saving design:', error);
       setSnackbar({
@@ -561,6 +575,7 @@ const OrchestrationDesignerPage: React.FC = () => {
     setDesignDescription(design.description);
     setBlocks(design.blocks);
     setConnections(design.connections);
+    setCurrentDesignId(design.id || null); // Set the current design ID
     
     setSnackbar({
       open: true,
@@ -568,6 +583,23 @@ const OrchestrationDesignerPage: React.FC = () => {
       severity: 'success'
     });
     setLoadDialogOpen(false);
+  };
+
+  const newDesign = () => {
+    // Clear all design data to start fresh
+    setBlocks([]);
+    setConnections([]);
+    setDesignName('Untitled Orchestration');
+    setDesignDescription('');
+    setCurrentDesignId(null); // Clear the current design ID
+    setExecutionResults(new Map());
+    setCurrentlyExecutingBlock(null);
+    
+    setSnackbar({
+      open: true,
+      message: 'Started new design',
+      severity: 'info'
+    });
   };
 
   const seedSampleDesigns = async () => {
@@ -1913,6 +1945,13 @@ Format your response as JSON:
             <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
             <Button
               variant="outlined"
+              startIcon={<Add />}
+              onClick={newDesign}
+            >
+              New Design
+            </Button>
+            <Button
+              variant="outlined"
               startIcon={<FolderOpen />}
               onClick={() => setLoadDialogOpen(true)}
             >
@@ -1920,7 +1959,7 @@ Format your response as JSON:
             </Button>
             <Button
               variant="outlined"
-              startIcon={seeding ? <CircularProgress size={20} /> : <Add />}
+              startIcon={seeding ? <CircularProgress size={20} /> : <Refresh />}
               onClick={seedSampleDesigns}
               disabled={seeding}
               color="secondary"
@@ -1932,7 +1971,7 @@ Format your response as JSON:
               startIcon={<Save />}
               onClick={() => setSaveDialogOpen(true)}
             >
-              Save Design
+              {currentDesignId ? 'Update Design' : 'Save Design'}
             </Button>
             <Button
               variant="contained"
