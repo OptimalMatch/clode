@@ -436,7 +436,7 @@ export const authApi = {
 export interface OrchestrationAgent {
   name: string;
   system_prompt: string;
-  role: 'manager' | 'worker' | 'specialist' | 'moderator';
+  role: 'manager' | 'worker' | 'specialist' | 'moderator' | 'reflector';
 }
 
 export interface SequentialPipelineRequest {
