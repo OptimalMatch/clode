@@ -58,11 +58,12 @@ echo "💡 Note: .mcp.json is automatically copied to each spawned instance's wo
 - `Dockerfile.terminal.base`
 - `Dockerfile.terminal.noupdate` (2 locations)
 - `Dockerfile.terminal.prebuilt`
-- `Dockerfile.mcp`
 
 **Change**: Replaced `netcat-openbsd` with `netcat-traditional`
 
-**Reason**: Claude Code 2.x's MCP client requires `netcat-traditional` for TCP connectivity testing
+**Reason**: Claude Code 2.x's MCP client requires `netcat-traditional` for TCP connectivity
+
+**Note**: `Dockerfile.mcp` does NOT need netcat - it uses Python for healthcheck instead (faster build)
 
 **Example diff**:
 ```dockerfile
@@ -174,6 +175,7 @@ nc -z claude-workflow-mcp 8002
 - `netcat-openbsd`: OpenBSD variant with different command-line options
 - `netcat-traditional`: Original BSD netcat with `-z` flag for TCP port checking
 - Claude Code's MCP client specifically expects `nc` with traditional behavior
+- **MCP server container doesn't need netcat** - it uses Python for healthcheck (faster build)
 
 ---
 
