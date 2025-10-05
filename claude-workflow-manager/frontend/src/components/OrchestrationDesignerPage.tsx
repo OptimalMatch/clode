@@ -134,6 +134,8 @@ const OrchestrationDesignerPage: React.FC = () => {
   // Execution state
   const [executing, setExecuting] = useState(false);
   const [executionResults, setExecutionResults] = useState<Map<string, any>>(new Map());
+  const [currentlyExecutingBlock, setCurrentlyExecutingBlock] = useState<string | null>(null);
+  const [resultsDialogOpen, setResultsDialogOpen] = useState(false);
   
   // UI state
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' }>({
@@ -517,20 +519,302 @@ const OrchestrationDesignerPage: React.FC = () => {
 
   // Execute orchestration workflow
   const executeOrchestration = async () => {
-    setExecuting(true);
-    
-    // TODO: Implement execution logic
-    // This would involve traversing the blocks and connections in order
-    // and executing each orchestration pattern sequentially
-    
-    setTimeout(() => {
-      setExecuting(false);
+    if (blocks.length === 0) {
       setSnackbar({
         open: true,
-        message: 'Execution completed',
+        message: 'No blocks to execute',
+        severity: 'error'
+      });
+      return;
+    }
+
+    setExecuting(true);
+    const results = new Map<string, any>();
+    
+    try {
+      // Build execution graph
+      const executionOrder = buildExecutionOrder(blocks, connections);
+      
+      if (executionOrder.length === 0) {
+        throw new Error('No executable blocks found. Check connections.');
+      }
+
+      setSnackbar({
+        open: true,
+        message: `Executing ${executionOrder.length} blocks in sequence...`,
+        severity: 'info'
+      });
+
+      // Execute blocks in order
+      for (const blockId of executionOrder) {
+        const block = blocks.find(b => b.id === blockId);
+        if (!block) continue;
+
+        // Mark block as currently executing
+        setCurrentlyExecutingBlock(blockId);
+
+        // Get inputs from connected blocks
+        const inputs = getBlockInputs(blockId, connections, results);
+        
+        // Execute the block
+        const result = await executeBlock(block, inputs);
+        results.set(blockId, result);
+        
+        // Update execution results state
+        setExecutionResults(new Map(results));
+        
+        // Clear currently executing
+        setCurrentlyExecutingBlock(null);
+      }
+
+      setSnackbar({
+        open: true,
+        message: `Execution completed successfully! ${executionOrder.length} blocks executed.`,
         severity: 'success'
       });
-    }, 3000);
+    } catch (error: any) {
+      console.error('Execution error:', error);
+      setSnackbar({
+        open: true,
+        message: `Execution failed: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  // Build execution order using topological sort
+  const buildExecutionOrder = (blocks: OrchestrationBlock[], connections: Connection[]): string[] => {
+    // Build adjacency list and in-degree map
+    const adjList = new Map<string, string[]>();
+    const inDegree = new Map<string, number>();
+    
+    // Initialize
+    blocks.forEach(block => {
+      adjList.set(block.id, []);
+      inDegree.set(block.id, 0);
+    });
+    
+    // Build graph from connections
+    connections.forEach(conn => {
+      if (conn.type === 'block') {
+        // Block-level connections
+        adjList.get(conn.source)?.push(conn.target);
+        inDegree.set(conn.target, (inDegree.get(conn.target) || 0) + 1);
+      }
+      // Note: Agent-level connections handled during block execution
+    });
+    
+    // Topological sort using Kahn's algorithm
+    const queue: string[] = [];
+    const result: string[] = [];
+    
+    // Find all nodes with no incoming edges
+    inDegree.forEach((degree, blockId) => {
+      if (degree === 0) {
+        queue.push(blockId);
+      }
+    });
+    
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      result.push(current);
+      
+      // Reduce in-degree for neighbors
+      adjList.get(current)?.forEach(neighbor => {
+        const newDegree = (inDegree.get(neighbor) || 0) - 1;
+        inDegree.set(neighbor, newDegree);
+        if (newDegree === 0) {
+          queue.push(neighbor);
+        }
+      });
+    }
+    
+    return result;
+  };
+
+  // Get inputs for a block from connected sources
+  const getBlockInputs = (blockId: string, connections: Connection[], results: Map<string, any>): any => {
+    const inputs: any[] = [];
+    
+    // Find all connections targeting this block
+    const incomingConnections = connections.filter(conn => conn.target === blockId);
+    
+    incomingConnections.forEach(conn => {
+      const sourceResult = results.get(conn.source);
+      
+      if (conn.type === 'agent' && conn.sourceAgent && sourceResult) {
+        // Agent-level connection - extract specific agent output
+        const agentOutput = sourceResult.agents?.find((a: any) => a.id === conn.sourceAgent);
+        if (agentOutput) {
+          inputs.push(agentOutput.output || agentOutput.result || '');
+        }
+      } else if (sourceResult) {
+        // Block-level connection - pass entire result
+        inputs.push(sourceResult.final_output || sourceResult.result || '');
+      }
+    });
+    
+    return inputs.length > 0 ? inputs.join('\n\n---\n\n') : '';
+  };
+
+  // Execute a single orchestration block
+  const executeBlock = async (block: OrchestrationBlock, inputs: any): Promise<any> => {
+    const pattern = patterns.find(p => p.id === block.type);
+    
+    setSnackbar({
+      open: true,
+      message: `Executing ${block.data.label} (${pattern?.name})...`,
+      severity: 'info'
+    });
+
+    // Prepare task with inputs if provided
+    const task = inputs 
+      ? `${block.data.task || ''}\n\nPrevious Results:\n${inputs}`
+      : block.data.task || 'Execute the configured task';
+
+    // Map block type to API call
+    switch (block.type) {
+      case 'sequential':
+        return await executeSequential(block, task);
+      case 'parallel':
+        return await executeParallel(block, task);
+      case 'hierarchical':
+        return await executeHierarchical(block, task);
+      case 'debate':
+        return await executeDebate(block, task);
+      case 'routing':
+        return await executeRouting(block, task);
+      default:
+        throw new Error(`Unknown orchestration pattern: ${block.type}`);
+    }
+  };
+
+  // Execute sequential orchestration
+  const executeSequential = async (block: OrchestrationBlock, task: string) => {
+    const response = await fetch('http://localhost:8000/api/orchestration/sequential', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agents: block.data.agents.map(a => ({
+          name: a.name,
+          system_prompt: a.system_prompt,
+          role: a.role
+        })),
+        task
+      })
+    });
+    
+    if (!response.ok) throw new Error(`Sequential execution failed: ${response.statusText}`);
+    return await response.json();
+  };
+
+  // Execute parallel orchestration
+  const executeParallel = async (block: OrchestrationBlock, task: string) => {
+    const response = await fetch('http://localhost:8000/api/orchestration/parallel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agents: block.data.agents.map(a => ({
+          name: a.name,
+          system_prompt: a.system_prompt,
+          role: a.role
+        })),
+        task,
+        aggregator_prompt: 'Synthesize all agent outputs into a cohesive summary.'
+      })
+    });
+    
+    if (!response.ok) throw new Error(`Parallel execution failed: ${response.statusText}`);
+    return await response.json();
+  };
+
+  // Execute hierarchical orchestration
+  const executeHierarchical = async (block: OrchestrationBlock, task: string) => {
+    const manager = block.data.agents.find(a => a.role === 'manager');
+    const workers = block.data.agents.filter(a => a.role === 'worker');
+    
+    if (!manager) throw new Error('Hierarchical orchestration requires a manager agent');
+    
+    const response = await fetch('http://localhost:8000/api/orchestration/hierarchical', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        manager: {
+          name: manager.name,
+          system_prompt: manager.system_prompt,
+          role: manager.role
+        },
+        workers: workers.map(w => ({
+          name: w.name,
+          system_prompt: w.system_prompt,
+          role: w.role
+        })),
+        task,
+        rounds: block.data.rounds || 2
+      })
+    });
+    
+    if (!response.ok) throw new Error(`Hierarchical execution failed: ${response.statusText}`);
+    return await response.json();
+  };
+
+  // Execute debate orchestration
+  const executeDebate = async (block: OrchestrationBlock, task: string) => {
+    const debaters = block.data.agents.filter(a => a.role === 'specialist' || a.role === 'worker');
+    const moderator = block.data.agents.find(a => a.role === 'moderator');
+    
+    const response = await fetch('http://localhost:8000/api/orchestration/debate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        debaters: debaters.map(d => ({
+          name: d.name,
+          system_prompt: d.system_prompt,
+          role: d.role
+        })),
+        moderator: moderator ? {
+          name: moderator.name,
+          system_prompt: moderator.system_prompt,
+          role: moderator.role
+        } : undefined,
+        topic: task,
+        rounds: block.data.rounds || 3
+      })
+    });
+    
+    if (!response.ok) throw new Error(`Debate execution failed: ${response.statusText}`);
+    return await response.json();
+  };
+
+  // Execute routing orchestration
+  const executeRouting = async (block: OrchestrationBlock, task: string) => {
+    const router = block.data.agents.find(a => a.role === 'moderator' || a.role === 'manager');
+    const specialists = block.data.agents.filter(a => a.role === 'specialist');
+    
+    if (!router) throw new Error('Routing orchestration requires a router agent');
+    
+    const response = await fetch('http://localhost:8000/api/orchestration/routing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        router: {
+          name: router.name,
+          system_prompt: router.system_prompt,
+          role: router.role
+        },
+        specialists: specialists.map(s => ({
+          name: s.name,
+          system_prompt: s.system_prompt,
+          role: s.role
+        })),
+        request: task
+      })
+    });
+    
+    if (!response.ok) throw new Error(`Routing execution failed: ${response.statusText}`);
+    return await response.json();
   };
 
   // Render connections as SVG curved paths
@@ -699,6 +983,8 @@ const OrchestrationDesignerPage: React.FC = () => {
       const pattern = patterns.find(p => p.id === block.type);
       const isSelected = selectedBlock?.id === block.id;
       const isConnectionTarget = isConnecting && connectionSource !== block.id;
+      const isExecuting = currentlyExecutingBlock === block.id;
+      const hasResults = executionResults.has(block.id);
 
       return (
         <Box key={block.id} sx={{ position: 'relative' }}>
@@ -709,9 +995,9 @@ const OrchestrationDesignerPage: React.FC = () => {
               top: block.position.y * zoom + panOffset.y,
               width: 300,
               cursor: isDragging && draggedBlock === block.id ? 'grabbing' : 'grab',
-              border: isSelected ? 3 : 1,
-              borderColor: isSelected ? 'primary.main' : (darkMode ? '#444' : 'divider'),
-              boxShadow: isSelected ? 6 : 2,
+              border: isSelected ? 3 : (isExecuting ? 3 : 1),
+              borderColor: isExecuting ? '#ff9800' : (isSelected ? 'primary.main' : (hasResults ? '#4caf50' : (darkMode ? '#444' : 'divider'))),
+              boxShadow: isSelected ? 6 : (isExecuting ? 8 : 2),
               transition: 'all 0.2s',
               backgroundColor: isConnectionTarget 
                 ? (darkMode ? '#404040' : 'action.hover') 
@@ -846,7 +1132,31 @@ const OrchestrationDesignerPage: React.FC = () => {
               />
             )}
             
-            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+            {/* Execution Status Indicator */}
+            {(isExecuting || hasResults) && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, mb: 1 }}>
+                {isExecuting && (
+                  <>
+                    <CircularProgress size={16} />
+                    <Typography variant="caption" color="warning.main" sx={{ fontWeight: 'bold' }}>
+                      Executing...
+                    </Typography>
+                  </>
+                )}
+                {hasResults && !isExecuting && (
+                  <>
+                    <Chip 
+                      label="✓ Executed" 
+                      size="small" 
+                      color="success"
+                      sx={{ fontWeight: 'bold' }}
+                    />
+                  </>
+                )}
+              </Box>
+            )}
+            
+            <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
               <Button
                 size="small"
                 variant="outlined"
@@ -871,6 +1181,20 @@ const OrchestrationDesignerPage: React.FC = () => {
               >
                 {isConnecting && connectionSource === block.id ? 'Cancel' : 'Connect'}
               </Button>
+              {hasResults && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="success"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedBlock(block);
+                    setResultsDialogOpen(true);
+                  }}
+                >
+                  View Results
+                </Button>
+              )}
             </Box>
           </CardContent>
         </Card>
@@ -1562,6 +1886,55 @@ const OrchestrationDesignerPage: React.FC = () => {
             sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
           >
             Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Results Dialog */}
+      <Dialog 
+        open={resultsDialogOpen} 
+        onClose={() => setResultsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+          Execution Results{selectedBlock ? `: ${selectedBlock.data.label}` : ''}
+        </DialogTitle>
+        <DialogContent>
+          {selectedBlock && executionResults.has(selectedBlock.id) ? (
+            <Box>
+              <Typography variant="h6" sx={{ mb: 2, color: darkMode ? '#ffffff' : 'inherit' }}>
+                Results
+              </Typography>
+              <Paper 
+                sx={{ 
+                  p: 2, 
+                  backgroundColor: darkMode ? '#2d2d2d' : '#f5f5f5',
+                  maxHeight: 400,
+                  overflow: 'auto'
+                }}
+              >
+                <pre style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word', margin: 0 }}>
+                  {JSON.stringify(executionResults.get(selectedBlock.id), null, 2)}
+                </pre>
+              </Paper>
+            </Box>
+          ) : (
+            <Typography>No results available</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setResultsDialogOpen(false)}
+            sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+          >
+            Close
           </Button>
         </DialogActions>
       </Dialog>
