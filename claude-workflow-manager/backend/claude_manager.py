@@ -968,6 +968,22 @@ class ClaudeCodeManager:
                 self._instance_working_dirs = {}
             self._instance_working_dirs[instance.id] = working_dir
             
+            # Copy MCP configuration to project directory (required for Claude Code 2.x)
+            try:
+                self._log_with_timestamp(f"🔌 Configuring MCP client for instance {instance.id}...")
+                mcp_config_source = "/app/claude_mcp_config.json"
+                mcp_config_dest = os.path.join(working_dir, ".mcp.json")
+                if os.path.exists(mcp_config_source):
+                    import shutil
+                    shutil.copy(mcp_config_source, mcp_config_dest)
+                    self._log_with_timestamp(f"✅ MCP configuration installed at {mcp_config_dest}")
+                    self._log_with_timestamp(f"📊 MCP Server: claude-workflow-mcp:8002 (34 tools available)")
+                else:
+                    self._log_with_timestamp(f"⚠️ MCP config source not found at {mcp_config_source}")
+            except Exception as e:
+                self._log_with_timestamp(f"⚠️ Failed to copy MCP config (MCP tools may not be available): {e}")
+                # Don't fail the instance spawn - continue without MCP
+            
             # Restore selected Claude profile for this instance
             try:
                 self._log_with_timestamp(f"🔐 Restoring Claude profile for instance {instance.id}...")

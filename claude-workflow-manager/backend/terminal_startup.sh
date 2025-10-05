@@ -142,19 +142,11 @@ else
 fi
 
 # Configure Claude CLI MCP client
-echo "🔌 Configuring Claude CLI MCP client..."
-CLAUDE_CONFIG_DIR="/home/claude/.config/claude"
-mkdir -p "$CLAUDE_CONFIG_DIR"
-
-# Copy MCP configuration
-if [ -f "/app/claude_mcp_config.json" ]; then
-    cp /app/claude_mcp_config.json "$CLAUDE_CONFIG_DIR/config.json"
-    echo "✅ Claude CLI MCP configuration installed"
-    echo "📊 MCP Server: claude-workflow-mcp:8002"
-    echo "🎯 Available tools: workflows, orchestration patterns, multi-agent systems"
-else
-    echo "⚠️ MCP configuration file not found at /app/claude_mcp_config.json"
-fi
+echo "🔌 Claude CLI MCP Configuration Info..."
+echo "📋 MCP config location: Per-project (.mcp.json in project root)"
+echo "📊 MCP Server: claude-workflow-mcp:8002"
+echo "🎯 Available tools: 34 tools (workflows, orchestration patterns, multi-agent systems)"
+echo "💡 Note: .mcp.json is automatically copied to each spawned instance's working directory"
 
 # Test MCP connectivity (optional, non-blocking)
 echo "🧪 Testing MCP server connectivity..."

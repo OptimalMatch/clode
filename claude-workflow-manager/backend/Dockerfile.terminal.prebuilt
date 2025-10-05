@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     vim \
     nano \
-    netcat-openbsd \
+    netcat-traditional \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
