@@ -422,6 +422,7 @@ class AgentRole(str, Enum):
     WORKER = "worker"
     SPECIALIST = "specialist"
     MODERATOR = "moderator"
+    REFLECTOR = "reflector"
 
 class OrchestrationAgent(BaseModel):
     """Agent definition for orchestration"""

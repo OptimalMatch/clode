@@ -1190,47 +1190,108 @@ Format your response as JSON:
       throw new Error('Reflection orchestration requires at least one reflector agent');
     }
     
-    // Clear previous streaming outputs
-    updateAgentStatus(block.id, reflector.name, 'executing');
-    
-    // Call API with reflection task (using sequential for simplicity)
-    const response = await api.post('/api/orchestration/sequential', {
-      agents: [{
-        name: reflector.name,
-        system_prompt: reflector.system_prompt,
-        role: reflector.role
-      }],
-      task: reflectionTask,
-      agent_sequence: [reflector.name]
-    });
-    
-    updateAgentStatus(block.id, reflector.name, 'completed');
-    
-    // Parse suggestions from response
-    try {
-      const result = response.data;
-      const output = result.final_result || result.steps?.[0]?.output || '';
+    // Use streaming for live feedback
+    if (enableStreaming) {
+      let fullOutput = '';
       
-      // Try to extract JSON from the response
-      const jsonMatch = output.match(/\{[\s\S]*"suggestions"[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
-          setPromptSuggestions(parsed.suggestions);
-          setSuggestionsDialogOpen(true);
-          
-          setSnackbar({
-            open: true,
-            message: `Reflection complete! Found ${parsed.suggestions.length} improvement suggestion(s).`,
-            severity: 'success'
-          });
+      const result = await orchestrationApi.executeSequentialStream(
+        {
+          task: reflectionTask,
+          agents: [{
+            name: reflector.name,
+            system_prompt: reflector.system_prompt,
+            role: reflector.role
+          }],
+          agent_sequence: [reflector.name]
+        },
+        (event: StreamEvent) => {
+          if (event.type === 'status' && event.agent) {
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status'], event.duration_ms);
+          } else if (event.type === 'chunk' && event.agent && event.data) {
+            appendStreamingOutput(block.id, event.agent, event.data);
+            fullOutput += event.data;
+          }
+        },
+        abortController?.signal
+      );
+      
+      // Parse suggestions from streaming output
+      try {
+        // Try to extract JSON from the accumulated output
+        const jsonMatch = fullOutput.match(/\{[\s\S]*"suggestions"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+            setPromptSuggestions(parsed.suggestions);
+            setSuggestionsDialogOpen(true);
+            
+            setSnackbar({
+              open: true,
+              message: `Reflection complete! Found ${parsed.suggestions.length} improvement suggestion(s).`,
+              severity: 'success'
+            });
+          }
+        } else {
+          // Also try from the final result
+          const output = result.final_result || result.steps?.[0]?.output || '';
+          const jsonMatch2 = output.match(/\{[\s\S]*"suggestions"[\s\S]*\}/);
+          if (jsonMatch2) {
+            const parsed = JSON.parse(jsonMatch2[0]);
+            if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+              setPromptSuggestions(parsed.suggestions);
+              setSuggestionsDialogOpen(true);
+              
+              setSnackbar({
+                open: true,
+                message: `Reflection complete! Found ${parsed.suggestions.length} improvement suggestion(s).`,
+                severity: 'success'
+              });
+            }
+          }
         }
+      } catch (error) {
+        console.error('Failed to parse reflection suggestions:', error);
       }
-    } catch (error) {
-      console.error('Failed to parse reflection suggestions:', error);
+      
+      return result;
+    } else {
+      // Non-streaming fallback
+      const response = await api.post('/api/orchestration/sequential', {
+        agents: [{
+          name: reflector.name,
+          system_prompt: reflector.system_prompt,
+          role: reflector.role
+        }],
+        task: reflectionTask,
+        agent_sequence: [reflector.name]
+      });
+      
+      // Parse suggestions from response
+      try {
+        const result = response.data;
+        const output = result.final_result || result.steps?.[0]?.output || '';
+        
+        // Try to extract JSON from the response
+        const jsonMatch = output.match(/\{[\s\S]*"suggestions"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+            setPromptSuggestions(parsed.suggestions);
+            setSuggestionsDialogOpen(true);
+            
+            setSnackbar({
+              open: true,
+              message: `Reflection complete! Found ${parsed.suggestions.length} improvement suggestion(s).`,
+              severity: 'success'
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to parse reflection suggestions:', error);
+      }
+      
+      return response.data;
     }
-    
-    return response.data;
   };
 
   // Apply a prompt suggestion to update an agent's prompt
