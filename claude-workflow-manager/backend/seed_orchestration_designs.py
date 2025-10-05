@@ -13,7 +13,8 @@ SAMPLE_DESIGN_NAMES = [
     "Technical Decision Framework",
     "Customer Support Routing System",
     "Research Paper Analysis Pipeline",
-    "Full-Stack Development Workflow"
+    "Full-Stack Development Workflow",
+    "Self-Improving Prompt Optimization"
 ]
 
 async def seed_sample_designs(force=False, silent=False, db=None):
@@ -659,8 +660,73 @@ async def seed_sample_designs(force=False, silent=False, db=None):
         git_repos=[]
     )
     
+    # Sample Design 8: Reflection-based Prompt Optimization
+    design8 = OrchestrationDesign(
+        name="Self-Improving Prompt Optimization",
+        description="Uses reflection agents to analyze and improve orchestration prompts for better performance",
+        blocks=[
+            {
+                "id": "block-1",
+                "type": "parallel",
+                "position": {"x": 50, "y": 50},
+                "data": {
+                    "label": "API Analysis Team",
+                    "agents": [
+                        {
+                            "id": "agent-1",
+                            "name": "Security Checker",
+                            "system_prompt": "Check API security. List 2-3 issues.",
+                            "role": "specialist"
+                        },
+                        {
+                            "id": "agent-2",
+                            "name": "Performance Checker",
+                            "system_prompt": "Check API performance. List 2-3 issues.",
+                            "role": "specialist"
+                        },
+                        {
+                            "id": "agent-3",
+                            "name": "Design Checker",
+                            "system_prompt": "Check API design quality. List 2-3 issues.",
+                            "role": "specialist"
+                        }
+                    ],
+                    "task": "Analyze this REST API: GET /users/:id returns full user object with password hash, no rate limiting, SQL query in URL parameter",
+                    "git_repo": ""
+                }
+            },
+            {
+                "id": "block-2",
+                "type": "reflection",
+                "position": {"x": 450, "y": 50},
+                "data": {
+                    "label": "Prompt Optimizer",
+                    "agents": [
+                        {
+                            "id": "agent-4",
+                            "name": "Reflection Agent",
+                            "system_prompt": "You are a prompt engineering expert. Analyze the agent prompts in this orchestration and their execution results. For agents whose prompts are too vague or could be improved, suggest specific, concrete improvements. Consider: 1) Are prompts explicit enough about output format? 2) Do they constrain scope appropriately? 3) Do they prevent the agent from straying off-task? 4) Are there clear success criteria? Output your analysis as JSON with this structure: {\"suggestions\": [{\"blockId\": \"...\", \"agentId\": \"...\", \"agentName\": \"...\", \"currentPrompt\": \"...\", \"suggestedPrompt\": \"...\", \"reasoning\": \"...\"}]}. Be specific and actionable in your suggestions.",
+                            "role": "reflector"
+                        }
+                    ],
+                    "task": "Analyze all agent prompts and suggest improvements to make them more effective, explicit, and reliable",
+                    "git_repo": ""
+                }
+            }
+        ],
+        connections=[
+            {
+                "id": "conn-1",
+                "source": "block-1",
+                "target": "block-2",
+                "type": "block"
+            }
+        ],
+        git_repos=[]
+    )
+    
     # Insert all designs
-    designs = [design1, design2, design3, design4, design5, design6, design7]
+    designs = [design1, design2, design3, design4, design5, design6, design7, design8]
     
     if not silent:
         print("🌱 Seeding orchestration designs...")
@@ -669,10 +735,10 @@ async def seed_sample_designs(force=False, silent=False, db=None):
         try:
             design_id = await db.create_orchestration_design(design)
             if not silent:
-                print(f"✅ Created design {i}/7: {design.name} (ID: {design_id})")
+                print(f"✅ Created design {i}/8: {design.name} (ID: {design_id})")
         except Exception as e:
             if not silent:
-                print(f"❌ Failed to create design {i}/7: {design.name} - {str(e)}")
+                print(f"❌ Failed to create design {i}/8: {design.name} - {str(e)}")
     
     if not silent:
         if force:
@@ -689,6 +755,7 @@ async def seed_sample_designs(force=False, silent=False, db=None):
         print("  5. Customer Support Routing System - Complex routing with branches")
         print("  6. Research Paper Analysis Pipeline - Agent-level connections")
         print("  7. Full-Stack Development Workflow - Multi-stage complete cycle")
+        print("  8. Self-Improving Prompt Optimization - Reflection agent analyzing prompts")
         print("\n💡 Next steps:")
         print("  1. Start the backend server (if not already running)")
         print("  2. Open the Orchestration Designer in the UI")
