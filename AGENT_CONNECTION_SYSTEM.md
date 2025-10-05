@@ -28,10 +28,12 @@ The Orchestration Designer now supports both **block-level** and **agent-level**
 ## Visual Indicators
 
 ### Connection Types
-- **Block connections**: Gray/dark gray solid lines with 'B' label
-- **Agent connections**: Blue dashed lines with 'A' label
+- **Block connections**: Gray/dark gray smooth curved lines with 'B' label
+- **Agent connections**: Blue dashed curved lines with 'A' label
 - **Arrowheads**: Point in the direction of data flow
-- **Delete button**: Circle in the middle of each connection (click to remove)
+- **Delete button**: Circle with minus icon on the curve (click to remove)
+- **Curved connectors**: Flexible Bezier curves that adapt to block positioning
+- **Top layer rendering**: Connections appear above blocks for maximum visibility
 
 ### Connection Handles
 - **Inactive**: Gray circles
@@ -122,6 +124,32 @@ Hierarchical Block
 
 ## Technical Details
 
+### Curved Connector Algorithm
+Connections use **cubic Bezier curves** (SVG path with C command) for smooth, flexible routing:
+
+```javascript
+// Adaptive curve based on flow direction
+const isVertical = Math.abs(dy) > Math.abs(dx);
+
+if (isVertical) {
+  // Vertical flow - curve smoothly up/down
+  curveOffset = Math.abs(dy) * 0.4;
+  controlPoint1 = (sourceX, sourceY + curveOffset)
+  controlPoint2 = (targetX, targetY - curveOffset)
+} else {
+  // Horizontal flow - curve smoothly left/right
+  curveOffset = Math.abs(dx) * 0.4;
+  controlPoint1 = (sourceX + curveOffset, sourceY)
+  controlPoint2 = (targetX - curveOffset, targetY)
+}
+```
+
+**Benefits:**
+- Adapts to block positioning automatically
+- Reduces visual clutter by avoiding overlaps
+- Natural flow direction indication
+- Professional appearance
+
 ### Connection Position Calculation
 - **Block-level source**: Bottom-center of source block (150px offset)
 - **Block-level target**: Top-center of target block (150px offset)
@@ -136,10 +164,11 @@ y = blockY * zoom + panOffset.y + handleOffset
 ```
 
 ### Event Handling
-- Connections are rendered in an SVG overlay (z-index: 1)
+- Connections are rendered in an SVG overlay (z-index: 10, above blocks)
 - Connection handles have `pointerEvents: 'all'` for click interaction
 - Connection lines have `pointerEvents: 'none'` except for delete button
 - `e.stopPropagation()` prevents conflicts with block dragging
+- Delete button positioned at curve midpoint with larger hit area (r=12px)
 
 ## Styling Details
 
@@ -147,11 +176,18 @@ y = blockY * zoom + panOffset.y + handleOffset
 - Block connections: `#888` (dark) / `#666` (light)
 - Agent connections: `#90caf9` (dark) / `#1976d2` (light)
 - Connection handles: `#666` (inactive) / `#90caf9` (active in dark)
-- Delete button: Matches connection color
+- Delete button: Matches connection color with semi-transparent background (opacity: 0.95)
+
+### Line Styles
+- Block connections: Solid curved lines (strokeWidth: 2px)
+- Agent connections: Dashed curved lines (strokeDasharray: '8,4', strokeWidth: 2.5px)
+- Both use cubic Bezier curves for smooth, professional appearance
+- Delete button: Larger (r=12px), bold minus icon (strokeWidth: 2.5px)
 
 ### Responsive Design
 - Connection handles scale on hover (transform: scale(1.3))
 - Smooth transitions (0.2s) on all interactive elements
 - Tooltip feedback for all clickable handles
 - Success snackbar confirms connection creation
+- Curves adapt dynamically to zoom and pan transformations
 

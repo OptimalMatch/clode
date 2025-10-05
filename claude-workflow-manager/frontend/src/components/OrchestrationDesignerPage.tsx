@@ -469,7 +469,7 @@ const OrchestrationDesignerPage: React.FC = () => {
     }, 3000);
   };
 
-  // Render connections as SVG lines
+  // Render connections as SVG curved paths
   const renderConnections = () => {
     return (
       <svg
@@ -480,7 +480,7 @@ const OrchestrationDesignerPage: React.FC = () => {
           width: '100%',
           height: '100%',
           pointerEvents: 'none',
-          zIndex: 1,
+          zIndex: 10, // Above blocks for visibility
         }}
       >
         {connections.map(conn => {
@@ -523,42 +523,74 @@ const OrchestrationDesignerPage: React.FC = () => {
           
           const lineWidth = conn.type === 'agent' ? 2.5 : 2;
 
+          // Create smooth curved path using cubic Bezier
+          const dx = targetX - sourceX;
+          const dy = targetY - sourceY;
+          
+          // Control points for smooth curves
+          // Adjust curve based on direction (vertical vs horizontal flow)
+          const isVertical = Math.abs(dy) > Math.abs(dx);
+          
+          let controlPoint1X, controlPoint1Y, controlPoint2X, controlPoint2Y;
+          
+          if (isVertical) {
+            // Vertical flow - curve smoothly downward/upward
+            const curveOffset = Math.abs(dy) * 0.4;
+            controlPoint1X = sourceX;
+            controlPoint1Y = sourceY + curveOffset;
+            controlPoint2X = targetX;
+            controlPoint2Y = targetY - curveOffset;
+          } else {
+            // Horizontal flow - curve smoothly left/right
+            const curveOffset = Math.abs(dx) * 0.4;
+            controlPoint1X = sourceX + curveOffset;
+            controlPoint1Y = sourceY;
+            controlPoint2X = targetX - curveOffset;
+            controlPoint2Y = targetY;
+          }
+          
+          const pathData = `M ${sourceX} ${sourceY} C ${controlPoint1X} ${controlPoint1Y}, ${controlPoint2X} ${controlPoint2Y}, ${targetX} ${targetY}`;
+          
+          // Calculate midpoint on the curve for delete button
+          const midX = (sourceX + controlPoint1X + controlPoint2X + targetX) / 4;
+          const midY = (sourceY + controlPoint1Y + controlPoint2Y + targetY) / 4;
+
           return (
             <g key={conn.id}>
-              <line
-              x1={sourceX}
-              y1={sourceY}
-              x2={targetX}
-              y2={targetY}
-              stroke={lineColor}
-              strokeWidth={lineWidth}
-              strokeDasharray={conn.type === 'agent' ? '5,3' : 'none'}
-              markerEnd={conn.type === 'agent' ? 'url(#arrowhead-agent)' : 'url(#arrowhead)'}
+              <path
+                d={pathData}
+                stroke={lineColor}
+                strokeWidth={lineWidth}
+                strokeDasharray={conn.type === 'agent' ? '8,4' : 'none'}
+                fill="none"
+                markerEnd={conn.type === 'agent' ? 'url(#arrowhead-agent)' : 'url(#arrowhead)'}
               />
-              {/* Delete button with connection type indicator */}
+              {/* Delete button with connection type indicator - positioned on the curve */}
               <g style={{ cursor: 'pointer', pointerEvents: 'all' }} onClick={() => deleteConnection(conn.id)}>
                 <circle
-                  cx={(sourceX + targetX) / 2}
-                  cy={(sourceY + targetY) / 2}
-                  r={10}
+                  cx={midX}
+                  cy={midY}
+                  r={12}
                   fill={darkMode ? '#2d2d2d' : 'white'}
                   stroke={lineColor}
                   strokeWidth={2}
+                  opacity={0.95}
                 />
                 <line
-                  x1={(sourceX + targetX) / 2 - 4}
-                  y1={(sourceY + targetY) / 2}
-                  x2={(sourceX + targetX) / 2 + 4}
-                  y2={(sourceY + targetY) / 2}
+                  x1={midX - 5}
+                  y1={midY}
+                  x2={midX + 5}
+                  y2={midY}
                   stroke={lineColor}
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                   style={{ pointerEvents: 'none' }}
                 />
                 {/* Type indicator - small letter */}
                 <text
-                  x={(sourceX + targetX) / 2}
-                  y={(sourceY + targetY) / 2 - 15}
-                  fontSize="10"
+                  x={midX}
+                  y={midY - 18}
+                  fontSize="11"
+                  fontWeight="bold"
                   fill={lineColor}
                   textAnchor="middle"
                   style={{ pointerEvents: 'none', userSelect: 'none' }}
