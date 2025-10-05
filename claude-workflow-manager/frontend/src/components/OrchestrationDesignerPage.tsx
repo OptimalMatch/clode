@@ -1393,9 +1393,9 @@ const OrchestrationDesignerPage: React.FC = () => {
                         )}
                       </>
                     )}
-                    {agent.status === 'completed' && agent.duration_ms && (
+                    {agent.status === 'completed' && (
                       <span style={{ color: '#4caf50', fontSize: '0.65rem', fontWeight: 'bold' }}>
-                        ✓ {agent.duration_ms}ms
+                        ✓{agent.duration_ms ? ` ${agent.duration_ms}ms` : ''}
                       </span>
                     )}
                   </Typography>
@@ -1441,9 +1441,9 @@ const OrchestrationDesignerPage: React.FC = () => {
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   {block.data.agents.length} agent{block.data.agents.length !== 1 ? 's' : ''}
                 </Typography>
-                {enableStreaming && block.data.agents.some(a => a.streamingOutput || a.status === 'executing' || a.status === 'delegating' || a.status === 'synthesizing' || a.status === 'aggregating' || a.status === 'routing') && (
+                {enableStreaming && block.data.agents.some(a => a.streamingOutput || a.status === 'executing' || a.status === 'delegating' || a.status === 'synthesizing' || a.status === 'aggregating' || a.status === 'routing' || a.status === 'completed' || a.duration_ms) && (
                   <Box sx={{ mb: 1 }}>
-                    {block.data.agents.filter(a => a.streamingOutput || a.status === 'executing' || a.status === 'delegating' || a.status === 'synthesizing' || a.status === 'aggregating' || a.status === 'routing' || a.status === 'completed').map((agent, idx) => (
+                    {block.data.agents.filter(a => a.streamingOutput || a.status === 'executing' || a.status === 'delegating' || a.status === 'synthesizing' || a.status === 'aggregating' || a.status === 'routing' || a.status === 'completed' || a.duration_ms).map((agent, idx) => (
                       <Box key={idx} sx={{ mb: 0.5 }}>
                         <Typography variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 'bold', flexWrap: 'wrap' }}>
                           <span>{agent.name}</span>
@@ -1457,9 +1457,9 @@ const OrchestrationDesignerPage: React.FC = () => {
                               )}
                             </>
                           )}
-                          {agent.status === 'completed' && agent.duration_ms && (
+                          {agent.status === 'completed' && (
                             <span style={{ color: '#4caf50', fontSize: '0.65rem', fontWeight: 'bold' }}>
-                              ✓ {agent.duration_ms}ms
+                              ✓{agent.duration_ms ? ` ${agent.duration_ms}ms` : ''}
                             </span>
                           )}
                         </Typography>
