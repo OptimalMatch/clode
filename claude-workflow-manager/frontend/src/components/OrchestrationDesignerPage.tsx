@@ -48,7 +48,7 @@ import {
   Settings,
   Psychology,
   ExpandMore,
-  GitBranch,
+  Source,
   Stop,
   Refresh,
   DragIndicator,
@@ -575,7 +575,7 @@ const OrchestrationDesignerPage: React.FC = () => {
             
             {block.data.git_repo && (
               <Chip
-                icon={<GitBranch />}
+                icon={<Source />}
                 label="Git Repo Assigned"
                 size="small"
                 variant="outlined"
