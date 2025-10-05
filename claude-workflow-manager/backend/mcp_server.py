@@ -496,6 +496,189 @@ class ClaudeWorkflowMCPServer:
                     "required": ["session_id"]
                 }
             ),
+            
+            # Agent Orchestration
+            Tool(
+                name="execute_sequential_pipeline",
+                description="Execute a task through a sequential pipeline where each agent's output becomes the next agent's input. Agents process information in a linear chain.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "task": {"type": "string", "description": "The task or prompt to execute"},
+                        "agents": {
+                            "type": "array",
+                            "description": "List of agents to execute in sequence",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string", "description": "Agent name"},
+                                    "system_prompt": {"type": "string", "description": "System prompt defining agent behavior"},
+                                    "role": {"type": "string", "enum": ["manager", "worker", "specialist", "moderator"], "default": "worker"}
+                                },
+                                "required": ["name", "system_prompt"]
+                            }
+                        },
+                        "agent_sequence": {
+                            "type": "array",
+                            "description": "Order of agent names to execute",
+                            "items": {"type": "string"}
+                        },
+                        "model": {"type": "string", "description": "Optional model override (e.g., claude-sonnet-4-20250514)", "default": "claude-sonnet-4-20250514"}
+                    },
+                    "required": ["task", "agents", "agent_sequence"]
+                }
+            ),
+            Tool(
+                name="execute_debate",
+                description="Execute a debate where multiple agents discuss and argue different perspectives on a topic for multiple rounds. Great for exploring different viewpoints.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "topic": {"type": "string", "description": "The debate topic or question"},
+                        "agents": {
+                            "type": "array",
+                            "description": "List of debate participants (typically 2-3 advocates and 1 moderator)",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string", "description": "Agent name"},
+                                    "system_prompt": {"type": "string", "description": "System prompt defining agent perspective and role"},
+                                    "role": {"type": "string", "enum": ["manager", "worker", "specialist", "moderator"], "default": "worker"}
+                                },
+                                "required": ["name", "system_prompt"]
+                            }
+                        },
+                        "participant_names": {
+                            "type": "array",
+                            "description": "Order of participants (typically advocates first, moderator last)",
+                            "items": {"type": "string"}
+                        },
+                        "rounds": {"type": "integer", "description": "Number of debate rounds", "default": 3},
+                        "model": {"type": "string", "description": "Optional model override", "default": "claude-sonnet-4-20250514"}
+                    },
+                    "required": ["topic", "agents", "participant_names"]
+                }
+            ),
+            Tool(
+                name="execute_hierarchical",
+                description="Execute hierarchical orchestration where a manager agent delegates subtasks to worker agents and synthesizes their results. Good for complex tasks requiring specialization.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "task": {"type": "string", "description": "The overall task to accomplish"},
+                        "manager": {
+                            "type": "object",
+                            "description": "The manager agent who delegates and synthesizes",
+                            "properties": {
+                                "name": {"type": "string", "description": "Manager agent name"},
+                                "system_prompt": {"type": "string", "description": "Manager's system prompt"},
+                                "role": {"type": "string", "enum": ["manager"], "default": "manager"}
+                            },
+                            "required": ["name", "system_prompt"]
+                        },
+                        "workers": {
+                            "type": "array",
+                            "description": "List of specialized worker agents",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string", "description": "Worker agent name"},
+                                    "system_prompt": {"type": "string", "description": "Worker's specialized system prompt"},
+                                    "role": {"type": "string", "enum": ["worker", "specialist"], "default": "worker"}
+                                },
+                                "required": ["name", "system_prompt"]
+                            }
+                        },
+                        "worker_names": {
+                            "type": "array",
+                            "description": "List of worker names",
+                            "items": {"type": "string"}
+                        },
+                        "model": {"type": "string", "description": "Optional model override", "default": "claude-sonnet-4-20250514"}
+                    },
+                    "required": ["task", "manager", "workers", "worker_names"]
+                }
+            ),
+            Tool(
+                name="execute_parallel_aggregate",
+                description="Execute parallel aggregation where multiple agents work on the same task independently, then results are optionally aggregated. Useful for getting diverse perspectives.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "task": {"type": "string", "description": "The task for all agents to work on"},
+                        "agents": {
+                            "type": "array",
+                            "description": "List of agents to work in parallel",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string", "description": "Agent name"},
+                                    "system_prompt": {"type": "string", "description": "Agent's system prompt defining their perspective"},
+                                    "role": {"type": "string", "enum": ["worker", "specialist"], "default": "worker"}
+                                },
+                                "required": ["name", "system_prompt"]
+                            }
+                        },
+                        "agent_names": {
+                            "type": "array",
+                            "description": "List of agent names to execute in parallel",
+                            "items": {"type": "string"}
+                        },
+                        "aggregator": {
+                            "type": "object",
+                            "description": "Optional aggregator agent to synthesize results",
+                            "properties": {
+                                "name": {"type": "string", "description": "Aggregator agent name"},
+                                "system_prompt": {"type": "string", "description": "Aggregator's system prompt"},
+                                "role": {"type": "string", "enum": ["manager"], "default": "manager"}
+                            }
+                        },
+                        "aggregator_name": {"type": "string", "description": "Optional aggregator name"},
+                        "model": {"type": "string", "description": "Optional model override", "default": "claude-sonnet-4-20250514"}
+                    },
+                    "required": ["task", "agents", "agent_names"]
+                }
+            ),
+            Tool(
+                name="execute_dynamic_routing",
+                description="Execute dynamic routing where a router agent analyzes the task and routes it to the most appropriate specialist(s). Good for triage and task-specific expertise.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "task": {"type": "string", "description": "The task to route and execute"},
+                        "router": {
+                            "type": "object",
+                            "description": "The router agent who selects specialists",
+                            "properties": {
+                                "name": {"type": "string", "description": "Router agent name"},
+                                "system_prompt": {"type": "string", "description": "Router's system prompt for decision-making"},
+                                "role": {"type": "string", "enum": ["manager"], "default": "manager"}
+                            },
+                            "required": ["name", "system_prompt"]
+                        },
+                        "specialists": {
+                            "type": "array",
+                            "description": "List of specialist agents available for routing",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string", "description": "Specialist agent name"},
+                                    "system_prompt": {"type": "string", "description": "Specialist's system prompt"},
+                                    "role": {"type": "string", "enum": ["specialist"], "default": "specialist"}
+                                },
+                                "required": ["name", "system_prompt"]
+                            }
+                        },
+                        "specialist_names": {
+                            "type": "array",
+                            "description": "List of specialist names",
+                            "items": {"type": "string"}
+                        },
+                        "model": {"type": "string", "description": "Optional model override", "default": "claude-sonnet-4-20250514"}
+                    },
+                    "required": ["task", "router", "specialists", "specialist_names"]
+                }
+            ),
         ]
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> List[TextContent | ImageContent | EmbeddedResource]:
@@ -678,6 +861,64 @@ class ClaudeWorkflowMCPServer:
                     arguments["session_id"],
                     arguments.get("duration_seconds", 30)
                 )
+            
+            # Agent Orchestration Tools
+            elif name == "execute_sequential_pipeline":
+                data = {
+                    "task": arguments["task"],
+                    "agents": arguments["agents"],
+                    "agent_sequence": arguments["agent_sequence"],
+                    "model": arguments.get("model", "claude-sonnet-4-20250514")
+                }
+                result = await self._make_request("POST", "/api/orchestration/sequential", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "execute_debate":
+                data = {
+                    "topic": arguments["topic"],
+                    "agents": arguments["agents"],
+                    "participant_names": arguments["participant_names"],
+                    "rounds": arguments.get("rounds", 3),
+                    "model": arguments.get("model", "claude-sonnet-4-20250514")
+                }
+                result = await self._make_request("POST", "/api/orchestration/debate", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "execute_hierarchical":
+                data = {
+                    "task": arguments["task"],
+                    "manager": arguments["manager"],
+                    "workers": arguments["workers"],
+                    "worker_names": arguments["worker_names"],
+                    "model": arguments.get("model", "claude-sonnet-4-20250514")
+                }
+                result = await self._make_request("POST", "/api/orchestration/hierarchical", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "execute_parallel_aggregate":
+                data = {
+                    "task": arguments["task"],
+                    "agents": arguments["agents"],
+                    "agent_names": arguments["agent_names"],
+                    "model": arguments.get("model", "claude-sonnet-4-20250514")
+                }
+                if "aggregator" in arguments:
+                    data["aggregator"] = arguments["aggregator"]
+                if "aggregator_name" in arguments:
+                    data["aggregator_name"] = arguments["aggregator_name"]
+                result = await self._make_request("POST", "/api/orchestration/parallel", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "execute_dynamic_routing":
+                data = {
+                    "task": arguments["task"],
+                    "router": arguments["router"],
+                    "specialists": arguments["specialists"],
+                    "specialist_names": arguments["specialist_names"],
+                    "model": arguments.get("model", "claude-sonnet-4-20250514")
+                }
+                result = await self._make_request("POST", "/api/orchestration/routing", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
             
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
