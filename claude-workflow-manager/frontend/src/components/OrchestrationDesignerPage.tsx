@@ -581,15 +581,55 @@ const OrchestrationDesignerPage: React.FC = () => {
         severity: 'success'
       });
     } catch (error: any) {
-      console.error('Execution error:', error);
-      setSnackbar({
-        open: true,
-        message: `Execution failed: ${error.message}`,
-        severity: 'error'
-      });
+      // Don't show error if it was an intentional cancellation
+      if (error.name === 'AbortError') {
+        console.log('Execution cancelled by user');
+        setSnackbar({
+          open: true,
+          message: 'Execution cancelled by user',
+          severity: 'info'
+        });
+      } else {
+        console.error('Execution error:', error);
+        setSnackbar({
+          open: true,
+          message: `Execution failed: ${error.message}`,
+          severity: 'error'
+        });
+      }
     } finally {
       setExecuting(false);
       setAbortController(null);
+      setCurrentlyExecutingBlock(null);
+    }
+  };
+
+  // Cancel execution
+  const cancelExecution = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+      setExecuting(false);
+      setCurrentlyExecutingBlock(null);
+      
+      // Clear all agent streaming outputs and statuses
+      setBlocks(prev => prev.map(block => ({
+        ...block,
+        data: {
+          ...block.data,
+          agents: block.data.agents.map(agent => ({
+            ...agent,
+            streamingOutput: '',
+            status: 'waiting' as Agent['status']
+          }))
+        }
+      })));
+      
+      setSnackbar({
+        open: true,
+        message: 'Execution cancelled',
+        severity: 'warning'
+      });
     }
   };
 
@@ -1551,6 +1591,16 @@ const OrchestrationDesignerPage: React.FC = () => {
             >
               {executing ? 'Executing...' : 'Execute'}
             </Button>
+            {executing && (
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<Stop />}
+                onClick={cancelExecution}
+              >
+                Stop
+              </Button>
+            )}
           </Box>
         </Box>
       </Paper>
