@@ -910,6 +910,11 @@ export const orchestrationDesignApi = {
     const response = await api.delete(`/api/orchestration-designs/${id}`);
     return response.data;
   },
+
+  seed: async (force: boolean = false) => {
+    const response = await api.post(`/api/orchestration-designs/seed?force=${force}`);
+    return response.data;
+  },
 };
 
 // Export the base axios instance as default for direct API calls
