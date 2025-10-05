@@ -555,6 +555,12 @@ const OrchestrationDesignerPage: React.FC = () => {
 
       // Execute blocks in order
       for (const blockId of executionOrder) {
+        // Check if execution was aborted before processing next block
+        if (controller.signal.aborted) {
+          console.log('Execution aborted, stopping workflow');
+          break;
+        }
+
         const block = blocks.find(b => b.id === blockId);
         if (!block) continue;
 
@@ -575,11 +581,14 @@ const OrchestrationDesignerPage: React.FC = () => {
         setCurrentlyExecutingBlock(null);
       }
 
-      setSnackbar({
-        open: true,
-        message: `Execution completed successfully! ${executionOrder.length} blocks executed.`,
-        severity: 'success'
-      });
+      // Only show success if not aborted
+      if (!controller.signal.aborted) {
+        setSnackbar({
+          open: true,
+          message: `Execution completed successfully! ${executionOrder.length} blocks executed.`,
+          severity: 'success'
+        });
+      }
     } catch (error: any) {
       // Don't show error if it was an intentional cancellation
       if (error.name === 'AbortError') {
