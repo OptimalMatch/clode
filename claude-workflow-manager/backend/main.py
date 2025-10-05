@@ -3403,8 +3403,8 @@ async def seed_orchestration_designs(force: bool = False):
                 "seeded_count": 0
             }
         
-        # Run the seed function (silent mode to avoid console spam)
-        await seed_sample_designs(force=True, silent=True)  # Always force when called via API
+        # Run the seed function (pass the existing db instance, silent mode to avoid console spam)
+        await seed_sample_designs(force=True, silent=True, db=db)  # Pass the connected db instance
         
         # Get the new count
         updated_designs = await db.get_orchestration_designs()
