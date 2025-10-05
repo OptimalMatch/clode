@@ -114,17 +114,6 @@ interface Connection {
   targetHandle?: string;
 }
 
-interface OrchestrationDesign {
-  id?: string;
-  name: string;
-  description: string;
-  blocks: OrchestrationBlock[];
-  connections: Connection[];
-  git_repos: string[];
-  created_at?: string;
-  updated_at?: string;
-}
-
 const OrchestrationDesignerPage: React.FC = () => {
   // Canvas state
   const [blocks, setBlocks] = useState<OrchestrationBlock[]>([]);
