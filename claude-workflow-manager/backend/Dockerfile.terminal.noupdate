@@ -31,7 +31,7 @@ RUN (apt-get install -y --no-install-recommends \
     cmake \
     vim \
     nano \
-    netcat-openbsd 2>/dev/null) || \
+    netcat-traditional 2>/dev/null) || \
     (apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
@@ -58,7 +58,7 @@ RUN (apt-get install -y --no-install-recommends \
     cmake \
     vim \
     nano \
-    netcat-openbsd) \
+    netcat-traditional) \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
