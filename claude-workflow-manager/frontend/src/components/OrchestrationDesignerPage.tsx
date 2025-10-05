@@ -88,8 +88,11 @@ interface OrchestrationBlock {
 
 interface Connection {
   id: string;
-  source: string;
-  target: string;
+  source: string; // block ID
+  target: string; // block ID
+  sourceAgent?: string; // agent ID (optional for agent-level connections)
+  targetAgent?: string; // agent ID (optional for agent-level connections)
+  type: 'block' | 'agent'; // Connection type
   sourceHandle?: string;
   targetHandle?: string;
 }
@@ -120,6 +123,8 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionSource, setConnectionSource] = useState<string | null>(null);
+  const [connectionSourceAgent, setConnectionSourceAgent] = useState<string | null>(null);
+  const [connectionMode, setConnectionMode] = useState<'simple' | 'advanced'>('simple'); // Toggle between modes
   
   // Design metadata
   const [designName, setDesignName] = useState('Untitled Orchestration');
@@ -303,31 +308,41 @@ const OrchestrationDesignerPage: React.FC = () => {
   };
 
   // Handle connection creation
-  const startConnection = (blockId: string) => {
+  const startConnection = (blockId: string, agentId?: string) => {
     setIsConnecting(true);
     setConnectionSource(blockId);
+    setConnectionSourceAgent(agentId || null);
   };
 
-  const completeConnection = (targetBlockId: string) => {
+  const completeConnection = (targetBlockId: string, targetAgentId?: string) => {
     if (!connectionSource || connectionSource === targetBlockId) {
       setIsConnecting(false);
       setConnectionSource(null);
+      setConnectionSourceAgent(null);
       return;
     }
+
+    // Determine connection type
+    const isAgentLevel = !!(connectionSourceAgent || targetAgentId);
 
     const newConnection: Connection = {
       id: `conn-${Date.now()}`,
       source: connectionSource,
       target: targetBlockId,
+      sourceAgent: connectionSourceAgent || undefined,
+      targetAgent: targetAgentId || undefined,
+      type: isAgentLevel ? 'agent' : 'block',
     };
 
     setConnections([...connections, newConnection]);
     setIsConnecting(false);
     setConnectionSource(null);
+    setConnectionSourceAgent(null);
     
+    const connectionType = isAgentLevel ? 'Agent-level' : 'Block-level';
     setSnackbar({
       open: true,
-      message: 'Connection created',
+      message: `${connectionType} connection created`,
       severity: 'success'
     });
   };
@@ -474,10 +489,39 @@ const OrchestrationDesignerPage: React.FC = () => {
           
           if (!sourceBlock || !targetBlock) return null;
 
-          const sourceX = sourceBlock.position.x * zoom + panOffset.x + 150;
-          const sourceY = sourceBlock.position.y * zoom + panOffset.y + 80;
-          const targetX = targetBlock.position.x * zoom + panOffset.x + 150;
-          const targetY = targetBlock.position.y * zoom + panOffset.y + 20;
+          // Calculate connection points based on type
+          let sourceX, sourceY, targetX, targetY;
+          
+          if (conn.type === 'agent' && conn.sourceAgent) {
+            // Agent-level connection - connect from specific agent
+            const agentIndex = sourceBlock.data.agents.findIndex(a => a.id === conn.sourceAgent);
+            const agentOffsetY = 120 + (agentIndex * 35); // Approximate agent position in block
+            sourceX = sourceBlock.position.x * zoom + panOffset.x + 300; // Right edge of block
+            sourceY = sourceBlock.position.y * zoom + panOffset.y + agentOffsetY;
+          } else {
+            // Block-level connection - connect from bottom center
+            sourceX = sourceBlock.position.x * zoom + panOffset.x + 150;
+            sourceY = sourceBlock.position.y * zoom + panOffset.y + 80;
+          }
+
+          if (conn.type === 'agent' && conn.targetAgent) {
+            // Agent-level connection - connect to specific agent
+            const agentIndex = targetBlock.data.agents.findIndex(a => a.id === conn.targetAgent);
+            const agentOffsetY = 120 + (agentIndex * 35);
+            targetX = targetBlock.position.x * zoom + panOffset.x; // Left edge of block
+            targetY = targetBlock.position.y * zoom + panOffset.y + agentOffsetY;
+          } else {
+            // Block-level connection - connect to top center
+            targetX = targetBlock.position.x * zoom + panOffset.x + 150;
+            targetY = targetBlock.position.y * zoom + panOffset.y + 20;
+          }
+
+          // Different colors for different connection types
+          const lineColor = conn.type === 'agent' 
+            ? (darkMode ? '#90caf9' : '#1976d2') // Blue for agent-level
+            : (darkMode ? '#888' : '#666'); // Gray for block-level
+          
+          const lineWidth = conn.type === 'agent' ? 2.5 : 2;
 
           return (
             <g key={conn.id}>
@@ -486,33 +530,47 @@ const OrchestrationDesignerPage: React.FC = () => {
               y1={sourceY}
               x2={targetX}
               y2={targetY}
-              stroke={darkMode ? "#888" : "#666"}
-              strokeWidth={2}
-              markerEnd="url(#arrowhead)"
+              stroke={lineColor}
+              strokeWidth={lineWidth}
+              strokeDasharray={conn.type === 'agent' ? '5,3' : 'none'}
+              markerEnd={conn.type === 'agent' ? 'url(#arrowhead-agent)' : 'url(#arrowhead)'}
               />
-              <circle
-                cx={(sourceX + targetX) / 2}
-                cy={(sourceY + targetY) / 2}
-                r={8}
-                fill={darkMode ? '#2d2d2d' : 'white'}
-                stroke={darkMode ? "#888" : "#666"}
-                strokeWidth={2}
-                style={{ cursor: 'pointer', pointerEvents: 'all' }}
-                onClick={() => deleteConnection(conn.id)}
-              />
-              <line
-                x1={(sourceX + targetX) / 2 - 4}
-                y1={(sourceY + targetY) / 2}
-                x2={(sourceX + targetX) / 2 + 4}
-                y2={(sourceY + targetY) / 2}
-                stroke={darkMode ? "#888" : "#666"}
-                strokeWidth={2}
-                style={{ pointerEvents: 'none' }}
-              />
+              {/* Delete button with connection type indicator */}
+              <g style={{ cursor: 'pointer', pointerEvents: 'all' }} onClick={() => deleteConnection(conn.id)}>
+                <circle
+                  cx={(sourceX + targetX) / 2}
+                  cy={(sourceY + targetY) / 2}
+                  r={10}
+                  fill={darkMode ? '#2d2d2d' : 'white'}
+                  stroke={lineColor}
+                  strokeWidth={2}
+                />
+                <line
+                  x1={(sourceX + targetX) / 2 - 4}
+                  y1={(sourceY + targetY) / 2}
+                  x2={(sourceX + targetX) / 2 + 4}
+                  y2={(sourceY + targetY) / 2}
+                  stroke={lineColor}
+                  strokeWidth={2}
+                  style={{ pointerEvents: 'none' }}
+                />
+                {/* Type indicator - small letter */}
+                <text
+                  x={(sourceX + targetX) / 2}
+                  y={(sourceY + targetY) / 2 - 15}
+                  fontSize="10"
+                  fill={lineColor}
+                  textAnchor="middle"
+                  style={{ pointerEvents: 'none', userSelect: 'none' }}
+                >
+                  {conn.type === 'agent' ? 'A' : 'B'}
+                </text>
+              </g>
             </g>
           );
         })}
         <defs>
+          {/* Block-level arrowhead */}
           <marker
             id="arrowhead"
             markerWidth="10"
@@ -522,6 +580,17 @@ const OrchestrationDesignerPage: React.FC = () => {
             orient="auto"
           >
             <polygon points="0 0, 10 3, 0 6" fill={darkMode ? "#888" : "#666"} />
+          </marker>
+          {/* Agent-level arrowhead */}
+          <marker
+            id="arrowhead-agent"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="3"
+            orient="auto"
+          >
+            <polygon points="0 0, 10 3, 0 6" fill={darkMode ? '#90caf9' : '#1976d2'} />
           </marker>
         </defs>
       </svg>
@@ -536,32 +605,32 @@ const OrchestrationDesignerPage: React.FC = () => {
       const isConnectionTarget = isConnecting && connectionSource !== block.id;
 
       return (
-        <Card
-          key={block.id}
-          sx={{
-            position: 'absolute',
-            left: block.position.x * zoom + panOffset.x,
-            top: block.position.y * zoom + panOffset.y,
-            width: 300,
-            cursor: isDragging && draggedBlock === block.id ? 'grabbing' : 'grab',
-            border: isSelected ? 3 : 1,
-            borderColor: isSelected ? 'primary.main' : (darkMode ? '#444' : 'divider'),
-            boxShadow: isSelected ? 6 : 2,
-            transition: 'all 0.2s',
-            backgroundColor: isConnectionTarget 
-              ? (darkMode ? '#404040' : 'action.hover') 
-              : (darkMode ? '#2d2d2d' : 'background.paper'),
-            color: darkMode ? '#ffffff' : '#000000',
-            zIndex: 2,
-            '&:hover': {
-              boxShadow: 4,
-              borderColor: 'primary.light',
-            }
-          }}
-          onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
-          onClick={() => !isDragging && handleBlockClick(block)}
-        >
-          <CardContent>
+        <Box key={block.id} sx={{ position: 'relative' }}>
+          <Card
+            sx={{
+              position: 'absolute',
+              left: block.position.x * zoom + panOffset.x,
+              top: block.position.y * zoom + panOffset.y,
+              width: 300,
+              cursor: isDragging && draggedBlock === block.id ? 'grabbing' : 'grab',
+              border: isSelected ? 3 : 1,
+              borderColor: isSelected ? 'primary.main' : (darkMode ? '#444' : 'divider'),
+              boxShadow: isSelected ? 6 : 2,
+              transition: 'all 0.2s',
+              backgroundColor: isConnectionTarget 
+                ? (darkMode ? '#404040' : 'action.hover') 
+                : (darkMode ? '#2d2d2d' : 'background.paper'),
+              color: darkMode ? '#ffffff' : '#000000',
+              zIndex: 2,
+              '&:hover': {
+                boxShadow: 4,
+                borderColor: 'primary.light',
+              }
+            }}
+            onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
+            onClick={() => !isDragging && handleBlockClick(block)}
+          >
+            <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <DragIndicator sx={{ mr: 1, color: 'text.secondary' }} />
               <Typography variant="h6" sx={{ fontSize: '1.1rem' }}>
@@ -585,9 +654,91 @@ const OrchestrationDesignerPage: React.FC = () => {
               sx={{ mb: 1, backgroundColor: pattern?.color, color: 'white' }}
             />
             
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              {block.data.agents.length} agent{block.data.agents.length !== 1 ? 's' : ''}
-            </Typography>
+            <Divider sx={{ my: 1 }} />
+            
+            {/* Agent list with connection handles (in advanced mode) */}
+            {connectionMode === 'advanced' && block.data.agents.map((agent, index) => (
+              <Box 
+                key={agent.id} 
+                sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  py: 0.5,
+                  px: 1,
+                  mb: 0.5,
+                  borderRadius: 1,
+                  backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
+                  '&:hover': {
+                    backgroundColor: darkMode ? '#333' : '#e0e0e0',
+                  }
+                }}
+              >
+                {/* Input handle (left) */}
+                <Tooltip title="Connect input to this agent">
+                  <Box
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isConnecting && connectionSource) {
+                        completeConnection(block.id, agent.id);
+                      }
+                    }}
+                    sx={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      backgroundColor: isConnecting 
+                        ? (darkMode ? '#90caf9' : '#1976d2')
+                        : (darkMode ? '#666' : '#999'),
+                      cursor: isConnecting ? 'pointer' : 'default',
+                      border: 2,
+                      borderColor: darkMode ? '#444' : '#ddd',
+                      '&:hover': {
+                        backgroundColor: darkMode ? '#90caf9' : '#1976d2',
+                        transform: 'scale(1.3)',
+                      },
+                      transition: 'all 0.2s',
+                    }}
+                  />
+                </Tooltip>
+                
+                <Typography variant="caption" sx={{ flex: 1, mx: 1, fontSize: '0.7rem' }}>
+                  {agent.name}
+                </Typography>
+                
+                {/* Output handle (right) */}
+                <Tooltip title="Connect output from this agent">
+                  <Box
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startConnection(block.id, agent.id);
+                    }}
+                    sx={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      backgroundColor: (isConnecting && connectionSource === block.id && connectionSourceAgent === agent.id)
+                        ? (darkMode ? '#90caf9' : '#1976d2')
+                        : (darkMode ? '#666' : '#999'),
+                      cursor: 'pointer',
+                      border: 2,
+                      borderColor: darkMode ? '#444' : '#ddd',
+                      '&:hover': {
+                        backgroundColor: darkMode ? '#90caf9' : '#1976d2',
+                        transform: 'scale(1.3)',
+                      },
+                      transition: 'all 0.2s',
+                    }}
+                  />
+                </Tooltip>
+              </Box>
+            ))}
+            
+            {connectionMode === 'simple' && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                {block.data.agents.length} agent{block.data.agents.length !== 1 ? 's' : ''}
+              </Typography>
+            )}
             
             {block.data.git_repo && (
               <Chip
@@ -627,6 +778,7 @@ const OrchestrationDesignerPage: React.FC = () => {
             </Box>
           </CardContent>
         </Card>
+        </Box>
       );
     });
   };
@@ -803,6 +955,37 @@ const OrchestrationDesignerPage: React.FC = () => {
               <strong>Tip:</strong> Click on patterns to add them to the canvas. Connect blocks to create complex workflows!
             </Typography>
           </Alert>
+
+          <Divider sx={{ my: 2 }} />
+          
+          {/* Connection Mode Toggle */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+              Connection Mode
+            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={connectionMode === 'advanced'}
+                  onChange={(e) => setConnectionMode(e.target.checked ? 'advanced' : 'simple')}
+                  size="small"
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="caption" sx={{ display: 'block', color: darkMode ? '#ffffff' : 'inherit' }}>
+                    {connectionMode === 'advanced' ? '⚡ Advanced' : '🔄 Simple'}
+                  </Typography>
+                  <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem', color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
+                    {connectionMode === 'advanced' 
+                      ? 'Connect individual agents' 
+                      : 'Connect entire blocks'}
+                  </Typography>
+                </Box>
+              }
+              sx={{ ml: 0 }}
+            />
+          </Box>
         </Paper>
 
         {/* Canvas */}
