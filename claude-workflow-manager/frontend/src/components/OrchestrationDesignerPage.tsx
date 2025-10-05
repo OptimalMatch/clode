@@ -1233,7 +1233,7 @@ Format your response as JSON:
           }
         } else {
           // Also try from the final result
-          const output = result.final_result || result.steps?.[0]?.output || '';
+          const output = result.result?.final_result || result.result?.steps?.[0]?.output || '';
           const jsonMatch2 = output.match(/\{[\s\S]*"suggestions"[\s\S]*\}/);
           if (jsonMatch2) {
             const parsed = JSON.parse(jsonMatch2[0]);
@@ -1269,7 +1269,7 @@ Format your response as JSON:
       // Parse suggestions from response
       try {
         const result = response.data;
-        const output = result.final_result || result.steps?.[0]?.output || '';
+        const output = result.result?.final_result || result.result?.steps?.[0]?.output || '';
         
         // Try to extract JSON from the response
         const jsonMatch = output.match(/\{[\s\S]*"suggestions"[\s\S]*\}/);
