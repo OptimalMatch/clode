@@ -63,8 +63,8 @@ import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent
 import { Workflow } from '../types';
 
 // Orchestration pattern types
-type OrchestrationPattern = 'sequential' | 'parallel' | 'hierarchical' | 'debate' | 'routing';
-type AgentRole = 'manager' | 'worker' | 'specialist' | 'moderator';
+type OrchestrationPattern = 'sequential' | 'parallel' | 'hierarchical' | 'debate' | 'routing' | 'reflection';
+type AgentRole = 'manager' | 'worker' | 'specialist' | 'moderator' | 'reflector';
 
 interface Agent {
   id: string;
@@ -76,6 +76,15 @@ interface Agent {
   startTime?: number; // Timestamp when agent started executing
   elapsedMs?: number; // Live elapsed time in milliseconds
   duration_ms?: number; // Final duration when completed
+}
+
+interface PromptSuggestion {
+  blockId: string;
+  agentId: string;
+  agentName: string;
+  currentPrompt: string;
+  suggestedPrompt: string;
+  reasoning: string;
 }
 
 interface OrchestrationBlock {
@@ -157,6 +166,8 @@ const OrchestrationDesignerPage: React.FC = () => {
     const saved = localStorage.getItem('orchestrationDesignerDarkMode');
     return saved ? JSON.parse(saved) : false;
   });
+  const [promptSuggestions, setPromptSuggestions] = useState<PromptSuggestion[]>([]);
+  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = useState(false);
   
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -242,6 +253,14 @@ const OrchestrationDesignerPage: React.FC = () => {
       description: 'Routes to appropriate specialist',
       emoji: '🎯',
       color: '#F44336'
+    },
+    {
+      id: 'reflection',
+      name: 'Reflection',
+      icon: <Psychology />,
+      description: 'Analyzes and improves agent prompts',
+      emoji: '🔍',
+      color: '#00BCD4'
     },
   ];
 
@@ -876,6 +895,8 @@ const OrchestrationDesignerPage: React.FC = () => {
         return await executeDebate(block, task);
       case 'routing':
         return await executeRouting(block, task);
+      case 'reflection':
+        return await executeReflection(block, task);
       default:
         throw new Error(`Unknown orchestration pattern: ${block.type}`);
     }
@@ -1111,6 +1132,136 @@ const OrchestrationDesignerPage: React.FC = () => {
       });
       return response.data;
     }
+  };
+
+  // Execute reflection orchestration
+  const executeReflection = async (block: OrchestrationBlock, task: string) => {
+    // Clear previous streaming outputs
+    clearBlockStreamingOutputs(block.id);
+    
+    // Collect current design information for reflection
+    const designContext = {
+      blocks: blocks.map(b => ({
+        id: b.id,
+        type: b.type,
+        label: b.data.label,
+        task: b.data.task,
+        agents: b.data.agents.map(a => ({
+          id: a.id,
+          name: a.name,
+          system_prompt: a.system_prompt,
+          role: a.role
+        }))
+      })),
+      connections: connections,
+      executionResults: Object.fromEntries(executionResults)
+    };
+    
+    // Prepare reflection task with design context
+    const reflectionTask = `${task}
+
+DESIGN CONTEXT:
+${JSON.stringify(designContext, null, 2)}
+
+Please analyze the agent prompts and execution results. For each agent that could be improved, provide:
+1. The block ID and agent ID
+2. The agent name
+3. The current prompt
+4. A suggested improved prompt
+5. Your reasoning for the improvement
+
+Format your response as JSON:
+{
+  "suggestions": [
+    {
+      "blockId": "block-123",
+      "agentId": "agent-456",
+      "agentName": "Agent Name",
+      "currentPrompt": "...",
+      "suggestedPrompt": "...",
+      "reasoning": "..."
+    }
+  ]
+}`;
+
+    const reflector = block.data.agents[0]; // Assume first agent is the reflector
+    
+    if (!reflector) {
+      throw new Error('Reflection orchestration requires at least one reflector agent');
+    }
+    
+    // Clear previous streaming outputs
+    updateAgentStatus(block.id, reflector.name, 'executing');
+    
+    // Call API with reflection task (using sequential for simplicity)
+    const response = await api.post('/api/orchestration/sequential', {
+      agents: [{
+        name: reflector.name,
+        system_prompt: reflector.system_prompt,
+        role: reflector.role
+      }],
+      task: reflectionTask,
+      agent_sequence: [reflector.name]
+    });
+    
+    updateAgentStatus(block.id, reflector.name, 'completed');
+    
+    // Parse suggestions from response
+    try {
+      const result = response.data;
+      const output = result.final_result || result.steps?.[0]?.output || '';
+      
+      // Try to extract JSON from the response
+      const jsonMatch = output.match(/\{[\s\S]*"suggestions"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+          setPromptSuggestions(parsed.suggestions);
+          setSuggestionsDialogOpen(true);
+          
+          setSnackbar({
+            open: true,
+            message: `Reflection complete! Found ${parsed.suggestions.length} improvement suggestion(s).`,
+            severity: 'success'
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to parse reflection suggestions:', error);
+    }
+    
+    return response.data;
+  };
+
+  // Apply a prompt suggestion to update an agent's prompt
+  const applySuggestion = (suggestion: PromptSuggestion) => {
+    setBlocks(prev => prev.map(block => {
+      if (block.id === suggestion.blockId) {
+        return {
+          ...block,
+          data: {
+            ...block.data,
+            agents: block.data.agents.map(agent => 
+              agent.id === suggestion.agentId
+                ? { ...agent, system_prompt: suggestion.suggestedPrompt }
+                : agent
+            )
+          }
+        };
+      }
+      return block;
+    }));
+    
+    // Remove applied suggestion
+    setPromptSuggestions(prev => prev.filter(s => 
+      !(s.blockId === suggestion.blockId && s.agentId === suggestion.agentId)
+    ));
+    
+    setSnackbar({
+      open: true,
+      message: `Applied suggestion for ${suggestion.agentName}`,
+      severity: 'success'
+    });
   };
 
   // Render connections as SVG curved paths
@@ -2297,6 +2448,122 @@ const OrchestrationDesignerPage: React.FC = () => {
         <DialogActions>
           <Button 
             onClick={() => setResultsDialogOpen(false)}
+            sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Prompt Suggestions Dialog */}
+      <Dialog
+        open={suggestionsDialogOpen}
+        onClose={() => setSuggestionsDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+          Reflection: Prompt Improvement Suggestions
+        </DialogTitle>
+        <DialogContent>
+          {promptSuggestions.length > 0 ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+              {promptSuggestions.map((suggestion, index) => (
+                <Card 
+                  key={index}
+                  sx={{ 
+                    backgroundColor: darkMode ? '#2d2d2d' : '#f5f5f5',
+                    border: '1px solid',
+                    borderColor: darkMode ? '#444' : '#ddd'
+                  }}
+                >
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 1, color: darkMode ? '#ffffff' : 'inherit' }}>
+                      {suggestion.agentName}
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ color: '#00BCD4', fontWeight: 'bold', mb: 1 }}>
+                      Reasoning:
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 2, color: darkMode ? '#aaa' : '#666' }}>
+                      {suggestion.reasoning}
+                    </Typography>
+                    
+                    <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="subtitle2" sx={{ color: '#F44336', fontWeight: 'bold', mb: 1 }}>
+                          Current Prompt:
+                        </Typography>
+                        <Paper sx={{ p: 1.5, backgroundColor: darkMode ? '#1a1a1a' : '#fff', maxHeight: 150, overflow: 'auto' }}>
+                          <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                            {suggestion.currentPrompt}
+                          </Typography>
+                        </Paper>
+                      </Box>
+                      
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="subtitle2" sx={{ color: '#4CAF50', fontWeight: 'bold', mb: 1 }}>
+                          Suggested Prompt:
+                        </Typography>
+                        <Paper sx={{ p: 1.5, backgroundColor: darkMode ? '#1a1a1a' : '#fff', maxHeight: 150, overflow: 'auto' }}>
+                          <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                            {suggestion.suggestedPrompt}
+                          </Typography>
+                        </Paper>
+                      </Box>
+                    </Box>
+                    
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => {
+                          setPromptSuggestions(prev => prev.filter((_, i) => i !== index));
+                        }}
+                        sx={{ color: darkMode ? '#fff' : 'inherit' }}
+                      >
+                        Dismiss
+                      </Button>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        color="success"
+                        onClick={() => applySuggestion(suggestion)}
+                      >
+                        Apply Change
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          ) : (
+            <Typography sx={{ color: darkMode ? '#aaa' : '#666', textAlign: 'center', py: 4 }}>
+              No suggestions available
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              // Apply all suggestions
+              promptSuggestions.forEach(suggestion => applySuggestion(suggestion));
+              setSuggestionsDialogOpen(false);
+            }}
+            variant="contained"
+            color="success"
+            disabled={promptSuggestions.length === 0}
+          >
+            Apply All
+          </Button>
+          <Button 
+            onClick={() => setSuggestionsDialogOpen(false)}
             sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
           >
             Close
