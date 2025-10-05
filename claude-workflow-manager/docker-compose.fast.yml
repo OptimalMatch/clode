@@ -19,9 +19,7 @@ services:
   mcp-server:
     build:
       context: ./backend
-      dockerfile: Dockerfile.fast
-      args:
-        BASE_IMAGE: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-org}/claude-workflow-backend-base:${BASE_IMAGE_TAG:-latest}
+      dockerfile: Dockerfile.mcp
     image: claude-mcp:fast
 
   frontend:

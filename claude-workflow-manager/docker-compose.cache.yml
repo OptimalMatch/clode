@@ -24,7 +24,7 @@ services:
   mcp-server:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.mcp
       cache_from:
         - python:3.11-slim
       target: final

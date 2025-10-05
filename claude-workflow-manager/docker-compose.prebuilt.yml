@@ -15,7 +15,7 @@ services:
   mcp-server:
     build:
       context: ./backend
-      dockerfile: Dockerfile.prebuilt
+      dockerfile: Dockerfile.mcp
     image: claude-mcp:prebuilt
 
   frontend:
