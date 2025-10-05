@@ -121,9 +121,10 @@ services:
       - mongodb
 
   mcp-server:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.mcp
     container_name: claude-workflow-mcp
-    # Note: No 'user: claude' here - let the Dockerfile handle user management
     restart: always
     environment:
       BACKEND_URL: http://backend:8000

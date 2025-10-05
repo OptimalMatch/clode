@@ -1,0 +1,51 @@
+# Lightweight MCP Server Dockerfile
+# No Docker-in-Docker needed - just a Python HTTP/TCP server
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional MCP-specific dependencies
+RUN pip install --no-cache-dir \
+    httpx \
+    websockets \
+    mcp
+
+# Create non-root user
+RUN useradd -m -u 1000 -s /bin/bash claude && \
+    mkdir -p /app && \
+    chown -R claude:claude /app
+
+# Copy application files
+COPY mcp_server.py .
+COPY models.py .
+COPY database.py .
+COPY auth_utils.py .
+
+# Switch to non-root user
+USER claude
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Expose MCP TCP port
+EXPOSE 8002
+
+# Health check (TCP port check)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD nc -z localhost 8002 || exit 1
+
+# Run MCP server
+CMD ["python", "mcp_server.py"]
+
