@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     vim \
     nano \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI only (for docker exec to backend container)
