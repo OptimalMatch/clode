@@ -52,6 +52,8 @@ import {
   Stop,
   Refresh,
   DragIndicator,
+  LightMode,
+  DarkMode,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { workflowApi } from '../services/api';
@@ -132,8 +134,17 @@ const OrchestrationDesignerPage: React.FC = () => {
     severity: 'success'
   });
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('orchestrationDesignerDarkMode');
+    return saved ? JSON.parse(saved) : false;
+  });
   
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Persist dark mode preference
+  useEffect(() => {
+    localStorage.setItem('orchestrationDesignerDarkMode', JSON.stringify(darkMode));
+  }, [darkMode]);
 
   // Fetch workflows for git repo selection
   const { data: workflows = [] } = useQuery({
@@ -469,20 +480,20 @@ const OrchestrationDesignerPage: React.FC = () => {
           return (
             <g key={conn.id}>
               <line
-                x1={sourceX}
-                y1={sourceY}
-                x2={targetX}
-                y2={targetY}
-                stroke="#666"
-                strokeWidth={2}
-                markerEnd="url(#arrowhead)"
+              x1={sourceX}
+              y1={sourceY}
+              x2={targetX}
+              y2={targetY}
+              stroke={darkMode ? "#888" : "#666"}
+              strokeWidth={2}
+              markerEnd="url(#arrowhead)"
               />
               <circle
                 cx={(sourceX + targetX) / 2}
                 cy={(sourceY + targetY) / 2}
                 r={8}
-                fill="white"
-                stroke="#666"
+                fill={darkMode ? '#2d2d2d' : 'white'}
+                stroke={darkMode ? "#888" : "#666"}
                 strokeWidth={2}
                 style={{ cursor: 'pointer', pointerEvents: 'all' }}
                 onClick={() => deleteConnection(conn.id)}
@@ -492,7 +503,7 @@ const OrchestrationDesignerPage: React.FC = () => {
                 y1={(sourceY + targetY) / 2}
                 x2={(sourceX + targetX) / 2 + 4}
                 y2={(sourceY + targetY) / 2}
-                stroke="#666"
+                stroke={darkMode ? "#888" : "#666"}
                 strokeWidth={2}
                 style={{ pointerEvents: 'none' }}
               />
@@ -508,7 +519,7 @@ const OrchestrationDesignerPage: React.FC = () => {
             refY="3"
             orient="auto"
           >
-            <polygon points="0 0, 10 3, 0 6" fill="#666" />
+            <polygon points="0 0, 10 3, 0 6" fill={darkMode ? "#888" : "#666"} />
           </marker>
         </defs>
       </svg>
@@ -532,10 +543,13 @@ const OrchestrationDesignerPage: React.FC = () => {
             width: 300,
             cursor: isDragging && draggedBlock === block.id ? 'grabbing' : 'grab',
             border: isSelected ? 3 : 1,
-            borderColor: isSelected ? 'primary.main' : 'divider',
+            borderColor: isSelected ? 'primary.main' : (darkMode ? '#444' : 'divider'),
             boxShadow: isSelected ? 6 : 2,
             transition: 'all 0.2s',
-            backgroundColor: isConnectionTarget ? 'action.hover' : 'background.paper',
+            backgroundColor: isConnectionTarget 
+              ? (darkMode ? '#404040' : 'action.hover') 
+              : (darkMode ? '#2d2d2d' : 'background.paper'),
+            color: darkMode ? '#ffffff' : '#000000',
             zIndex: 2,
             '&:hover': {
               boxShadow: 4,
@@ -616,18 +630,56 @@ const OrchestrationDesignerPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ 
+      height: '100vh', 
+      display: 'flex', 
+      flexDirection: 'column',
+      backgroundColor: darkMode ? '#121212' : '#ffffff',
+      color: darkMode ? '#ffffff' : '#000000',
+    }}>
       {/* Header */}
-      <Paper sx={{ p: 2, borderRadius: 0 }}>
+      <Paper sx={{ 
+        p: 2, 
+        borderRadius: 0,
+        backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+        color: darkMode ? '#ffffff' : '#000000',
+      }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box>
-            <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
-              <Psychology sx={{ mr: 1 }} />
-              Orchestration Designer
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Design complex multi-agent orchestration workflows
-            </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Psychology fontSize="large" sx={{ color: darkMode ? '#bb86fc' : 'primary.main' }} />
+            <Box>
+              <Typography variant="h5" sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+                Orchestration Designer
+              </Typography>
+              <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
+                Design complex multi-agent orchestration workflows
+              </Typography>
+            </Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={darkMode}
+                  onChange={(e) => setDarkMode(e.target.checked)}
+                  icon={<LightMode />}
+                  checkedIcon={<DarkMode />}
+                  sx={{
+                    '& .MuiSwitch-thumb': {
+                      backgroundColor: darkMode ? '#bb86fc' : '#1976d2',
+                    },
+                    '& .MuiSwitch-track': {
+                      backgroundColor: darkMode ? '#6200ea' : '#42a5f5',
+                    }
+                  }}
+                />
+              }
+              label={darkMode ? 'Dark' : 'Light'}
+              sx={{
+                '& .MuiFormControlLabel-label': {
+                  color: darkMode ? '#ffffff' : 'inherit',
+                  fontSize: '0.875rem'
+                }
+              }}
+            />
           </Box>
           
           <Box sx={{ display: 'flex', gap: 1 }}>
@@ -669,11 +721,18 @@ const OrchestrationDesignerPage: React.FC = () => {
 
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Sidebar - Pattern Library */}
-        <Paper sx={{ width: 280, p: 2, borderRadius: 0, overflowY: 'auto' }}>
-          <Typography variant="h6" gutterBottom>
+        <Paper sx={{ 
+          width: 280, 
+          p: 2, 
+          borderRadius: 0, 
+          overflowY: 'auto',
+          backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+          color: darkMode ? '#ffffff' : '#000000',
+        }}>
+          <Typography variant="h6" gutterBottom sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
             Orchestration Patterns
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography variant="body2" sx={{ mb: 2, color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
             Drag patterns onto the canvas to build your workflow
           </Typography>
           
@@ -684,11 +743,12 @@ const OrchestrationDesignerPage: React.FC = () => {
                 sx={{
                   mb: 1,
                   border: 1,
-                  borderColor: 'divider',
+                  borderColor: darkMode ? '#444' : 'divider',
                   borderRadius: 1,
                   cursor: 'pointer',
+                  backgroundColor: darkMode ? '#2d2d2d' : 'transparent',
                   '&:hover': {
-                    backgroundColor: 'action.hover',
+                    backgroundColor: darkMode ? '#404040' : 'action.hover',
                     borderColor: 'primary.main',
                   }
                 }}
@@ -715,7 +775,7 @@ const OrchestrationDesignerPage: React.FC = () => {
                     </Typography>
                   }
                   secondary={
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
                       {pattern.description}
                     </Typography>
                   }
@@ -726,7 +786,17 @@ const OrchestrationDesignerPage: React.FC = () => {
 
           <Divider sx={{ my: 2 }} />
 
-          <Alert severity="info" sx={{ mb: 2 }}>
+          <Alert 
+            severity="info" 
+            sx={{ 
+              mb: 2,
+              backgroundColor: darkMode ? '#1a2332' : undefined,
+              color: darkMode ? '#90caf9' : undefined,
+              '& .MuiAlert-icon': {
+                color: darkMode ? '#90caf9' : undefined,
+              }
+            }}
+          >
             <Typography variant="caption">
               <strong>Tip:</strong> Click on patterns to add them to the canvas. Connect blocks to create complex workflows!
             </Typography>
@@ -739,8 +809,10 @@ const OrchestrationDesignerPage: React.FC = () => {
           sx={{
             flex: 1,
             position: 'relative',
-            backgroundColor: '#f5f5f5',
-            backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
+            backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
+            backgroundImage: darkMode 
+              ? 'radial-gradient(circle, #333 1px, transparent 1px)'
+              : 'radial-gradient(circle, #ccc 1px, transparent 1px)',
             backgroundSize: '20px 20px',
             overflow: 'hidden',
           }}
@@ -756,7 +828,7 @@ const OrchestrationDesignerPage: React.FC = () => {
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
                 textAlign: 'center',
-                color: 'text.secondary',
+                color: darkMode ? '#666' : 'text.secondary',
               }}
             >
               <Psychology sx={{ fontSize: 80, opacity: 0.3, mb: 2 }} />
@@ -776,13 +848,20 @@ const OrchestrationDesignerPage: React.FC = () => {
         anchor="right"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        sx={{ '& .MuiDrawer-paper': { width: 500, p: 3 } }}
+        sx={{ 
+          '& .MuiDrawer-paper': { 
+            width: 500, 
+            p: 3,
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          } 
+        }}
       >
         {selectedBlock && (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-              <Settings sx={{ mr: 1 }} />
-              <Typography variant="h6">
+              <Settings sx={{ mr: 1, color: darkMode ? '#bb86fc' : 'inherit' }} />
+              <Typography variant="h6" sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
                 Configure {selectedBlock.data.label}
               </Typography>
             </Box>
@@ -792,7 +871,14 @@ const OrchestrationDesignerPage: React.FC = () => {
               label="Block Label"
               value={selectedBlock.data.label}
               onChange={(e) => updateBlock({ data: { ...selectedBlock.data, label: e.target.value } })}
-              sx={{ mb: 2 }}
+              sx={{ 
+                mb: 2,
+                '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
+                '& .MuiOutlinedInput-root': {
+                  color: darkMode ? '#ffffff' : undefined,
+                  '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+                }
+              }}
             />
 
             <TextField
@@ -802,16 +888,46 @@ const OrchestrationDesignerPage: React.FC = () => {
               label="Task Description"
               value={selectedBlock.data.task || ''}
               onChange={(e) => updateBlock({ data: { ...selectedBlock.data, task: e.target.value } })}
-              sx={{ mb: 2 }}
+              sx={{ 
+                mb: 2,
+                '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
+                '& .MuiOutlinedInput-root': {
+                  color: darkMode ? '#ffffff' : undefined,
+                  '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+                }
+              }}
             />
 
             {/* Git Repository Selection */}
             <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Git Repository</InputLabel>
+              <InputLabel sx={{ color: darkMode ? '#b0b0b0' : undefined }}>Git Repository</InputLabel>
               <Select
                 value={selectedBlock.data.git_repo || ''}
                 label="Git Repository"
                 onChange={(e) => updateBlock({ data: { ...selectedBlock.data, git_repo: e.target.value } })}
+                sx={{
+                  color: darkMode ? '#ffffff' : undefined,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: darkMode ? '#555' : undefined,
+                  },
+                  '& .MuiSvgIcon-root': {
+                    color: darkMode ? '#ffffff' : undefined,
+                  }
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      backgroundColor: darkMode ? '#2d2d2d' : '#ffffff',
+                      color: darkMode ? '#ffffff' : '#000000',
+                      '& .MuiMenuItem-root': {
+                        color: darkMode ? '#ffffff' : '#000000',
+                        '&:hover': {
+                          backgroundColor: darkMode ? '#404040' : 'rgba(0, 0, 0, 0.04)',
+                        }
+                      }
+                    }
+                  }
+                }}
               >
                 <MenuItem value="">
                   <em>None</em>
@@ -831,7 +947,14 @@ const OrchestrationDesignerPage: React.FC = () => {
                 label="Number of Rounds"
                 value={selectedBlock.data.rounds || 3}
                 onChange={(e) => updateBlock({ data: { ...selectedBlock.data, rounds: parseInt(e.target.value) } })}
-                sx={{ mb: 2 }}
+                sx={{ 
+                  mb: 2,
+                  '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
+                  '& .MuiOutlinedInput-root': {
+                    color: darkMode ? '#ffffff' : undefined,
+                    '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+                  }
+                }}
               />
             )}
 
@@ -839,7 +962,7 @@ const OrchestrationDesignerPage: React.FC = () => {
 
             {/* Agents Configuration */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
+              <Typography variant="h6" sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
                 Agents ({selectedBlock.data.agents.length})
               </Typography>
               <Button
@@ -852,11 +975,34 @@ const OrchestrationDesignerPage: React.FC = () => {
             </Box>
 
             {selectedBlock.data.agents.map((agent, index) => (
-              <Accordion key={agent.id} defaultExpanded={index === 0}>
-                <AccordionSummary expandIcon={<ExpandMore />}>
-                  <Typography>
+              <Accordion 
+                key={agent.id} 
+                defaultExpanded={index === 0}
+                sx={{
+                  backgroundColor: darkMode ? '#2d2d2d' : undefined,
+                  color: darkMode ? '#ffffff' : undefined,
+                  '&:before': {
+                    backgroundColor: darkMode ? '#444' : undefined,
+                  }
+                }}
+              >
+                <AccordionSummary 
+                  expandIcon={<ExpandMore sx={{ color: darkMode ? '#ffffff' : undefined }} />}
+                  sx={{
+                    backgroundColor: darkMode ? '#2d2d2d' : undefined,
+                  }}
+                >
+                  <Typography sx={{ color: darkMode ? '#ffffff' : undefined }}>
                     {agent.name || `Agent ${index + 1}`}
-                    <Chip label={agent.role} size="small" sx={{ ml: 1 }} />
+                    <Chip 
+                      label={agent.role} 
+                      size="small" 
+                      sx={{ 
+                        ml: 1,
+                        backgroundColor: darkMode ? '#424242' : undefined,
+                        color: darkMode ? '#ffffff' : undefined,
+                      }} 
+                    />
                   </Typography>
                 </AccordionSummary>
                 <AccordionDetails>
@@ -866,14 +1012,44 @@ const OrchestrationDesignerPage: React.FC = () => {
                       label="Agent Name"
                       value={agent.name}
                       onChange={(e) => updateAgent(agent.id, { name: e.target.value })}
+                      sx={{
+                        '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
+                        '& .MuiOutlinedInput-root': {
+                          color: darkMode ? '#ffffff' : undefined,
+                          '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+                        }
+                      }}
                     />
                     
                     <FormControl fullWidth>
-                      <InputLabel>Role</InputLabel>
+                      <InputLabel sx={{ color: darkMode ? '#b0b0b0' : undefined }}>Role</InputLabel>
                       <Select
                         value={agent.role}
                         label="Role"
                         onChange={(e) => updateAgent(agent.id, { role: e.target.value as AgentRole })}
+                        sx={{
+                          color: darkMode ? '#ffffff' : undefined,
+                          '& .MuiOutlinedInput-notchedOutline': {
+                            borderColor: darkMode ? '#555' : undefined,
+                          },
+                          '& .MuiSvgIcon-root': {
+                            color: darkMode ? '#ffffff' : undefined,
+                          }
+                        }}
+                        MenuProps={{
+                          PaperProps: {
+                            sx: {
+                              backgroundColor: darkMode ? '#2d2d2d' : '#ffffff',
+                              color: darkMode ? '#ffffff' : '#000000',
+                              '& .MuiMenuItem-root': {
+                                color: darkMode ? '#ffffff' : '#000000',
+                                '&:hover': {
+                                  backgroundColor: darkMode ? '#404040' : 'rgba(0, 0, 0, 0.04)',
+                                }
+                              }
+                            }
+                          }
+                        }}
                       >
                         <MenuItem value="worker">Worker</MenuItem>
                         <MenuItem value="manager">Manager</MenuItem>
@@ -890,6 +1066,13 @@ const OrchestrationDesignerPage: React.FC = () => {
                       value={agent.system_prompt}
                       onChange={(e) => updateAgent(agent.id, { system_prompt: e.target.value })}
                       placeholder="Define the agent's role, personality, and instructions..."
+                      sx={{
+                        '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
+                        '& .MuiOutlinedInput-root': {
+                          color: darkMode ? '#ffffff' : undefined,
+                          '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+                        }
+                      }}
                     />
 
                     <Button
@@ -911,15 +1094,36 @@ const OrchestrationDesignerPage: React.FC = () => {
       </Drawer>
 
       {/* Save Dialog */}
-      <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Save Orchestration Design</DialogTitle>
+      <Dialog 
+        open={saveDialogOpen} 
+        onClose={() => setSaveDialogOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+          Save Orchestration Design
+        </DialogTitle>
         <DialogContent>
           <TextField
             fullWidth
             label="Design Name"
             value={designName}
             onChange={(e) => setDesignName(e.target.value)}
-            sx={{ mb: 2, mt: 1 }}
+            sx={{ 
+              mb: 2, 
+              mt: 1,
+              '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
+              '& .MuiOutlinedInput-root': {
+                color: darkMode ? '#ffffff' : undefined,
+                '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+              }
+            }}
           />
           <TextField
             fullWidth
@@ -928,11 +1132,32 @@ const OrchestrationDesignerPage: React.FC = () => {
             label="Description"
             value={designDescription}
             onChange={(e) => setDesignDescription(e.target.value)}
+            sx={{
+              '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
+              '& .MuiOutlinedInput-root': {
+                color: darkMode ? '#ffffff' : undefined,
+                '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+              }
+            }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-          <Button onClick={saveDesign} variant="contained">
+          <Button 
+            onClick={() => setSaveDialogOpen(false)}
+            sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={saveDesign} 
+            variant="contained"
+            sx={{ 
+              backgroundColor: darkMode ? '#bb86fc' : undefined,
+              '&:hover': {
+                backgroundColor: darkMode ? '#9965d4' : undefined,
+              }
+            }}
+          >
             Save
           </Button>
         </DialogActions>
