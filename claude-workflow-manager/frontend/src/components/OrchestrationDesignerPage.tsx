@@ -58,7 +58,7 @@ import {
   LightMode,
   DarkMode,
 } from '@mui/icons-material';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent } from '../services/api';
 import { Workflow } from '../types';
 
@@ -162,6 +162,8 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [designToDelete, setDesignToDelete] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('orchestrationDesignerDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -210,6 +212,26 @@ const OrchestrationDesignerPage: React.FC = () => {
     queryKey: ['orchestration-designs'],
     queryFn: orchestrationDesignApi.getAll,
     enabled: loadDialogOpen, // Only fetch when load dialog is open
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: orchestrationDesignApi.delete,
+    onSuccess: () => {
+      refetchDesigns();
+      setSnackbar({
+        open: true,
+        message: 'Design deleted successfully',
+        severity: 'success',
+      });
+    },
+    onError: (error: any) => {
+      setSnackbar({
+        open: true,
+        message: `Failed to delete design: ${error.message}`,
+        severity: 'error',
+      });
+    },
   });
 
   // Available orchestration patterns
@@ -564,6 +586,26 @@ const OrchestrationDesignerPage: React.FC = () => {
     } finally {
       setSeeding(false);
     }
+  };
+
+  // Handle delete design
+  const handleDeleteClick = (e: React.MouseEvent, designId: string) => {
+    e.stopPropagation(); // Prevent loading the design
+    setDesignToDelete(designId);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (designToDelete) {
+      deleteMutation.mutate(designToDelete);
+      setDeleteConfirmOpen(false);
+      setDesignToDelete(null);
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmOpen(false);
+    setDesignToDelete(null);
   };
 
   // Execute orchestration workflow
@@ -2406,6 +2448,22 @@ Format your response as JSON:
                     }
                   }}
                   onClick={() => loadDesign(design)}
+                  secondaryAction={
+                    <Tooltip title="Delete design">
+                      <IconButton
+                        edge="end"
+                        onClick={(e) => handleDeleteClick(e, design.id!)}
+                        sx={{
+                          color: darkMode ? '#ff6b6b' : 'error.main',
+                          '&:hover': {
+                            backgroundColor: darkMode ? 'rgba(255, 107, 107, 0.1)' : 'error.light',
+                          }
+                        }}
+                      >
+                        <Delete />
+                      </IconButton>
+                    </Tooltip>
+                  }
                 >
                   <ListItemIcon>
                     <AccountTree sx={{ color: darkMode ? '#bb86fc' : 'primary.main' }} />
@@ -2628,6 +2686,43 @@ Format your response as JSON:
             sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
           >
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={cancelDelete}
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+          Confirm Delete
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
+            Are you sure you want to delete this design? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={cancelDelete}
+            sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={confirmDelete}
+            variant="contained"
+            color="error"
+            disabled={deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>
