@@ -16,14 +16,16 @@ SAMPLE_DESIGN_NAMES = [
     "Full-Stack Development Workflow"
 ]
 
-async def seed_sample_designs(force=False, silent=False):
+async def seed_sample_designs(force=False, silent=False, db=None):
     """Create sample orchestration designs demonstrating various patterns
     
     Args:
         force (bool): If True, will seed even if designs already exist
         silent (bool): If True, suppress console output (useful when called via API)
+        db (Database): Optional database instance to use. If None, creates a new one.
     """
-    db = Database()
+    if db is None:
+        db = Database()
     
     # Check if SAMPLE designs already exist (not just any designs)
     all_designs = await db.get_orchestration_designs()
