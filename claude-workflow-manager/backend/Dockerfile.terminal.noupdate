@@ -110,6 +110,9 @@ RUN pip install --no-cache-dir \
 COPY terminal_server.py .
 COPY claude_profile_manager.py .
 
+# Copy Claude MCP client configuration
+COPY claude_mcp_config.json .
+
 # Create non-root user for better security
 RUN useradd -m -s /bin/bash claude && \
     # Add passwordless sudo ONLY for package managers (doesn't interfere with Claude autonomous mode)

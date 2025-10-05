@@ -141,6 +141,34 @@ else
     fi
 fi
 
+# Configure Claude CLI MCP client
+echo "🔌 Configuring Claude CLI MCP client..."
+CLAUDE_CONFIG_DIR="/home/claude/.config/claude"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+
+# Copy MCP configuration
+if [ -f "/app/claude_mcp_config.json" ]; then
+    cp /app/claude_mcp_config.json "$CLAUDE_CONFIG_DIR/config.json"
+    echo "✅ Claude CLI MCP configuration installed"
+    echo "📊 MCP Server: claude-workflow-mcp:8002"
+    echo "🎯 Available tools: workflows, orchestration patterns, multi-agent systems"
+else
+    echo "⚠️ MCP configuration file not found at /app/claude_mcp_config.json"
+fi
+
+# Test MCP connectivity (optional, non-blocking)
+echo "🧪 Testing MCP server connectivity..."
+if command -v nc &> /dev/null; then
+    if timeout 2 nc -z claude-workflow-mcp 8002 2>/dev/null; then
+        echo "✅ MCP server is reachable at claude-workflow-mcp:8002"
+    else
+        echo "⚠️ Cannot reach MCP server - it may not be started yet"
+        echo "💡 MCP tools will be available once the server starts"
+    fi
+else
+    echo "ℹ️ nc (netcat) not available - skipping connectivity test"
+fi
+
 # Set up Python path
 export PYTHONPATH="/app:${PYTHONPATH}"
 
