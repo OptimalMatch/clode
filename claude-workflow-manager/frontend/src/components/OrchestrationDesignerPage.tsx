@@ -73,6 +73,9 @@ interface Agent {
   role: AgentRole;
   streamingOutput?: string; // Real-time streaming output
   status?: 'waiting' | 'executing' | 'completed' | 'delegating' | 'synthesizing' | 'aggregating' | 'routing';
+  startTime?: number; // Timestamp when agent started executing
+  elapsedMs?: number; // Live elapsed time in milliseconds
+  duration_ms?: number; // Final duration when completed
 }
 
 interface OrchestrationBlock {
@@ -161,6 +164,29 @@ const OrchestrationDesignerPage: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('orchestrationDesignerDarkMode', JSON.stringify(darkMode));
   }, [darkMode]);
+
+  // Real-time stopwatch effect: Update elapsed time for executing agents
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBlocks(prev => 
+        prev.map(block => ({
+          ...block,
+          data: {
+            ...block.data,
+            agents: block.data.agents.map(agent => {
+              if ((agent.status === 'executing' || agent.status === 'delegating' || agent.status === 'synthesizing' || agent.status === 'aggregating' || agent.status === 'routing') && agent.startTime) {
+                const elapsedMs = Date.now() - agent.startTime;
+                return { ...agent, elapsedMs };
+              }
+              return agent;
+            })
+          }
+        }))
+      );
+    }, 100); // Update every 100ms for smooth counter
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch workflows for git repo selection
   const { data: workflows = [] } = useQuery({
@@ -754,16 +780,28 @@ const OrchestrationDesignerPage: React.FC = () => {
   };
 
   // Update agent status in a block
-  const updateAgentStatus = (blockId: string, agentName: string, status: Agent['status']) => {
+  const updateAgentStatus = (blockId: string, agentName: string, status: Agent['status'], duration_ms?: number) => {
     setBlocks(prev => prev.map(block => {
       if (block.id === blockId) {
         return {
           ...block,
           data: {
             ...block.data,
-            agents: block.data.agents.map(agent => 
-              agent.name === agentName ? { ...agent, status } : agent
-            )
+            agents: block.data.agents.map(agent => {
+              if (agent.name === agentName) {
+                // Record start time when agent starts any active phase
+                const startTime = (status === 'executing' || status === 'delegating' || status === 'synthesizing' || status === 'aggregating' || status === 'routing') 
+                  ? Date.now() 
+                  : agent.startTime;
+                // Clear elapsed time when starting or use duration when completed
+                const elapsedMs = (status === 'executing' || status === 'delegating' || status === 'synthesizing' || status === 'aggregating' || status === 'routing') 
+                  ? 0 
+                  : (status === 'completed' ? duration_ms : agent.elapsedMs);
+                
+                return { ...agent, status, startTime, elapsedMs, duration_ms };
+              }
+              return agent;
+            })
           }
         };
       }
@@ -861,7 +899,7 @@ const OrchestrationDesignerPage: React.FC = () => {
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
-            updateAgentStatus(block.id, event.agent, event.data as Agent['status']);
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status'], event.duration_ms);
           } else if (event.type === 'chunk' && event.agent && event.data) {
             appendStreamingOutput(block.id, event.agent, event.data);
           }
@@ -901,7 +939,7 @@ const OrchestrationDesignerPage: React.FC = () => {
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
-            updateAgentStatus(block.id, event.agent, event.data as Agent['status']);
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status'], event.duration_ms);
           } else if (event.type === 'chunk' && event.agent && event.data) {
             appendStreamingOutput(block.id, event.agent, event.data);
           }
@@ -951,7 +989,7 @@ const OrchestrationDesignerPage: React.FC = () => {
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
-            updateAgentStatus(block.id, event.agent, event.data as Agent['status']);
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status'], event.duration_ms);
           } else if (event.type === 'chunk' && event.agent && event.data) {
             appendStreamingOutput(block.id, event.agent, event.data);
           }
@@ -995,7 +1033,7 @@ const OrchestrationDesignerPage: React.FC = () => {
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
-            updateAgentStatus(block.id, event.agent, event.data as Agent['status']);
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status'], event.duration_ms);
           } else if (event.type === 'chunk' && event.agent && event.data) {
             appendStreamingOutput(block.id, event.agent, event.data);
           }
@@ -1049,7 +1087,7 @@ const OrchestrationDesignerPage: React.FC = () => {
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
-            updateAgentStatus(block.id, event.agent, event.data as Agent['status']);
+            updateAgentStatus(block.id, event.agent, event.data as Agent['status'], event.duration_ms);
           } else if (event.type === 'chunk' && event.agent && event.data) {
             appendStreamingOutput(block.id, event.agent, event.data);
           }
@@ -1343,13 +1381,22 @@ const OrchestrationDesignerPage: React.FC = () => {
                 </Tooltip>
                 
                 <Box sx={{ flex: 1, mx: 1 }}>
-                  <Typography variant="caption" sx={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    {agent.name}
-                    {agent.status === 'executing' && (
-                      <CircularProgress size={10} sx={{ ml: 0.5 }} />
+                  <Typography variant="caption" sx={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                    <span>{agent.name}</span>
+                    {(agent.status === 'executing' || agent.status === 'delegating' || agent.status === 'synthesizing' || agent.status === 'aggregating' || agent.status === 'routing') && (
+                      <>
+                        <CircularProgress size={8} sx={{ ml: 0.3 }} />
+                        {agent.elapsedMs !== undefined && (
+                          <span style={{ fontWeight: 'bold', color: darkMode ? '#fff' : '#000', fontSize: '0.65rem' }}>
+                            ⏱️{agent.elapsedMs}ms
+                          </span>
+                        )}
+                      </>
                     )}
-                    {agent.status === 'completed' && (
-                      <span style={{ color: '#4caf50', fontSize: '0.8rem' }}>✓</span>
+                    {agent.status === 'completed' && agent.duration_ms && (
+                      <span style={{ color: '#4caf50', fontSize: '0.65rem', fontWeight: 'bold' }}>
+                        ✓ {agent.duration_ms}ms
+                      </span>
                     )}
                   </Typography>
                   {enableStreaming && agent.streamingOutput && (
@@ -1394,14 +1441,27 @@ const OrchestrationDesignerPage: React.FC = () => {
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   {block.data.agents.length} agent{block.data.agents.length !== 1 ? 's' : ''}
                 </Typography>
-                {enableStreaming && block.data.agents.some(a => a.streamingOutput) && (
+                {enableStreaming && block.data.agents.some(a => a.streamingOutput || a.status === 'executing' || a.status === 'delegating' || a.status === 'synthesizing' || a.status === 'aggregating' || a.status === 'routing') && (
                   <Box sx={{ mb: 1 }}>
-                    {block.data.agents.filter(a => a.streamingOutput || a.status === 'executing').map((agent, idx) => (
+                    {block.data.agents.filter(a => a.streamingOutput || a.status === 'executing' || a.status === 'delegating' || a.status === 'synthesizing' || a.status === 'aggregating' || a.status === 'routing' || a.status === 'completed').map((agent, idx) => (
                       <Box key={idx} sx={{ mb: 0.5 }}>
-                        <Typography variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 'bold' }}>
-                          {agent.name}
-                          {agent.status === 'executing' && <CircularProgress size={8} sx={{ ml: 0.5 }} />}
-                          {agent.status === 'completed' && <span style={{ color: '#4caf50', fontSize: '0.7rem' }}>✓</span>}
+                        <Typography variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 'bold', flexWrap: 'wrap' }}>
+                          <span>{agent.name}</span>
+                          {(agent.status === 'executing' || agent.status === 'delegating' || agent.status === 'synthesizing' || agent.status === 'aggregating' || agent.status === 'routing') && (
+                            <>
+                              <CircularProgress size={8} sx={{ ml: 0.3 }} />
+                              {agent.elapsedMs !== undefined && (
+                                <span style={{ fontWeight: 'bold', color: darkMode ? '#fff' : '#000', fontSize: '0.65rem' }}>
+                                  ⏱️{agent.elapsedMs}ms
+                                </span>
+                              )}
+                            </>
+                          )}
+                          {agent.status === 'completed' && agent.duration_ms && (
+                            <span style={{ color: '#4caf50', fontSize: '0.65rem', fontWeight: 'bold' }}>
+                              ✓ {agent.duration_ms}ms
+                            </span>
+                          )}
                         </Typography>
                         {agent.streamingOutput && (
                           <Box sx={{ mt: 0.3, p: 0.5, bgcolor: darkMode ? '#0a0a0a' : '#fafafa', borderRadius: 0.5, maxHeight: 80, overflow: 'auto' }}>
