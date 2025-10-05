@@ -143,6 +143,7 @@ const OrchestrationDesignerPage: React.FC = () => {
   });
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('orchestrationDesignerDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -479,6 +480,38 @@ const OrchestrationDesignerPage: React.FC = () => {
       severity: 'success'
     });
     setLoadDialogOpen(false);
+  };
+
+  const seedSampleDesigns = async () => {
+    setSeeding(true);
+    try {
+      const result = await orchestrationDesignApi.seed(false);
+      
+      if (result.success) {
+        setSnackbar({
+          open: true,
+          message: `Successfully seeded ${result.seeded_count} sample designs!`,
+          severity: 'success'
+        });
+        // Refresh the designs list
+        refetchDesigns();
+      } else {
+        setSnackbar({
+          open: true,
+          message: result.message,
+          severity: 'error'
+        });
+      }
+    } catch (error: any) {
+      console.error('Error seeding designs:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.detail || 'Failed to seed sample designs',
+        severity: 'error'
+      });
+    } finally {
+      setSeeding(false);
+    }
   };
 
   // Execute orchestration workflow
@@ -922,6 +955,15 @@ const OrchestrationDesignerPage: React.FC = () => {
               onClick={() => setLoadDialogOpen(true)}
             >
               Load Design
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={seeding ? <CircularProgress size={20} /> : <Add />}
+              onClick={seedSampleDesigns}
+              disabled={seeding}
+              color="secondary"
+            >
+              {seeding ? 'Seeding...' : 'Seed Samples'}
             </Button>
             <Button
               variant="outlined"

@@ -14,6 +14,15 @@ python seed_orchestration_designs.py
 
 This will create 7 comprehensive sample designs in your database.
 
+**Protection Built-In:** The script checks if designs already exist and won't create duplicates unless you use `--force`:
+
+```bash
+# Force re-seeding (adds duplicates)
+python seed_orchestration_designs.py --force
+```
+
+📖 **For detailed instructions, see:** `claude-workflow-manager/backend/SEEDING_README.md`
+
 ## 📋 Sample Designs Overview
 
 ### 1. **Data Processing Pipeline** 🔄

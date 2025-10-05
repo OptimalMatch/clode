@@ -5,9 +5,25 @@ import asyncio
 from database import Database
 from models import OrchestrationDesign
 
-async def seed_sample_designs():
-    """Create sample orchestration designs demonstrating various patterns"""
+async def seed_sample_designs(force=False, silent=False):
+    """Create sample orchestration designs demonstrating various patterns
+    
+    Args:
+        force (bool): If True, will seed even if designs already exist
+        silent (bool): If True, suppress console output (useful when called via API)
+    """
     db = Database()
+    
+    # Check if designs already exist
+    existing_designs = await db.get_orchestration_designs()
+    if existing_designs and not force:
+        if not silent:
+            print("⚠️  Orchestration designs already exist in the database!")
+            print(f"   Found {len(existing_designs)} existing design(s)")
+            print("\n   To re-seed anyway, run with --force flag:")
+            print("   python seed_orchestration_designs.py --force")
+            print("\n   This will add the sample designs without removing existing ones.")
+        return
     
     # Sample Design 1: Simple Sequential Pipeline
     design1 = OrchestrationDesign(
@@ -628,25 +644,43 @@ async def seed_sample_designs():
     # Insert all designs
     designs = [design1, design2, design3, design4, design5, design6, design7]
     
-    print("🌱 Seeding orchestration designs...")
+    if not silent:
+        print("🌱 Seeding orchestration designs...")
+    
     for i, design in enumerate(designs, 1):
         try:
             design_id = await db.create_orchestration_design(design)
-            print(f"✅ Created design {i}/7: {design.name} (ID: {design_id})")
+            if not silent:
+                print(f"✅ Created design {i}/7: {design.name} (ID: {design_id})")
         except Exception as e:
-            print(f"❌ Failed to create design {i}/7: {design.name} - {str(e)}")
+            if not silent:
+                print(f"❌ Failed to create design {i}/7: {design.name} - {str(e)}")
     
-    print("\n🎉 Seeding complete!")
-    print(f"📊 Total designs created: {len(designs)}")
-    print("\n📋 Summary:")
-    print("  1. Data Processing Pipeline - Simple sequential workflow")
-    print("  2. Multi-Domain Analysis - Parallel processing with aggregation")
-    print("  3. Automated Code Review System - Hierarchical delegation")
-    print("  4. Technical Decision Framework - Debate-based decision making")
-    print("  5. Customer Support Routing System - Complex routing with branches")
-    print("  6. Research Paper Analysis Pipeline - Agent-level connections")
-    print("  7. Full-Stack Development Workflow - Multi-stage complete cycle")
+    if not silent:
+        if force:
+            print("\n🎉 Seeding complete (forced)!")
+        else:
+            print("\n🎉 Seeding complete!")
+        
+        print(f"📊 Total designs created: {len(designs)}")
+        print("\n📋 Summary:")
+        print("  1. Data Processing Pipeline - Simple sequential workflow")
+        print("  2. Multi-Domain Analysis - Parallel processing with aggregation")
+        print("  3. Automated Code Review System - Hierarchical delegation")
+        print("  4. Technical Decision Framework - Debate-based decision making")
+        print("  5. Customer Support Routing System - Complex routing with branches")
+        print("  6. Research Paper Analysis Pipeline - Agent-level connections")
+        print("  7. Full-Stack Development Workflow - Multi-stage complete cycle")
+        print("\n💡 Next steps:")
+        print("  1. Start the backend server (if not already running)")
+        print("  2. Open the Orchestration Designer in the UI")
+        print("  3. Click 'Load Design' to see and explore the sample designs")
 
 if __name__ == "__main__":
-    asyncio.run(seed_sample_designs())
+    import sys
+    
+    # Check for --force flag
+    force = "--force" in sys.argv or "-f" in sys.argv
+    
+    asyncio.run(seed_sample_designs(force=force))
 

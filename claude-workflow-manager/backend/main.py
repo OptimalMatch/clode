@@ -3379,6 +3379,44 @@ async def delete_orchestration_design(design_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete design: {str(e)}")
 
+@app.post(
+    "/api/orchestration-designs/seed",
+    summary="Seed Sample Orchestration Designs",
+    description="Create sample orchestration designs to showcase capabilities. Will not create duplicates unless force=true.",
+    tags=["Orchestration Designer"]
+)
+async def seed_orchestration_designs(force: bool = False):
+    """Seed sample orchestration designs"""
+    try:
+        from seed_orchestration_designs import seed_sample_designs
+        
+        # Check if designs already exist
+        existing_designs = await db.get_orchestration_designs()
+        if existing_designs and not force:
+            return {
+                "success": False,
+                "message": f"Sample designs already exist ({len(existing_designs)} found). Use force=true to add anyway.",
+                "existing_count": len(existing_designs),
+                "seeded_count": 0
+            }
+        
+        # Run the seed function (silent mode to avoid console spam)
+        await seed_sample_designs(force=True, silent=True)  # Always force when called via API
+        
+        # Get the new count
+        all_designs = await db.get_orchestration_designs()
+        seeded_count = 7  # We know we seed 7 designs
+        
+        return {
+            "success": True,
+            "message": f"Successfully seeded {seeded_count} sample orchestration designs",
+            "existing_count": len(existing_designs) if existing_designs else 0,
+            "seeded_count": seeded_count,
+            "total_count": len(all_designs)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to seed designs: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
