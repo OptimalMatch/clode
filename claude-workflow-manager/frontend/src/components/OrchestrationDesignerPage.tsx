@@ -57,6 +57,8 @@ import {
   DragIndicator,
   LightMode,
   DarkMode,
+  History,
+  Restore,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent } from '../services/api';
@@ -164,6 +166,8 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [seeding, setSeeding] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [designToDelete, setDesignToDelete] = useState<string | null>(null);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const [selectedDesignForHistory, setSelectedDesignForHistory] = useState<any>(null);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('orchestrationDesignerDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -229,6 +233,28 @@ const OrchestrationDesignerPage: React.FC = () => {
       setSnackbar({
         open: true,
         message: `Failed to delete design: ${error.message}`,
+        severity: 'error',
+      });
+    },
+  });
+
+  // Restore mutation
+  const restoreMutation = useMutation({
+    mutationFn: ({ id, version }: { id: string; version: number }) => 
+      orchestrationDesignApi.restore(id, version),
+    onSuccess: () => {
+      refetchDesigns();
+      setSnackbar({
+        open: true,
+        message: 'Design version restored successfully',
+        severity: 'success',
+      });
+      setVersionHistoryOpen(false);
+    },
+    onError: (error: any) => {
+      setSnackbar({
+        open: true,
+        message: `Failed to restore version: ${error.message}`,
         severity: 'error',
       });
     },
@@ -606,6 +632,19 @@ const OrchestrationDesignerPage: React.FC = () => {
   const cancelDelete = () => {
     setDeleteConfirmOpen(false);
     setDesignToDelete(null);
+  };
+
+  // Handle version history
+  const handleViewHistory = (e: React.MouseEvent, design: any) => {
+    e.stopPropagation(); // Prevent loading the design
+    setSelectedDesignForHistory(design);
+    setVersionHistoryOpen(true);
+  };
+
+  const handleRestoreVersion = (version: number) => {
+    if (selectedDesignForHistory?.id) {
+      restoreMutation.mutate({ id: selectedDesignForHistory.id, version });
+    }
   };
 
   // Execute orchestration workflow
@@ -2449,20 +2488,37 @@ Format your response as JSON:
                   }}
                   onClick={() => loadDesign(design)}
                   secondaryAction={
-                    <Tooltip title="Delete design">
-                      <IconButton
-                        edge="end"
-                        onClick={(e) => handleDeleteClick(e, design.id!)}
-                        sx={{
-                          color: darkMode ? '#ff6b6b' : 'error.main',
-                          '&:hover': {
-                            backgroundColor: darkMode ? 'rgba(255, 107, 107, 0.1)' : 'error.light',
-                          }
-                        }}
-                      >
-                        <Delete />
-                      </IconButton>
-                    </Tooltip>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      {design.version_history && design.version_history.length > 0 && (
+                        <Tooltip title="View version history">
+                          <IconButton
+                            onClick={(e) => handleViewHistory(e, design)}
+                            sx={{
+                              color: darkMode ? '#64b5f6' : 'primary.main',
+                              '&:hover': {
+                                backgroundColor: darkMode ? 'rgba(100, 181, 246, 0.1)' : 'primary.light',
+                              }
+                            }}
+                          >
+                            <History />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      <Tooltip title="Delete design">
+                        <IconButton
+                          edge="end"
+                          onClick={(e) => handleDeleteClick(e, design.id!)}
+                          sx={{
+                            color: darkMode ? '#ff6b6b' : 'error.main',
+                            '&:hover': {
+                              backgroundColor: darkMode ? 'rgba(255, 107, 107, 0.1)' : 'error.light',
+                            }
+                          }}
+                        >
+                          <Delete />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   }
                 >
                   <ListItemIcon>
@@ -2503,6 +2559,17 @@ Format your response as JSON:
                               sx={{ 
                                 backgroundColor: darkMode ? '#404040' : undefined,
                                 color: darkMode ? '#ffffff' : undefined 
+                              }}
+                            />
+                          )}
+                          {design.version && design.version > 1 && (
+                            <Chip 
+                              size="small" 
+                              icon={<History sx={{ fontSize: 14 }} />}
+                              label={`v${design.version}`}
+                              sx={{ 
+                                backgroundColor: darkMode ? '#2d4a6d' : '#e3f2fd',
+                                color: darkMode ? '#64b5f6' : '#1976d2' 
                               }}
                             />
                           )}
@@ -2723,6 +2790,130 @@ Format your response as JSON:
             disabled={deleteMutation.isPending}
           >
             {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Version History Dialog */}
+      <Dialog
+        open={versionHistoryOpen}
+        onClose={() => setVersionHistoryOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <History />
+            <span>Version History: {selectedDesignForHistory?.name}</span>
+          </Box>
+          <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary', mt: 0.5 }}>
+            Current version: v{selectedDesignForHistory?.version || 1}
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          {selectedDesignForHistory?.version_history && selectedDesignForHistory.version_history.length > 0 ? (
+            <List>
+              {/* Show versions in reverse order (newest first) */}
+              {[...selectedDesignForHistory.version_history].reverse().map((version: any) => (
+                <ListItem
+                  key={version.version}
+                  sx={{
+                    mb: 1,
+                    border: 1,
+                    borderColor: darkMode ? '#444' : 'divider',
+                    borderRadius: 1,
+                    backgroundColor: darkMode ? '#2d2d2d' : 'transparent',
+                  }}
+                  secondaryAction={
+                    <Tooltip title={`Restore to version ${version.version}`}>
+                      <IconButton
+                        edge="end"
+                        onClick={() => handleRestoreVersion(version.version)}
+                        disabled={restoreMutation.isPending}
+                        sx={{
+                          color: darkMode ? '#64b5f6' : 'primary.main',
+                          '&:hover': {
+                            backgroundColor: darkMode ? 'rgba(100, 181, 246, 0.1)' : 'primary.light',
+                          }
+                        }}
+                      >
+                        <Restore />
+                      </IconButton>
+                    </Tooltip>
+                  }
+                >
+                  <ListItemIcon>
+                    <History sx={{ color: darkMode ? '#64b5f6' : 'primary.main' }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                          Version {version.version}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={new Date(version.saved_at).toLocaleString()}
+                          sx={{
+                            backgroundColor: darkMode ? '#404040' : undefined,
+                            color: darkMode ? '#ffffff' : undefined
+                          }}
+                        />
+                      </Box>
+                    }
+                    secondary={
+                      <Box sx={{ mt: 0.5 }}>
+                        <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
+                          {version.description || version.name}
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                          <Chip
+                            size="small"
+                            label={`${version.blocks?.length || 0} blocks`}
+                            sx={{
+                              backgroundColor: darkMode ? '#404040' : undefined,
+                              color: darkMode ? '#ffffff' : undefined
+                            }}
+                          />
+                          <Chip
+                            size="small"
+                            label={`${version.connections?.length || 0} connections`}
+                            sx={{
+                              backgroundColor: darkMode ? '#404040' : undefined,
+                              color: darkMode ? '#ffffff' : undefined
+                            }}
+                          />
+                        </Box>
+                      </Box>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          ) : (
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <History sx={{ fontSize: 60, opacity: 0.3, mb: 2, color: darkMode ? '#666' : 'text.secondary' }} />
+              <Typography variant="body1" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
+                No version history available
+              </Typography>
+              <Typography variant="body2" sx={{ color: darkMode ? '#888' : 'text.secondary', mt: 1 }}>
+                Version history is saved when you update a design
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setVersionHistoryOpen(false)}
+            sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+          >
+            Close
           </Button>
         </DialogActions>
       </Dialog>

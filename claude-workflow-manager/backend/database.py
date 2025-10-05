@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
 from bson import ObjectId
-from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics, OrchestrationDesign
+from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics, OrchestrationDesign, OrchestrationDesignVersion
 
 class Database:
     def __init__(self):
@@ -1101,22 +1101,112 @@ class Database:
             return None
     
     async def update_orchestration_design(self, design_id: str, design: OrchestrationDesign) -> bool:
-        """Update an orchestration design"""
+        """Update an orchestration design and save previous version to history"""
         if self.db is None:
             raise RuntimeError("Database not connected")
         
         try:
-            design_dict = design.dict()
-            design_dict["updated_at"] = datetime.utcnow()
-            
             object_id = ObjectId(design_id) if ObjectId.is_valid(design_id) else design_id
+            
+            # Get the current design to save as a version snapshot
+            current_design = await self.db.orchestration_designs.find_one({"_id": object_id})
+            
+            if current_design:
+                # Create a version snapshot from the current state
+                current_version = current_design.get("version", 1)
+                version_snapshot = OrchestrationDesignVersion(
+                    version=current_version,
+                    name=current_design.get("name", ""),
+                    description=current_design.get("description", ""),
+                    blocks=current_design.get("blocks", []),
+                    connections=current_design.get("connections", []),
+                    git_repos=current_design.get("git_repos", []),
+                    saved_at=current_design.get("updated_at", current_design.get("created_at", datetime.utcnow())),
+                    saved_by=None
+                )
+                
+                # Prepare the new design data
+                design_dict = design.dict()
+                design_dict["updated_at"] = datetime.utcnow()
+                design_dict["version"] = current_version + 1
+                
+                # Add the version snapshot to history
+                current_history = current_design.get("version_history", [])
+                current_history.append(version_snapshot.dict())
+                design_dict["version_history"] = current_history
+                
+                # Update the design
+                result = await self.db.orchestration_designs.update_one(
+                    {"_id": object_id},
+                    {"$set": design_dict}
+                )
+                return result.modified_count > 0
+            else:
+                # Design doesn't exist, cannot update
+                return False
+        except Exception as e:
+            print(f"Error updating orchestration design {design_id}: {e}")
+            return False
+    
+    async def restore_orchestration_design_version(self, design_id: str, version_number: int) -> bool:
+        """Restore an orchestration design to a previous version"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(design_id) if ObjectId.is_valid(design_id) else design_id
+            
+            # Get the current design
+            current_design = await self.db.orchestration_designs.find_one({"_id": object_id})
+            
+            if not current_design:
+                return False
+            
+            # Find the requested version in history
+            version_history = current_design.get("version_history", [])
+            target_version = None
+            for version in version_history:
+                if version.get("version") == version_number:
+                    target_version = version
+                    break
+            
+            if not target_version:
+                return False
+            
+            # Save current state to history before restoring
+            current_version = current_design.get("version", 1)
+            current_snapshot = OrchestrationDesignVersion(
+                version=current_version,
+                name=current_design.get("name", ""),
+                description=current_design.get("description", ""),
+                blocks=current_design.get("blocks", []),
+                connections=current_design.get("connections", []),
+                git_repos=current_design.get("git_repos", []),
+                saved_at=current_design.get("updated_at", current_design.get("created_at", datetime.utcnow())),
+                saved_by=None
+            )
+            version_history.append(current_snapshot.dict())
+            
+            # Restore from the target version
+            restored_design = {
+                "name": target_version.get("name"),
+                "description": target_version.get("description"),
+                "blocks": target_version.get("blocks"),
+                "connections": target_version.get("connections"),
+                "git_repos": target_version.get("git_repos"),
+                "updated_at": datetime.utcnow(),
+                "version": current_version + 1,  # Increment version
+                "version_history": version_history
+            }
+            
+            # Update the design with restored data
             result = await self.db.orchestration_designs.update_one(
                 {"_id": object_id},
-                {"$set": design_dict}
+                {"$set": restored_design}
             )
             return result.modified_count > 0
         except Exception as e:
-            print(f"Error updating orchestration design {design_id}: {e}")
+            print(f"Error restoring orchestration design {design_id} to version {version_number}: {e}")
             return False
     
     async def delete_orchestration_design(self, design_id: str) -> bool:

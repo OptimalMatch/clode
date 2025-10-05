@@ -3360,6 +3360,25 @@ async def update_orchestration_design(design_id: str, design: OrchestrationDesig
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update design: {str(e)}")
 
+@app.post(
+    "/api/orchestration-designs/{design_id}/restore/{version}",
+    response_model=ApiResponse,
+    summary="Restore Orchestration Design Version",
+    description="Restore an orchestration design to a previous version",
+    tags=["Orchestration Designer"]
+)
+async def restore_orchestration_design_version(design_id: str, version: int):
+    """Restore an orchestration design to a previous version"""
+    try:
+        success = await db.restore_orchestration_design_version(design_id, version)
+        if not success:
+            raise HTTPException(status_code=404, detail="Design or version not found")
+        return ApiResponse(success=True, message=f"Design restored to version {version}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to restore design: {str(e)}")
+
 @app.delete(
     "/api/orchestration-designs/{design_id}",
     response_model=ApiResponse,
