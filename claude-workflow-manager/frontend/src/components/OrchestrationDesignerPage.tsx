@@ -660,12 +660,48 @@ const OrchestrationDesignerPage: React.FC = () => {
           inputs.push(agentOutput.output || agentOutput.result || '');
         }
       } else if (sourceResult) {
-        // Block-level connection - pass entire result
-        inputs.push(sourceResult.final_output || sourceResult.result || '');
+        // Block-level connection - format the result properly
+        let formattedResult = '';
+        
+        // Handle different result structures
+        if (sourceResult.individual_results) {
+          // Parallel orchestration with individual agent results
+          formattedResult = Object.entries(sourceResult.individual_results)
+            .map(([agentName, result]) => `**${agentName}:**\n${result}`)
+            .join('\n\n---\n\n');
+        } else if (sourceResult.agent_steps && Array.isArray(sourceResult.agent_steps)) {
+          // Sequential/hierarchical with agent steps
+          formattedResult = sourceResult.agent_steps
+            .map((step: any) => `**${step.agent}:**\n${step.result || step.output}`)
+            .join('\n\n---\n\n');
+        } else if (sourceResult.final_result) {
+          // Simple final result
+          formattedResult = sourceResult.final_result;
+        } else if (sourceResult.aggregated_result) {
+          // Aggregated result
+          formattedResult = sourceResult.aggregated_result;
+        } else if (sourceResult.result && typeof sourceResult.result === 'string') {
+          // String result
+          formattedResult = sourceResult.result;
+        } else if (sourceResult.result && typeof sourceResult.result === 'object') {
+          // Nested result object - recurse
+          if (sourceResult.result.individual_results) {
+            formattedResult = Object.entries(sourceResult.result.individual_results)
+              .map(([agentName, result]) => `**${agentName}:**\n${result}`)
+              .join('\n\n---\n\n');
+          } else {
+            formattedResult = JSON.stringify(sourceResult.result, null, 2);
+          }
+        } else {
+          // Fallback: stringify the entire result
+          formattedResult = JSON.stringify(sourceResult, null, 2);
+        }
+        
+        inputs.push(formattedResult);
       }
     });
     
-    return inputs.length > 0 ? inputs.join('\n\n---\n\n') : '';
+    return inputs.length > 0 ? inputs.join('\n\n===== NEXT RESULT =====\n\n') : '';
   };
 
   // Update agent status in a block
