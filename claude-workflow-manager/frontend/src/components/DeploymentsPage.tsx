@@ -74,7 +74,7 @@ const DeploymentsPage: React.FC = () => {
   const [executeInputData, setExecuteInputData] = useState('{}');
 
   // Configure dialog state
-  const [configStatus, setConfigStatus] = useState<'active' | 'inactive'>('active');
+  const [configStatus, setConfigStatus] = useState<'active' | 'inactive' | 'error'>('active');
   const [configScheduleEnabled, setConfigScheduleEnabled] = useState(false);
   const [configScheduleType, setConfigScheduleType] = useState<'cron' | 'interval'>('interval');
   const [configCronExpression, setConfigCronExpression] = useState('0 9 * * *');
@@ -523,10 +523,11 @@ const DeploymentsPage: React.FC = () => {
               <Select
                 value={configStatus}
                 label="Status"
-                onChange={(e) => setConfigStatus(e.target.value as 'active' | 'inactive')}
+                onChange={(e) => setConfigStatus(e.target.value as 'active' | 'inactive' | 'error')}
               >
                 <MenuItem value="active">Active</MenuItem>
                 <MenuItem value="inactive">Inactive</MenuItem>
+                <MenuItem value="error">Error</MenuItem>
               </Select>
             </FormControl>
 
