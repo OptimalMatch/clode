@@ -3630,6 +3630,7 @@ Return ONLY the complete design JSON, no other text."""
                 # Stream events as they come
                 while True:
                     event = await event_queue.get()
+                    print(f"[AI Generation] Event received: {event.get('type')}")  # Debug logging
                     
                     if event['type'] == '__complete__':
                         # Extract the final result from the sequential pipeline
@@ -3644,8 +3645,13 @@ Return ONLY the complete design JSON, no other text."""
                         return
                     elif event['type'] == 'chunk':
                         # Stream the chunk to the client
+                        print(f"[AI Generation] Sending chunk: {len(event['data'])} chars")  # Debug logging
                         accumulated_text += event['data']
                         yield f"data: {json.dumps({'type': 'chunk', 'data': event['data']})}\n\n"
+                    elif event['type'] == 'status':
+                        # Forward status events too
+                        print(f"[AI Generation] Status: {event['agent']} -> {event['data']}")  # Debug logging
+                        yield f"data: {json.dumps({'type': 'status', 'agent': event['agent'], 'data': event['data']})}\n\n"
                 
                 await task
                 

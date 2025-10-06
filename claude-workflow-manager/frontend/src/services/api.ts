@@ -979,12 +979,16 @@ export const orchestrationDesignApi = {
               if (line.startsWith('data: ')) {
                 try {
                   const event = JSON.parse(line.slice(6));
+                  console.log('AI Generation Event:', event); // Debug logging
                   
                   if (event.type === 'chunk' && onChunk) {
+                    console.log('Chunk received:', event.data); // Debug logging
                     onChunk(event.data);
                   } else if (event.type === 'complete') {
+                    console.log('Generation complete'); // Debug logging
                     resolve(event.design);
                   } else if (event.type === 'error') {
+                    console.error('Generation error:', event.error); // Debug logging
                     reject(new Error(event.error || 'Generation failed'));
                   }
                 } catch (e) {
