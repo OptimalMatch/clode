@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 from database import Database
 from deployment_executor import DeploymentExecutor
-from models import ExecutionLog
+from models import ExecutionLog, OrchestrationDesign
 import os
 
 
@@ -142,10 +142,13 @@ class DeploymentScheduler:
                 return
             
             # Get design
-            design = await self.db.get_orchestration_design(deployment.design_id)
-            if not design:
+            design_dict = await self.db.get_orchestration_design(deployment.design_id)
+            if not design_dict:
                 print(f"❌ Design not found for deployment: {deployment.design_name}")
                 return
+            
+            # Convert dict to OrchestrationDesign object
+            design = OrchestrationDesign(**design_dict)
             
             # Create execution log
             log = ExecutionLog(
