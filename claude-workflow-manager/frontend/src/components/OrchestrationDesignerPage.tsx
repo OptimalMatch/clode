@@ -2057,7 +2057,7 @@ Format your response as JSON:
                 }
               }}
             >
-              Design Assistant
+              Architect
             </Button>
             <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
             <Button
@@ -3079,7 +3079,7 @@ Format your response as JSON:
         <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <SmartToy sx={{ color: '#667eea' }} />
-            <span>Design Assistant</span>
+            <span>Architect</span>
           </Box>
           <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary', mt: 0.5 }}>
             {aiMode === 'create' 
