@@ -94,7 +94,7 @@ const DeploymentsPage: React.FC = () => {
   const { data: designsData } = useQuery({
     queryKey: ['orchestration-designs'],
     queryFn: async () => {
-      const response = await orchestrationDesignApi.list();
+      const response = await orchestrationDesignApi.getAll();
       return response.data;
     },
   });
