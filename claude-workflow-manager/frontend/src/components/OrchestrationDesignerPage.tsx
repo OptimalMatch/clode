@@ -688,68 +688,59 @@ const OrchestrationDesignerPage: React.FC = () => {
     }
   };
 
-  // Copy JSON to clipboard - select the pre element text
-  const handleCopyToClipboard = () => {
-    // Find the pre element containing the JSON
-    const preElements = document.querySelectorAll('pre');
-    let jsonPre: HTMLPreElement | null = null;
-    
-    // Find the pre element that contains our JSON (in the results dialog)
-    for (const pre of Array.from(preElements)) {
-      if (pre.textContent && pre.textContent.includes('"pattern"') && pre.textContent.length > 100) {
-        jsonPre = pre;
-        break;
-      }
-    }
-    
-    if (jsonPre) {
+  // Copy JSON to clipboard
+  const handleCopyToClipboard = async () => {
+    if (selectedBlock && executionResults.has(selectedBlock.id)) {
+      const jsonString = JSON.stringify(executionResults.get(selectedBlock.id), null, 2);
+      
       try {
-        // Create a range and select the pre element's content
-        const range = document.createRange();
-        range.selectNodeContents(jsonPre);
-        
-        const selection = window.getSelection();
-        if (selection) {
-          selection.removeAllRanges();
-          selection.addRange(range);
-          
-          console.log('📋 JSON text selected - press Ctrl+C to copy');
-          setSnackbar({
-            open: true,
-            message: 'JSON text selected! Press Ctrl+C to copy.',
-            severity: 'info'
-          });
-          
-          // Try to copy automatically
-          try {
-            const successful = document.execCommand('copy');
-            if (successful) {
-              console.log('📋 Copy command executed successfully');
-              setSnackbar({
-                open: true,
-                message: 'JSON copied to clipboard!',
-                severity: 'success'
-              });
-            }
-          } catch (copyErr) {
-            console.log('Auto-copy failed, text is selected for manual copy');
-          }
-        }
-      } catch (error) {
-        console.error('❌ Failed to select text:', error);
+        await navigator.clipboard.writeText(jsonString);
+        console.log('📋 Terminal content copied to clipboard');
         setSnackbar({
           open: true,
-          message: 'Failed to select text. Please manually select and copy.',
-          severity: 'error'
+          message: 'JSON copied to clipboard!',
+          severity: 'success'
         });
+      } catch (error) {
+        console.error('❌ Failed to copy content to clipboard:', error);
+        
+        // Fallback for older browsers - same as AgentTerminal.tsx
+        // But temporarily remove aria-hidden to make it work in dialogs
+        const rootElement = document.getElementById('root');
+        const hadAriaHidden = rootElement?.getAttribute('aria-hidden') === 'true';
+        
+        if (hadAriaHidden && rootElement) {
+          rootElement.removeAttribute('aria-hidden');
+        }
+        
+        try {
+          const textArea = document.createElement('textarea');
+          textArea.value = jsonString;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          
+          console.log('📋 Fallback copy succeeded');
+          setSnackbar({
+            open: true,
+            message: 'JSON copied to clipboard!',
+            severity: 'success'
+          });
+        } catch (fallbackError) {
+          console.error('❌ Fallback copy also failed:', fallbackError);
+          setSnackbar({
+            open: true,
+            message: 'Failed to copy to clipboard.',
+            severity: 'error'
+          });
+        } finally {
+          // Restore aria-hidden
+          if (hadAriaHidden && rootElement) {
+            rootElement.setAttribute('aria-hidden', 'true');
+          }
+        }
       }
-    } else {
-      console.error('❌ Could not find JSON pre element');
-      setSnackbar({
-        open: true,
-        message: 'Could not find JSON text to copy.',
-        severity: 'error'
-      });
     }
   };
 
