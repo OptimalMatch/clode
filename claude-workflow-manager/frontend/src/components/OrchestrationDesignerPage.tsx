@@ -2705,6 +2705,8 @@ Format your response as JSON:
         onClose={() => setSaveDialogOpen(false)} 
         maxWidth="sm" 
         fullWidth
+        disableEnforceFocus
+        disableRestoreFocus
         PaperProps={{
           sx: {
             backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
@@ -2775,6 +2777,8 @@ Format your response as JSON:
         onClose={() => setLoadDialogOpen(false)} 
         maxWidth="md" 
         fullWidth
+        disableEnforceFocus
+        disableRestoreFocus
         PaperProps={{
           sx: {
             backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
@@ -2928,6 +2932,8 @@ Format your response as JSON:
         }}
         maxWidth="lg"
         fullWidth
+        disableEnforceFocus
+        disableRestoreFocus
         PaperProps={{
           sx: {
             backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
@@ -3096,6 +3102,8 @@ Format your response as JSON:
         onClose={() => setSuggestionsDialogOpen(false)}
         maxWidth="lg"
         fullWidth
+        disableEnforceFocus
+        disableRestoreFocus
         PaperProps={{
           sx: {
             backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
@@ -3210,6 +3218,8 @@ Format your response as JSON:
       <Dialog
         open={deleteConfirmOpen}
         onClose={cancelDelete}
+        disableEnforceFocus
+        disableRestoreFocus
         PaperProps={{
           sx: {
             backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
@@ -3249,6 +3259,8 @@ Format your response as JSON:
         onClose={() => setVersionHistoryOpen(false)}
         maxWidth="md"
         fullWidth
+        disableEnforceFocus
+        disableRestoreFocus
         PaperProps={{
           sx: {
             backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
@@ -3373,6 +3385,8 @@ Format your response as JSON:
         onClose={() => !aiGenerating && setAiAssistantOpen(false)}
         maxWidth="md"
         fullWidth
+        disableEnforceFocus
+        disableRestoreFocus
         PaperProps={{
           sx: {
             backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
