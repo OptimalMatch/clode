@@ -63,6 +63,7 @@ import {
   Restore,
   AutoAwesome,
   SmartToy,
+  ContentCopy,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent, OrchestrationDesign } from '../services/api';
@@ -687,6 +688,27 @@ const OrchestrationDesignerPage: React.FC = () => {
     }
   };
 
+  // Copy JSON to clipboard
+  const handleCopyToClipboard = async () => {
+    if (selectedBlock && executionResults.has(selectedBlock.id)) {
+      try {
+        const jsonString = JSON.stringify(executionResults.get(selectedBlock.id), null, 2);
+        await navigator.clipboard.writeText(jsonString);
+        setSnackbar({
+          open: true,
+          message: 'JSON copied to clipboard!',
+          severity: 'success'
+        });
+      } catch (error) {
+        setSnackbar({
+          open: true,
+          message: 'Failed to copy to clipboard',
+          severity: 'error'
+        });
+      }
+    }
+  };
+
   // Handle AI-assisted design generation
   const handleAIGenerate = async () => {
     if (!aiPrompt.trim()) {
@@ -775,21 +797,24 @@ const OrchestrationDesignerPage: React.FC = () => {
   const formatResultsForDisplay = (result: any): string => {
     if (!result) return 'No result data';
     
+    // If result has a nested 'result' property, use that instead
+    const data = result.result || result;
+    
     let formattedText = '';
     
     // Handle different result structures
-    if (result.pattern) {
-      formattedText += `## Orchestration Pattern: ${result.pattern}\n\n`;
+    if (data.pattern) {
+      formattedText += `## Orchestration Pattern: ${data.pattern}\n\n`;
     }
     
-    if (result.task) {
-      formattedText += `### Task\n${result.task}\n\n`;
+    if (data.task) {
+      formattedText += `### Task\n${data.task}\n\n`;
     }
     
     // Handle sequential results
-    if (result.steps && Array.isArray(result.steps)) {
+    if (data.steps && Array.isArray(data.steps)) {
       formattedText += `### Agent Steps\n\n`;
-      result.steps.forEach((step: any, index: number) => {
+      data.steps.forEach((step: any, index: number) => {
         formattedText += `#### Step ${step.step || index + 1}: ${step.agent}\n\n`;
         if (step.output) {
           formattedText += `${step.output}\n\n`;
@@ -801,9 +826,9 @@ const OrchestrationDesignerPage: React.FC = () => {
     }
     
     // Handle parallel results
-    if (result.agent_steps && Array.isArray(result.agent_steps)) {
+    if (data.agent_steps && Array.isArray(data.agent_steps)) {
       formattedText += `### Agent Results\n\n`;
-      result.agent_steps.forEach((step: any) => {
+      data.agent_steps.forEach((step: any) => {
         formattedText += `#### ${step.agent}\n\n`;
         if (step.result) {
           formattedText += `${step.result}\n\n`;
@@ -815,16 +840,16 @@ const OrchestrationDesignerPage: React.FC = () => {
     }
     
     // Handle hierarchical results
-    if (result.delegation) {
-      formattedText += `### Manager Delegation\n\n${result.delegation}\n\n`;
-      if (result.delegation_duration_ms) {
-        formattedText += `*Delegation Duration: ${result.delegation_duration_ms}ms*\n\n`;
+    if (data.delegation) {
+      formattedText += `### Manager Delegation\n\n${data.delegation}\n\n`;
+      if (data.delegation_duration_ms) {
+        formattedText += `*Delegation Duration: ${data.delegation_duration_ms}ms*\n\n`;
       }
     }
     
-    if (result.worker_steps && Array.isArray(result.worker_steps)) {
+    if (data.worker_steps && Array.isArray(data.worker_steps)) {
       formattedText += `### Worker Results\n\n`;
-      result.worker_steps.forEach((step: any) => {
+      data.worker_steps.forEach((step: any) => {
         formattedText += `#### ${step.worker}\n\n`;
         if (step.task) {
           formattedText += `**Task:** ${step.task}\n\n`;
@@ -839,25 +864,25 @@ const OrchestrationDesignerPage: React.FC = () => {
     }
     
     // Handle synthesis/aggregation
-    if (result.final_result) {
-      formattedText += `### Final Result\n\n${result.final_result}\n\n`;
+    if (data.final_result) {
+      formattedText += `### Final Result\n\n${data.final_result}\n\n`;
     }
     
-    if (result.synthesis) {
-      formattedText += `### Synthesis\n\n${result.synthesis}\n\n`;
-      if (result.synthesis_duration_ms) {
-        formattedText += `*Synthesis Duration: ${result.synthesis_duration_ms}ms*\n\n`;
+    if (data.synthesis) {
+      formattedText += `### Synthesis\n\n${data.synthesis}\n\n`;
+      if (data.synthesis_duration_ms) {
+        formattedText += `*Synthesis Duration: ${data.synthesis_duration_ms}ms*\n\n`;
       }
     }
     
-    if (result.aggregated_result) {
-      formattedText += `### Aggregated Result\n\n${result.aggregated_result}\n\n`;
+    if (data.aggregated_result) {
+      formattedText += `### Aggregated Result\n\n${data.aggregated_result}\n\n`;
     }
     
     // Handle debate results
-    if (result.rounds && Array.isArray(result.rounds)) {
+    if (data.rounds && Array.isArray(data.rounds)) {
       formattedText += `### Debate Rounds\n\n`;
-      result.rounds.forEach((round: any, index: number) => {
+      data.rounds.forEach((round: any, index: number) => {
         formattedText += `#### Round ${round.round || index + 1}\n\n`;
         if (round.arguments && Array.isArray(round.arguments)) {
           round.arguments.forEach((arg: any) => {
@@ -868,17 +893,17 @@ const OrchestrationDesignerPage: React.FC = () => {
     }
     
     // Handle routing results
-    if (result.selected_agent) {
+    if (data.selected_agent) {
       formattedText += `### Routing Decision\n\n`;
-      formattedText += `**Selected Agent:** ${result.selected_agent}\n\n`;
-      if (result.routing_reason) {
-        formattedText += `**Reason:** ${result.routing_reason}\n\n`;
+      formattedText += `**Selected Agent:** ${data.selected_agent}\n\n`;
+      if (data.routing_reason) {
+        formattedText += `**Reason:** ${data.routing_reason}\n\n`;
       }
     }
     
     // Total duration
-    if (result.duration_ms) {
-      formattedText += `---\n\n**Total Duration:** ${result.duration_ms}ms\n\n`;
+    if (data.duration_ms) {
+      formattedText += `---\n\n**Total Duration:** ${data.duration_ms}ms\n\n`;
     }
     
     return formattedText || 'No formatted output available';
@@ -2964,26 +2989,46 @@ Format your response as JSON:
                   </ReactMarkdown>
                 </Paper>
               ) : (
-                <Paper 
-                  sx={{ 
-                    p: 2, 
-                    backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
-                    border: `1px solid ${darkMode ? '#444' : '#e0e0e0'}`,
-                    maxHeight: 600,
-                    overflow: 'auto'
-                  }}
-                >
-                  <pre style={{ 
-                    whiteSpace: 'pre-wrap', 
-                    wordWrap: 'break-word', 
-                    margin: 0,
-                    color: darkMode ? '#00ff00' : '#006600',
-                    fontFamily: 'monospace',
-                    fontSize: '0.875rem',
-                  }}>
-                    {JSON.stringify(executionResults.get(selectedBlock.id), null, 2)}
-                  </pre>
-                </Paper>
+                <Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<ContentCopy />}
+                      onClick={handleCopyToClipboard}
+                      sx={{
+                        color: darkMode ? '#ffffff' : 'primary.main',
+                        borderColor: darkMode ? '#555' : 'primary.main',
+                        '&:hover': {
+                          borderColor: darkMode ? '#777' : 'primary.dark',
+                          backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                        }
+                      }}
+                    >
+                      Copy to Clipboard
+                    </Button>
+                  </Box>
+                  <Paper 
+                    sx={{ 
+                      p: 2, 
+                      backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
+                      border: `1px solid ${darkMode ? '#444' : '#e0e0e0'}`,
+                      maxHeight: 600,
+                      overflow: 'auto'
+                    }}
+                  >
+                    <pre style={{ 
+                      whiteSpace: 'pre-wrap', 
+                      wordWrap: 'break-word', 
+                      margin: 0,
+                      color: darkMode ? '#00ff00' : '#006600',
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem',
+                    }}>
+                      {JSON.stringify(executionResults.get(selectedBlock.id), null, 2)}
+                    </pre>
+                  </Paper>
+                </Box>
               )}
             </Box>
           ) : (
