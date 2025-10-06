@@ -141,12 +141,6 @@ class DeploymentExecutor:
         
         Returns list of block IDs in execution order
         """
-        print(f"🔍 Topological sort debug:")
-        print(f"   Connections type: {type(connections)}, length: {len(connections)}")
-        if connections:
-            print(f"   First connection type: {type(connections[0])}")
-            print(f"   First connection: {connections[0]}")
-        
         # Build adjacency list
         graph: Dict[str, List[str]] = {block["id"]: [] for block in blocks}
         in_degree: Dict[str, int] = {block["id"]: 0 for block in blocks}
@@ -195,7 +189,11 @@ class DeploymentExecutor:
         incoming = [c for c in connections if get_target_id(c) == block_id]
         
         if not incoming:
-            return context["input"]
+            # Convert dict to JSON string for consistency
+            input_data = context["input"]
+            if isinstance(input_data, dict):
+                return json.dumps(input_data, indent=2) if input_data else ""
+            return str(input_data) if input_data else ""
         
         # Format results from previous blocks
         inputs = []
@@ -210,7 +208,13 @@ class DeploymentExecutor:
                 else:
                     inputs.append(str(result))
         
-        return "\n\n---\n\n".join(inputs) if inputs else context["input"]
+        if not inputs:
+            input_data = context["input"]
+            if isinstance(input_data, dict):
+                return json.dumps(input_data, indent=2) if input_data else ""
+            return str(input_data) if input_data else ""
+        
+        return "\n\n---\n\n".join(inputs)
     
     async def _execute_sequential(self, block: Dict, block_input: Any, log_id: str) -> Dict[str, Any]:
         """Execute sequential pattern"""
