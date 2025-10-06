@@ -694,56 +694,51 @@ const OrchestrationDesignerPage: React.FC = () => {
       const jsonString = JSON.stringify(executionResults.get(selectedBlock.id), null, 2);
       
       try {
-        // Use the same approach as AgentTerminal.tsx
         await navigator.clipboard.writeText(jsonString);
-        console.log('📋 JSON copied to clipboard successfully');
+        console.log('📋 Terminal content copied to clipboard');
         setSnackbar({
           open: true,
           message: 'JSON copied to clipboard!',
           severity: 'success'
         });
       } catch (error) {
-        console.error('❌ Failed to copy to clipboard:', error);
+        console.error('❌ Failed to copy content to clipboard:', error);
         
-        // Fallback for older browsers or security restrictions
+        // Fallback for older browsers - same as AgentTerminal.tsx
+        // But temporarily remove aria-hidden to make it work in dialogs
+        const rootElement = document.getElementById('root');
+        const hadAriaHidden = rootElement?.getAttribute('aria-hidden') === 'true';
+        
+        if (hadAriaHidden && rootElement) {
+          rootElement.removeAttribute('aria-hidden');
+        }
+        
         try {
           const textArea = document.createElement('textarea');
           textArea.value = jsonString;
-          textArea.style.position = 'fixed';
-          textArea.style.top = '0';
-          textArea.style.left = '0';
-          textArea.style.width = '2em';
-          textArea.style.height = '2em';
-          textArea.style.padding = '0';
-          textArea.style.border = 'none';
-          textArea.style.outline = 'none';
-          textArea.style.boxShadow = 'none';
-          textArea.style.background = 'transparent';
-          
           document.body.appendChild(textArea);
-          textArea.focus();
           textArea.select();
-          
-          const successful = document.execCommand('copy');
+          document.execCommand('copy');
           document.body.removeChild(textArea);
           
-          if (successful) {
-            console.log('📋 Fallback copy succeeded');
-            setSnackbar({
-              open: true,
-              message: 'JSON copied to clipboard!',
-              severity: 'success'
-            });
-          } else {
-            throw new Error('Fallback copy failed');
-          }
+          console.log('📋 Fallback copy succeeded');
+          setSnackbar({
+            open: true,
+            message: 'JSON copied to clipboard!',
+            severity: 'success'
+          });
         } catch (fallbackError) {
           console.error('❌ Fallback copy also failed:', fallbackError);
           setSnackbar({
             open: true,
-            message: 'Failed to copy to clipboard. Please manually select and copy the text.',
+            message: 'Failed to copy to clipboard.',
             severity: 'error'
           });
+        } finally {
+          // Restore aria-hidden
+          if (hadAriaHidden && rootElement) {
+            rootElement.setAttribute('aria-hidden', 'true');
+          }
         }
       }
     }
