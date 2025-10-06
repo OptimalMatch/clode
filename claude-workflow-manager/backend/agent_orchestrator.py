@@ -952,8 +952,13 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
             await stream_callback("status", agent_name, "executing")
             
             step_start = datetime.now()
+            
+            # Create proper async callback wrapper
+            async def agent_stream_cb(name: str, chunk: str):
+                await stream_callback("chunk", name, chunk)
+            
             response = await self.send_message(previous_agent, agent_name, current_input, MessageType.TASK, 
-                                             lambda name, chunk: stream_callback("chunk", name, chunk))
+                                             agent_stream_cb)
             step_end = datetime.now()
             
             results[agent_name] = response
@@ -994,8 +999,13 @@ Format your response as JSON:
         
         await stream_callback("status", manager, "delegating")
         delegation_start = datetime.now()
+        
+        # Create proper async callback wrapper
+        async def delegation_stream_cb(name: str, chunk: str):
+            await stream_callback("chunk", name, chunk)
+        
         delegation = await self.send_message("system", manager, delegation_prompt, MessageType.DELEGATION,
-                                            lambda name, chunk: stream_callback("chunk", name, chunk))
+                                            delegation_stream_cb)
         delegation_end = datetime.now()
         await stream_callback("status", manager, "delegation_complete")
         
@@ -1017,8 +1027,13 @@ Format your response as JSON:
             if worker in self.agents:
                 await stream_callback("status", worker, "executing")
                 worker_start = datetime.now()
+                
+                # Create proper async callback wrapper
+                async def worker_stream_cb(name: str, chunk: str):
+                    await stream_callback("chunk", name, chunk)
+                
                 result = await self.send_message(manager, worker, subtask["task"], MessageType.TASK,
-                                               lambda name, chunk: stream_callback("chunk", name, chunk))
+                                               worker_stream_cb)
                 worker_end = datetime.now()
                 await stream_callback("status", worker, "completed")
                 
@@ -1040,8 +1055,13 @@ Synthesize these results into a coherent final output."""
         
         await stream_callback("status", manager, "synthesizing")
         synthesis_start = datetime.now()
+        
+        # Create proper async callback wrapper
+        async def synthesis_stream_cb(name: str, chunk: str):
+            await stream_callback("chunk", name, chunk)
+        
         final_result = await self.send_message("system", manager, synthesis_prompt, MessageType.SYNTHESIS,
-                                              lambda name, chunk: stream_callback("chunk", name, chunk))
+                                              synthesis_stream_cb)
         synthesis_end = datetime.now()
         await stream_callback("status", manager, "completed")
         
