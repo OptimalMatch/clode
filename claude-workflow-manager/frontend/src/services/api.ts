@@ -939,6 +939,7 @@ export const orchestrationDesignApi = {
     currentDesign?: OrchestrationDesign,
     mode: 'create' | 'improve' = 'create',
     onChunk?: (chunk: string) => void,
+    onStatus?: (agent: string, status: string) => void,
     abortSignal?: AbortSignal
   ): Promise<OrchestrationDesign> => {
     return new Promise((resolve, reject) => {
@@ -984,6 +985,9 @@ export const orchestrationDesignApi = {
                   if (event.type === 'chunk' && onChunk) {
                     console.log('Chunk received:', event.data); // Debug logging
                     onChunk(event.data);
+                  } else if (event.type === 'status' && onStatus) {
+                    console.log('Status received:', event.agent, event.data); // Debug logging
+                    onStatus(event.agent, event.data);
                   } else if (event.type === 'complete') {
                     console.log('Generation complete'); // Debug logging
                     resolve(event.design);
