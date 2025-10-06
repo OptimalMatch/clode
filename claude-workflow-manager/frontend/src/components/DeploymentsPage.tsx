@@ -204,7 +204,9 @@ const DeploymentsPage: React.FC = () => {
       setExecuteDialogOpen(false);
       
       // Show result
-      console.log('Execution result:', response.data);
+      if (response) {
+        console.log('Execution result:', response.data);
+      }
     },
     onError: (error: any) => {
       enqueueSnackbar(error.response?.data?.detail || error.message || 'Failed to execute deployment', {
