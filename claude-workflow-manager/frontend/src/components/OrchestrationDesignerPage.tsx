@@ -691,28 +691,35 @@ const OrchestrationDesignerPage: React.FC = () => {
   // Copy JSON to clipboard
   const handleCopyToClipboard = async () => {
     if (selectedBlock && executionResults.has(selectedBlock.id)) {
+      const rootElement = document.getElementById('root');
+      const originalAriaHidden = rootElement?.getAttribute('aria-hidden');
+      
       try {
         const jsonString = JSON.stringify(executionResults.get(selectedBlock.id), null, 2);
         
-        // Try the modern Clipboard API with proper async/await
-        // This works better with dialogs and aria-hidden elements
-        try {
-          await navigator.clipboard.writeText(jsonString);
-          console.log('Clipboard API succeeded');
-          setSnackbar({
-            open: true,
-            message: 'JSON copied to clipboard!',
-            severity: 'success'
-          });
-          return;
-        } catch (clipboardError) {
-          console.warn('Clipboard API failed, trying fallback:', clipboardError);
+        // Temporarily remove aria-hidden to allow clipboard access
+        if (rootElement && originalAriaHidden === 'true') {
+          rootElement.removeAttribute('aria-hidden');
+          console.log('Temporarily removed aria-hidden from root');
         }
         
-        // Fallback: Create a textarea outside the dialog's DOM tree
-        // Use a small delay to ensure focus is properly handled
-        await new Promise(resolve => setTimeout(resolve, 10));
+        // Try the modern Clipboard API with proper async/await
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          try {
+            await navigator.clipboard.writeText(jsonString);
+            console.log('Clipboard API succeeded');
+            setSnackbar({
+              open: true,
+              message: 'JSON copied to clipboard!',
+              severity: 'success'
+            });
+            return;
+          } catch (clipboardError) {
+            console.warn('Clipboard API failed, trying fallback:', clipboardError);
+          }
+        }
         
+        // Fallback: Use execCommand with temporary textarea
         const textArea = document.createElement('textarea');
         textArea.value = jsonString;
         textArea.style.position = 'fixed';
@@ -728,8 +735,6 @@ const OrchestrationDesignerPage: React.FC = () => {
         textArea.style.zIndex = '9999';
         
         document.body.appendChild(textArea);
-        
-        // Force focus and selection
         textArea.focus();
         textArea.select();
         
@@ -759,6 +764,12 @@ const OrchestrationDesignerPage: React.FC = () => {
           message: `Failed to copy to clipboard. Please manually select and copy the text.`,
           severity: 'error'
         });
+      } finally {
+        // Restore aria-hidden if it was originally set
+        if (rootElement && originalAriaHidden === 'true') {
+          rootElement.setAttribute('aria-hidden', 'true');
+          console.log('Restored aria-hidden to root');
+        }
       }
     }
   };
