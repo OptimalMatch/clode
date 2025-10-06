@@ -152,11 +152,21 @@ class DeploymentExecutor:
         
         Returns list of block IDs in execution order
         """
+        print(f"🔍 Topological sort debug:")
+        print(f"   Connections type: {type(connections)}, length: {len(connections)}")
+        if connections:
+            print(f"   First connection type: {type(connections[0])}")
+            print(f"   First connection: {connections[0]}")
+        
         # Build adjacency list
         graph: Dict[str, List[str]] = {block["id"]: [] for block in blocks}
         in_degree: Dict[str, int] = {block["id"]: 0 for block in blocks}
         
-        for conn in connections:
+        for i, conn in enumerate(connections):
+            print(f"   Processing connection {i}: type={type(conn)}")
+            if isinstance(conn, str):
+                print(f"   ERROR: Connection is a string: {conn[:100]}")
+                raise ValueError(f"Connection {i} is a string, not a dictionary")
             source_id = conn["source"]["blockId"]
             target_id = conn["target"]["blockId"]
             
