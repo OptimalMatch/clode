@@ -59,6 +59,8 @@ import {
   DarkMode,
   History,
   Restore,
+  AutoAwesome,
+  SmartToy,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent, OrchestrationDesign } from '../services/api';
@@ -158,6 +160,11 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [designToDelete, setDesignToDelete] = useState<string | null>(null);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [selectedDesignForHistory, setSelectedDesignForHistory] = useState<any>(null);
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiMode, setAiMode] = useState<'create' | 'improve'>('create');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiStreamOutput, setAiStreamOutput] = useState('');
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('orchestrationDesignerDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -665,6 +672,72 @@ const OrchestrationDesignerPage: React.FC = () => {
   const handleRestoreVersion = (version: number) => {
     if (selectedDesignForHistory?.id) {
       restoreMutation.mutate({ id: selectedDesignForHistory.id, version });
+    }
+  };
+
+  // Handle AI-assisted design generation
+  const handleAIGenerate = async () => {
+    if (!aiPrompt.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Please enter a prompt describing what you want',
+        severity: 'warning'
+      });
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiStreamOutput('');
+
+    try {
+      const currentDesignForAI = aiMode === 'improve' ? {
+        name: designName,
+        description: designDescription,
+        blocks,
+        connections,
+        git_repos: []
+      } : undefined;
+
+      const generatedDesign = await orchestrationDesignApi.generateWithAI(
+        aiPrompt,
+        currentDesignForAI,
+        aiMode,
+        (chunk) => {
+          setAiStreamOutput(prev => prev + chunk);
+        }
+      );
+
+      // Apply the generated design to the canvas
+      if (generatedDesign) {
+        setDesignName(generatedDesign.name);
+        setDesignDescription(generatedDesign.description);
+        setBlocks(generatedDesign.blocks);
+        setConnections(generatedDesign.connections);
+        
+        // Clear the current design ID if creating new
+        if (aiMode === 'create') {
+          setCurrentDesignId(null);
+        }
+
+        setSnackbar({
+          open: true,
+          message: `Design ${aiMode === 'create' ? 'created' : 'improved'} successfully!`,
+          severity: 'success'
+        });
+        
+        setAiAssistantOpen(false);
+        setAiPrompt('');
+        setAiStreamOutput('');
+      }
+    } catch (error: any) {
+      console.error('Error generating design:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to generate design: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setAiGenerating(false);
     }
   };
 
@@ -1944,6 +2017,24 @@ Format your response as JSON:
             </Tooltip>
             <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
             <Button
+              variant="contained"
+              startIcon={<AutoAwesome />}
+              onClick={() => {
+                setAiMode(blocks.length > 0 ? 'improve' : 'create');
+                setAiAssistantOpen(true);
+              }}
+              sx={{
+                background: 'linear-gradient(45deg, #667eea 30%, #764ba2 90%)',
+                color: 'white',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #5568d3 30%, #653a8c 90%)',
+                }
+              }}
+            >
+              AI Assistant
+            </Button>
+            <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+            <Button
               variant="outlined"
               startIcon={<Add />}
               onClick={newDesign}
@@ -2942,6 +3033,133 @@ Format your response as JSON:
             sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
           >
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* AI Assistant Dialog */}
+      <Dialog
+        open={aiAssistantOpen}
+        onClose={() => !aiGenerating && setAiAssistantOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+            color: darkMode ? '#ffffff' : '#000000',
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SmartToy sx={{ color: '#667eea' }} />
+            <span>AI Design Assistant</span>
+          </Box>
+          <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary', mt: 0.5 }}>
+            {aiMode === 'create' 
+              ? 'Describe the orchestration design you want to create' 
+              : 'Describe how you want to improve the current design'}
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb: 2 }}>
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel sx={{ color: darkMode ? '#b0b0b0' : undefined }}>Mode</InputLabel>
+              <Select
+                value={aiMode}
+                onChange={(e) => setAiMode(e.target.value as 'create' | 'improve')}
+                disabled={aiGenerating}
+                label="Mode"
+                sx={{
+                  color: darkMode ? '#ffffff' : undefined,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: darkMode ? '#555' : undefined,
+                  },
+                }}
+              >
+                <MenuItem value="create">Create New Design</MenuItem>
+                <MenuItem value="improve">Improve Current Design</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              label="Describe your design"
+              placeholder={
+                aiMode === 'create'
+                  ? 'Example: Create a design that analyzes customer feedback using sentiment analysis, categorization, and trend detection...'
+                  : 'Example: Add a reflection agent to analyze and improve the prompts...'
+              }
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              disabled={aiGenerating}
+              sx={{
+                mb: 2,
+                '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
+                '& .MuiOutlinedInput-root': {
+                  color: darkMode ? '#ffffff' : undefined,
+                  '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+                },
+              }}
+            />
+
+            {aiGenerating && (
+              <Box sx={{ mt: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <CircularProgress size={20} />
+                  <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
+                    Generating design...
+                  </Typography>
+                </Box>
+                {aiStreamOutput && (
+                  <Paper
+                    sx={{
+                      p: 2,
+                      backgroundColor: darkMode ? '#2d2d2d' : '#f5f5f5',
+                      maxHeight: 300,
+                      overflow: 'auto',
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      color: darkMode ? '#ffffff' : '#000000',
+                    }}
+                  >
+                    {aiStreamOutput}
+                  </Paper>
+                )}
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setAiAssistantOpen(false)}
+            disabled={aiGenerating}
+            sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleAIGenerate}
+            variant="contained"
+            disabled={aiGenerating || !aiPrompt.trim()}
+            startIcon={aiGenerating ? <CircularProgress size={20} /> : <AutoAwesome />}
+            sx={{
+              background: 'linear-gradient(45deg, #667eea 30%, #764ba2 90%)',
+              color: 'white',
+              '&:hover': {
+                background: 'linear-gradient(45deg, #5568d3 30%, #653a8c 90%)',
+              },
+              '&:disabled': {
+                background: darkMode ? '#333' : '#ccc',
+                color: darkMode ? '#666' : '#999',
+              }
+            }}
+          >
+            {aiGenerating ? 'Generating...' : 'Generate Design'}
           </Button>
         </DialogActions>
       </Dialog>
