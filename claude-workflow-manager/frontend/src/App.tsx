@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { SnackbarProvider } from 'notistack';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import LoginPage from './components/LoginPage';
@@ -44,31 +45,33 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Router future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-          <AuthProvider>
-            <Routes>
-              {/* Public routes (no layout) */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              
-              {/* Protected routes (with layout) */}
-              <Route path="/" element={<Layout><WorkflowsPage /></Layout>} />
-              <Route path="/workflows" element={<Layout><WorkflowsPage /></Layout>} />
-              <Route path="/profile" element={<Layout><ProfilePage /></Layout>} />
-              <Route path="/design" element={<Layout><DesignPage /></Layout>} />
-              <Route path="/prompts" element={<Layout><PromptsPage /></Layout>} />
-              <Route path="/subagents" element={<Layout><SubagentsPage /></Layout>} />
-              <Route path="/claude-auth" element={<Layout><ClaudeAuthPage /></Layout>} />
-              <Route path="/ssh-keys" element={<Layout><SSHKeysPage /></Layout>} />
-              <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
-              <Route path="/orchestration" element={<Layout><AgentOrchestrationPage /></Layout>} />
-              <Route path="/orchestration-designer" element={<Layout><OrchestrationDesignerPage /></Layout>} />
-              <Route path="/deployments" element={<Layout><DeploymentsPage /></Layout>} />
-              <Route path="/agents/:workflowId" element={<Layout><AgentsPage /></Layout>} />
-              <Route path="/multi-agent" element={<Layout><MultiAgentView /></Layout>} />
-            </Routes>
-          </AuthProvider>
-        </Router>
+        <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+          <Router future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+            <AuthProvider>
+              <Routes>
+                {/* Public routes (no layout) */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                
+                {/* Protected routes (with layout) */}
+                <Route path="/" element={<Layout><WorkflowsPage /></Layout>} />
+                <Route path="/workflows" element={<Layout><WorkflowsPage /></Layout>} />
+                <Route path="/profile" element={<Layout><ProfilePage /></Layout>} />
+                <Route path="/design" element={<Layout><DesignPage /></Layout>} />
+                <Route path="/prompts" element={<Layout><PromptsPage /></Layout>} />
+                <Route path="/subagents" element={<Layout><SubagentsPage /></Layout>} />
+                <Route path="/claude-auth" element={<Layout><ClaudeAuthPage /></Layout>} />
+                <Route path="/ssh-keys" element={<Layout><SSHKeysPage /></Layout>} />
+                <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
+                <Route path="/orchestration" element={<Layout><AgentOrchestrationPage /></Layout>} />
+                <Route path="/orchestration-designer" element={<Layout><OrchestrationDesignerPage /></Layout>} />
+                <Route path="/deployments" element={<Layout><DeploymentsPage /></Layout>} />
+                <Route path="/agents/:workflowId" element={<Layout><AgentsPage /></Layout>} />
+                <Route path="/multi-agent" element={<Layout><MultiAgentView /></Layout>} />
+              </Routes>
+            </AuthProvider>
+          </Router>
+        </SnackbarProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
