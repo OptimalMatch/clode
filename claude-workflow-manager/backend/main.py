@@ -3460,6 +3460,177 @@ async def seed_orchestration_designs(force: bool = False):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to seed designs: {str(e)}")
 
+@app.post(
+    "/api/orchestration-designs/generate",
+    summary="AI-Generate Orchestration Design",
+    description="Use AI to generate or improve an orchestration design based on natural language prompt",
+    tags=["Orchestration Designer"]
+)
+async def generate_orchestration_design(
+    request: Request,
+    prompt: str = Body(..., description="User's natural language description of what they want"),
+    current_design: Optional[Dict[str, Any]] = Body(None, description="Current design to improve (optional)"),
+    mode: str = Body("create", description="Mode: 'create' for new design or 'improve' for enhancing existing")
+):
+    """Generate or improve an orchestration design using AI"""
+    try:
+        import anthropic
+        import json
+        
+        # Get API key
+        api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="No API key configured")
+        
+        # Get example designs from seed file
+        from seed_orchestration_designs import SAMPLE_DESIGN_NAMES
+        
+        # Build the system prompt with design schema and examples
+        system_prompt = """You are an expert AI assistant that helps create orchestration workflow designs. Your task is to generate or improve orchestration designs based on user requirements.
+
+**Design Structure:**
+An orchestration design consists of:
+1. **blocks**: List of orchestration pattern blocks (sequential, parallel, hierarchical, debate, routing, reflection)
+2. **connections**: Links between blocks showing data flow
+3. **agents**: AI agents within each block with specific roles and prompts
+
+**Available Orchestration Patterns:**
+- **sequential**: Agents execute one after another (A → B → C)
+- **parallel**: Multiple agents work simultaneously
+- **hierarchical**: Manager delegates tasks to workers, then synthesizes
+- **debate**: Agents debate to reach consensus
+- **routing**: Router directs to specific agents based on input
+- **reflection**: Agents analyze and improve other agents' prompts
+
+**Agent Roles:**
+- manager: Coordinates and delegates
+- worker: Executes specific tasks
+- specialist: Domain expert
+- moderator: Facilitates debate
+- reflector: Analyzes and improves prompts
+
+**Design JSON Format:**
+```json
+{
+  "name": "Design Name",
+  "description": "Clear description",
+  "blocks": [
+    {
+      "id": "block-1",
+      "type": "parallel",
+      "position": {"x": 50, "y": 50},
+      "data": {
+        "label": "Block Label",
+        "agents": [
+          {
+            "id": "agent-1",
+            "name": "Agent Name",
+            "system_prompt": "Clear, specific instructions. Be explicit about output format and scope.",
+            "role": "specialist"
+          }
+        ],
+        "task": "The specific task for this block",
+        "git_repo": ""
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "conn-1",
+      "source": "block-1",
+      "target": "block-2",
+      "type": "block"
+    }
+  ],
+  "git_repos": []
+}
+```
+
+**Important Prompt Writing Guidelines:**
+- Keep prompts SHORT and SPECIFIC (2-3 sentences max)
+- Be EXPLICIT about output format and scope
+- Avoid vague instructions that let agents stray
+- Include clear success criteria
+- Example good prompt: "List 3 security issues in this code. One sentence each."
+- Example bad prompt: "Analyze the security of this code and provide recommendations."
+
+**Position Layout:**
+- Start first block at x:50, y:50
+- Space blocks 400px apart horizontally (x: 50, 450, 850, etc.)
+- For parallel branches, space vertically (y: 50, 250, 450, etc.)"""
+
+        # Build user message based on mode
+        if mode == "improve" and current_design:
+            user_message = f"""**Current Design:**
+```json
+{json.dumps(current_design, indent=2)}
+```
+
+**User Request:**
+{prompt}
+
+Please improve the current design based on the user's request. Maintain the existing structure where appropriate, but make the requested changes. Return ONLY the complete updated design JSON, no other text."""
+        else:
+            user_message = f"""**User Request:**
+{prompt}
+
+Please create a new orchestration design based on this request. Think about:
+1. What orchestration patterns best fit the requirements?
+2. What agents are needed and what should their specific roles be?
+3. How should data flow between blocks?
+4. How can prompts be clear and explicit?
+
+Return ONLY the complete design JSON, no other text."""
+
+        # Call Claude API
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        async def generate_stream():
+            """Stream the AI response"""
+            accumulated_text = ""
+            
+            with client.messages.stream(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4000,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}]
+            ) as stream:
+                for text in stream.text_stream:
+                    accumulated_text += text
+                    # Send chunk
+                    yield f"data: {json.dumps({'type': 'chunk', 'data': text})}\n\n"
+            
+            # Parse the JSON from the response
+            try:
+                # Extract JSON from markdown code blocks if present
+                json_text = accumulated_text
+                if "```json" in json_text:
+                    json_text = json_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in json_text:
+                    json_text = json_text.split("```")[1].split("```")[0].strip()
+                
+                design_data = json.loads(json_text)
+                
+                # Send complete event with parsed design
+                yield f"data: {json.dumps({'type': 'complete', 'design': design_data})}\n\n"
+            except json.JSONDecodeError as e:
+                # Send error if JSON parsing fails
+                yield f"data: {json.dumps({'type': 'error', 'error': f'Failed to parse design JSON: {str(e)}'})}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating design: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate design: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

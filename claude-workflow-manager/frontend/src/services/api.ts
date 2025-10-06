@@ -933,6 +933,74 @@ export const orchestrationDesignApi = {
     const response = await api.post(`/api/orchestration-designs/seed?force=${force}`);
     return response.data;
   },
+
+  generateWithAI: async (
+    prompt: string,
+    currentDesign?: OrchestrationDesign,
+    mode: 'create' | 'improve' = 'create',
+    onChunk?: (chunk: string) => void,
+    abortSignal?: AbortSignal
+  ): Promise<OrchestrationDesign> => {
+    return new Promise((resolve, reject) => {
+      fetch(`${getApiUrl()}/api/orchestration-designs/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          current_design: currentDesign,
+          mode,
+        }),
+        signal: abortSignal,
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const reader = response.body?.getReader();
+          if (!reader) {
+            throw new Error('No response body');
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const event = JSON.parse(line.slice(6));
+                  
+                  if (event.type === 'chunk' && onChunk) {
+                    onChunk(event.data);
+                  } else if (event.type === 'complete') {
+                    resolve(event.design);
+                  } else if (event.type === 'error') {
+                    reject(new Error(event.error || 'Generation failed'));
+                  }
+                } catch (e) {
+                  console.error('Failed to parse SSE event:', e);
+                }
+              }
+            }
+          }
+        })
+        .catch((error) => {
+          if (error.name !== 'AbortError') {
+            reject(error);
+          }
+        });
+    });
+  },
 };
 
 // Export the base axios instance as default for direct API calls
