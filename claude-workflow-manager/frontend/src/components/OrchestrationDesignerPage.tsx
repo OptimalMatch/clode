@@ -33,6 +33,8 @@ import {
   Snackbar,
   Switch,
   FormControlLabel,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   AccountTree,
@@ -65,6 +67,7 @@ import {
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent, OrchestrationDesign } from '../services/api';
 import { Workflow } from '../types';
+import ReactMarkdown from 'react-markdown';
 
 // Orchestration pattern types
 type OrchestrationPattern = 'sequential' | 'parallel' | 'hierarchical' | 'debate' | 'routing' | 'reflection';
@@ -144,6 +147,7 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [executionResults, setExecutionResults] = useState<Map<string, any>>(new Map());
   const [currentlyExecutingBlock, setCurrentlyExecutingBlock] = useState<string | null>(null);
   const [resultsDialogOpen, setResultsDialogOpen] = useState(false);
+  const [resultsViewMode, setResultsViewMode] = useState<'formatted' | 'raw'>('formatted');
   const [enableStreaming, setEnableStreaming] = useState(true); // Enable streaming by default
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   
@@ -765,6 +769,119 @@ const OrchestrationDesignerPage: React.FC = () => {
       setAiGenerationStartTime(null);
       setAiGenerationStatus('Connecting...');
     }
+  };
+
+  // Format results for human-friendly display
+  const formatResultsForDisplay = (result: any): string => {
+    if (!result) return 'No result data';
+    
+    let formattedText = '';
+    
+    // Handle different result structures
+    if (result.pattern) {
+      formattedText += `## Orchestration Pattern: ${result.pattern}\n\n`;
+    }
+    
+    if (result.task) {
+      formattedText += `### Task\n${result.task}\n\n`;
+    }
+    
+    // Handle sequential results
+    if (result.steps && Array.isArray(result.steps)) {
+      formattedText += `### Agent Steps\n\n`;
+      result.steps.forEach((step: any, index: number) => {
+        formattedText += `#### Step ${step.step || index + 1}: ${step.agent}\n\n`;
+        if (step.output) {
+          formattedText += `${step.output}\n\n`;
+        }
+        if (step.duration_ms) {
+          formattedText += `*Duration: ${step.duration_ms}ms*\n\n`;
+        }
+      });
+    }
+    
+    // Handle parallel results
+    if (result.agent_steps && Array.isArray(result.agent_steps)) {
+      formattedText += `### Agent Results\n\n`;
+      result.agent_steps.forEach((step: any) => {
+        formattedText += `#### ${step.agent}\n\n`;
+        if (step.result) {
+          formattedText += `${step.result}\n\n`;
+        }
+        if (step.duration_ms) {
+          formattedText += `*Duration: ${step.duration_ms}ms*\n\n`;
+        }
+      });
+    }
+    
+    // Handle hierarchical results
+    if (result.delegation) {
+      formattedText += `### Manager Delegation\n\n${result.delegation}\n\n`;
+      if (result.delegation_duration_ms) {
+        formattedText += `*Delegation Duration: ${result.delegation_duration_ms}ms*\n\n`;
+      }
+    }
+    
+    if (result.worker_steps && Array.isArray(result.worker_steps)) {
+      formattedText += `### Worker Results\n\n`;
+      result.worker_steps.forEach((step: any) => {
+        formattedText += `#### ${step.worker}\n\n`;
+        if (step.task) {
+          formattedText += `**Task:** ${step.task}\n\n`;
+        }
+        if (step.result) {
+          formattedText += `${step.result}\n\n`;
+        }
+        if (step.duration_ms) {
+          formattedText += `*Duration: ${step.duration_ms}ms*\n\n`;
+        }
+      });
+    }
+    
+    // Handle synthesis/aggregation
+    if (result.final_result) {
+      formattedText += `### Final Result\n\n${result.final_result}\n\n`;
+    }
+    
+    if (result.synthesis) {
+      formattedText += `### Synthesis\n\n${result.synthesis}\n\n`;
+      if (result.synthesis_duration_ms) {
+        formattedText += `*Synthesis Duration: ${result.synthesis_duration_ms}ms*\n\n`;
+      }
+    }
+    
+    if (result.aggregated_result) {
+      formattedText += `### Aggregated Result\n\n${result.aggregated_result}\n\n`;
+    }
+    
+    // Handle debate results
+    if (result.rounds && Array.isArray(result.rounds)) {
+      formattedText += `### Debate Rounds\n\n`;
+      result.rounds.forEach((round: any, index: number) => {
+        formattedText += `#### Round ${round.round || index + 1}\n\n`;
+        if (round.arguments && Array.isArray(round.arguments)) {
+          round.arguments.forEach((arg: any) => {
+            formattedText += `**${arg.agent}:**\n\n${arg.argument}\n\n`;
+          });
+        }
+      });
+    }
+    
+    // Handle routing results
+    if (result.selected_agent) {
+      formattedText += `### Routing Decision\n\n`;
+      formattedText += `**Selected Agent:** ${result.selected_agent}\n\n`;
+      if (result.routing_reason) {
+        formattedText += `**Reason:** ${result.routing_reason}\n\n`;
+      }
+    }
+    
+    // Total duration
+    if (result.duration_ms) {
+      formattedText += `---\n\n**Total Duration:** ${result.duration_ms}ms\n\n`;
+    }
+    
+    return formattedText || 'No formatted output available';
   };
 
   // Execute orchestration workflow
@@ -2740,8 +2857,11 @@ Format your response as JSON:
       {/* Results Dialog */}
       <Dialog 
         open={resultsDialogOpen} 
-        onClose={() => setResultsDialogOpen(false)}
-        maxWidth="md"
+        onClose={() => {
+          setResultsDialogOpen(false);
+          setResultsViewMode('formatted');
+        }}
+        maxWidth="lg"
         fullWidth
         PaperProps={{
           sx: {
@@ -2756,29 +2876,128 @@ Format your response as JSON:
         <DialogContent>
           {selectedBlock && executionResults.has(selectedBlock.id) ? (
             <Box>
-              <Typography variant="h6" sx={{ mb: 2, color: darkMode ? '#ffffff' : 'inherit' }}>
-                Results
-              </Typography>
-              <Paper 
+              <Tabs 
+                value={resultsViewMode} 
+                onChange={(_, newValue) => setResultsViewMode(newValue)}
                 sx={{ 
-                  p: 2, 
-                  backgroundColor: darkMode ? '#2d2d2d' : '#f5f5f5',
-                  maxHeight: 400,
-                  overflow: 'auto'
+                  mb: 2,
+                  borderBottom: 1,
+                  borderColor: darkMode ? '#444' : 'divider',
+                  '& .MuiTab-root': {
+                    color: darkMode ? '#b0b0b0' : 'inherit',
+                  },
+                  '& .Mui-selected': {
+                    color: darkMode ? '#ffffff' : 'primary.main',
+                  },
                 }}
               >
-                <pre style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word', margin: 0 }}>
-                  {JSON.stringify(executionResults.get(selectedBlock.id), null, 2)}
-                </pre>
-              </Paper>
+                <Tab label="📄 Formatted View" value="formatted" />
+                <Tab label="{ } Raw JSON" value="raw" />
+              </Tabs>
+              
+              {resultsViewMode === 'formatted' ? (
+                <Paper 
+                  sx={{ 
+                    p: 3, 
+                    backgroundColor: darkMode ? '#2d2d2d' : '#ffffff',
+                    border: `1px solid ${darkMode ? '#444' : '#e0e0e0'}`,
+                    maxHeight: 600,
+                    overflow: 'auto',
+                    '& h2': { 
+                      color: darkMode ? '#667eea' : '#5568d3',
+                      marginTop: '0.5em',
+                      marginBottom: '0.5em',
+                      fontSize: '1.75rem',
+                    },
+                    '& h3': { 
+                      color: darkMode ? '#8b9aee' : '#6677dd',
+                      marginTop: '1em',
+                      marginBottom: '0.5em',
+                      fontSize: '1.5rem',
+                    },
+                    '& h4': { 
+                      color: darkMode ? '#a5b4f2' : '#7788e6',
+                      marginTop: '0.75em',
+                      marginBottom: '0.5em',
+                      fontSize: '1.25rem',
+                    },
+                    '& p': { 
+                      color: darkMode ? '#e0e0e0' : '#333333',
+                      lineHeight: 1.6,
+                      marginBottom: '0.75em',
+                    },
+                    '& strong': {
+                      color: darkMode ? '#ffffff' : '#000000',
+                      fontWeight: 600,
+                    },
+                    '& em': {
+                      color: darkMode ? '#b0b0b0' : '#666666',
+                    },
+                    '& code': {
+                      backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
+                      padding: '2px 6px',
+                      borderRadius: '3px',
+                      fontFamily: 'monospace',
+                      fontSize: '0.9em',
+                      color: darkMode ? '#00ff00' : '#006600',
+                    },
+                    '& pre': {
+                      backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
+                      padding: '12px',
+                      borderRadius: '4px',
+                      overflow: 'auto',
+                      color: darkMode ? '#00ff00' : '#006600',
+                    },
+                    '& hr': {
+                      borderColor: darkMode ? '#444' : '#e0e0e0',
+                      margin: '1.5em 0',
+                    },
+                    '& ul, & ol': {
+                      color: darkMode ? '#e0e0e0' : '#333333',
+                      paddingLeft: '1.5em',
+                      marginBottom: '0.75em',
+                    },
+                  }}
+                >
+                  <ReactMarkdown>
+                    {formatResultsForDisplay(executionResults.get(selectedBlock.id))}
+                  </ReactMarkdown>
+                </Paper>
+              ) : (
+                <Paper 
+                  sx={{ 
+                    p: 2, 
+                    backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
+                    border: `1px solid ${darkMode ? '#444' : '#e0e0e0'}`,
+                    maxHeight: 600,
+                    overflow: 'auto'
+                  }}
+                >
+                  <pre style={{ 
+                    whiteSpace: 'pre-wrap', 
+                    wordWrap: 'break-word', 
+                    margin: 0,
+                    color: darkMode ? '#00ff00' : '#006600',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                  }}>
+                    {JSON.stringify(executionResults.get(selectedBlock.id), null, 2)}
+                  </pre>
+                </Paper>
+              )}
             </Box>
           ) : (
-            <Typography>No results available</Typography>
+            <Typography sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
+              No results available
+            </Typography>
           )}
         </DialogContent>
         <DialogActions>
           <Button 
-            onClick={() => setResultsDialogOpen(false)}
+            onClick={() => {
+              setResultsDialogOpen(false);
+              setResultsViewMode('formatted');
+            }}
             sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
           >
             Close
