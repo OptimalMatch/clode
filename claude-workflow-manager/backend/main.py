@@ -3913,8 +3913,15 @@ async def execute_deployment(
         if not design_dict:
             raise HTTPException(status_code=404, detail="Design not found")
         
+        # Debug: Check what we got from DB
+        print(f"📋 Design dict keys: {design_dict.keys()}")
+        print(f"📋 Blocks type: {type(design_dict.get('blocks'))}, value: {design_dict.get('blocks')[:100] if design_dict.get('blocks') else 'None'}")
+        print(f"📋 Connections type: {type(design_dict.get('connections'))}")
+        
         # Convert dict to OrchestrationDesign object
         design = OrchestrationDesign(**design_dict)
+        
+        print(f"✅ Converted design - blocks: {type(design.blocks)}, connections: {type(design.connections)}")
         
         # Create execution log
         log = ExecutionLog(
