@@ -3580,69 +3580,78 @@ Please create a new orchestration design based on this request. Think about:
 
 Return ONLY the complete design JSON, no other text."""
 
-        # Call Claude using the agent orchestration system
-        from agent_orchestrator import Agent, AgentRole
+        # Use the existing orchestration system with a single agent
+        from agent_orchestrator import MultiAgentOrchestrator, AgentRole as OrchestratorAgentRole
         
         async def generate_stream():
-            """Stream the AI response"""
+            """Stream the AI response using orchestration system"""
             accumulated_text = ""
             
-            if use_max_plan:
-                # Use Claude CLI directly for max plan mode
-                try:
-                    # Combine system prompt and user message
-                    full_prompt = f"{system_prompt}\n\n{user_message}"
-                    
-                    # Call claude-code CLI directly
-                    cmd = ["claude-code", "--prompt", full_prompt]
-                    
-                    # Execute with streaming
-                    process = await asyncio.create_subprocess_exec(
-                        *cmd,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                        env={**os.environ, "TERM": "xterm-256color"}
-                    )
-                    
-                    # Read output in chunks
-                    while True:
-                        chunk = await process.stdout.read(100)
-                        if not chunk:
-                            break
-                        
-                        text = chunk.decode('utf-8', errors='ignore')
-                        accumulated_text += text
-                        
-                        # Send chunk
-                        yield f"data: {json.dumps({'type': 'chunk', 'data': text})}\n\n"
-                        await asyncio.sleep(0.01)
-                    
-                    # Wait for process to complete
-                    await process.wait()
-                    
-                    if process.returncode != 0:
-                        stderr = await process.stderr.read()
-                        error_msg = stderr.decode('utf-8', errors='ignore')
-                        raise Exception(f"Claude CLI failed: {error_msg}")
-                        
-                except Exception as e:
-                    yield f"data: {json.dumps({'type': 'error', 'error': f'Max plan execution failed: {str(e)}'})}\n\n"
-                    return
-            else:
-                # Use Anthropic SDK for API key mode
-                import anthropic
-                client = anthropic.Anthropic(api_key=api_key)
+            try:
+                # Ensure credentials are set up
+                await ensure_orchestration_credentials()
                 
-                with client.messages.stream(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=4000,
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": user_message}]
-                ) as stream:
-                    for text in stream.text_stream:
-                        accumulated_text += text
-                        # Send chunk
-                        yield f"data: {json.dumps({'type': 'chunk', 'data': text})}\n\n"
+                # Create orchestrator
+                model = await db.get_default_model() or "claude-sonnet-4-20250514"
+                orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+                
+                # Add a single design generation agent
+                orchestrator.add_agent(
+                    name="Design Generator",
+                    system_prompt=system_prompt,
+                    role=OrchestratorAgentRole.SPECIALIST
+                )
+                
+                # Create queue for streaming events
+                event_queue = asyncio.Queue()
+                
+                # Stream callback to put events in queue
+                async def stream_callback(event_type: str, agent_name: str, data: str):
+                    await event_queue.put({
+                        'type': event_type,
+                        'agent': agent_name,
+                        'data': data
+                    })
+                
+                # Execute in background task
+                async def execute_generation():
+                    try:
+                        result = await orchestrator.sequential_pipeline_stream(
+                            user_message, 
+                            ["Design Generator"], 
+                            stream_callback
+                        )
+                        await event_queue.put({'type': '__complete__', 'result': result})
+                    except Exception as e:
+                        await event_queue.put({'type': '__error__', 'error': str(e)})
+                
+                task = asyncio.create_task(execute_generation())
+                
+                # Stream events as they come
+                while True:
+                    event = await event_queue.get()
+                    
+                    if event['type'] == '__complete__':
+                        # Extract the final result from the sequential pipeline
+                        result = event['result']
+                        if result and 'final_result' in result:
+                            accumulated_text = result['final_result']
+                        elif result and 'steps' in result and len(result['steps']) > 0:
+                            accumulated_text = result['steps'][0].get('output', '')
+                        break
+                    elif event['type'] == '__error__':
+                        yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
+                        return
+                    elif event['type'] == 'chunk':
+                        # Stream the chunk to the client
+                        accumulated_text += event['data']
+                        yield f"data: {json.dumps({'type': 'chunk', 'data': event['data']})}\n\n"
+                
+                await task
+                
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'error': f'Generation failed: {str(e)}'})}\n\n"
+                return
             
             # Parse the JSON from the response
             try:
