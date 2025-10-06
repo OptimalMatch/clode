@@ -693,16 +693,49 @@ const OrchestrationDesignerPage: React.FC = () => {
     if (selectedBlock && executionResults.has(selectedBlock.id)) {
       try {
         const jsonString = JSON.stringify(executionResults.get(selectedBlock.id), null, 2);
-        await navigator.clipboard.writeText(jsonString);
+        
+        // Try modern clipboard API first
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(jsonString);
+          setSnackbar({
+            open: true,
+            message: 'JSON copied to clipboard!',
+            severity: 'success'
+          });
+        } else {
+          // Fallback for browsers that don't support clipboard API
+          const textArea = document.createElement('textarea');
+          textArea.value = jsonString;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          
+          try {
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            if (successful) {
+              setSnackbar({
+                open: true,
+                message: 'JSON copied to clipboard!',
+                severity: 'success'
+              });
+            } else {
+              throw new Error('Copy command failed');
+            }
+          } catch (err) {
+            document.body.removeChild(textArea);
+            throw err;
+          }
+        }
+      } catch (error: any) {
+        console.error('Copy to clipboard failed:', error);
         setSnackbar({
           open: true,
-          message: 'JSON copied to clipboard!',
-          severity: 'success'
-        });
-      } catch (error) {
-        setSnackbar({
-          open: true,
-          message: 'Failed to copy to clipboard',
+          message: `Failed to copy: ${error.message || 'Unknown error'}`,
           severity: 'error'
         });
       }
