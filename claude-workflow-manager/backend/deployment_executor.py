@@ -5,7 +5,7 @@ Executes deployed designs with full logging and error handling
 
 from typing import Dict, Any, List, Optional, Set
 from datetime import datetime
-from agent_orchestrator import MultiAgentOrchestrator, AgentRole
+from agent_orchestrator import MultiAgentOrchestrator, AgentRole, ensure_orchestration_credentials
 from models import OrchestrationDesign, ExecutionLog
 from database import Database
 import asyncio
@@ -41,6 +41,9 @@ class DeploymentExecutor:
         start_time = datetime.utcnow()
         
         try:
+            # Ensure orchestration credentials are available
+            await ensure_orchestration_credentials()
+            
             # Initialize orchestrator for this execution
             self.orchestrator = MultiAgentOrchestrator(model=self.model, cwd=self.cwd)
             
