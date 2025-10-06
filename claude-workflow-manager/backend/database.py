@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
 from bson import ObjectId
-from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics, OrchestrationDesign, OrchestrationDesignVersion
+from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics, OrchestrationDesign, OrchestrationDesignVersion, Deployment, ExecutionLog, ScheduleConfig
 
 class Database:
     def __init__(self):
@@ -56,6 +56,18 @@ class Database:
         await self.db.logs.create_index([("workflow_id", 1), ("timestamp", -1)])
         await self.db.logs.create_index("type")
         await self.db.logs.create_index([("content", "text")])
+        
+        # Deployments indexes
+        await self.db.deployments.create_index("design_id")
+        await self.db.deployments.create_index("endpoint_path", unique=True)
+        await self.db.deployments.create_index("status")
+        await self.db.deployments.create_index("created_at")
+        
+        # Execution Logs indexes
+        await self.db.execution_logs.create_index("deployment_id")
+        await self.db.execution_logs.create_index("design_id")
+        await self.db.execution_logs.create_index("status")
+        await self.db.execution_logs.create_index("started_at")
         
         # Subagents indexes
         await self.db.subagents.create_index("name", unique=True)
@@ -1220,4 +1232,134 @@ class Database:
             return result.deleted_count > 0
         except Exception as e:
             print(f"Error deleting orchestration design {design_id}: {e}")
+            return False
+    
+    # ==================== Deployment Methods ====================
+    
+    async def create_deployment(self, deployment: Deployment) -> Deployment:
+        """Create a new deployment"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        deployment_dict = deployment.dict(exclude={"id"})
+        result = await self.db.deployments.insert_one(deployment_dict)
+        deployment.id = str(result.inserted_id)
+        return deployment
+    
+    async def get_deployments(self) -> List[Deployment]:
+        """Get all deployments"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        deployments = []
+        cursor = self.db.deployments.find().sort("created_at", -1)
+        async for doc in cursor:
+            doc["id"] = str(doc.pop("_id"))
+            deployments.append(Deployment(**doc))
+        return deployments
+    
+    async def get_deployment(self, deployment_id: str) -> Optional[Deployment]:
+        """Get a deployment by ID"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        object_id = ObjectId(deployment_id) if ObjectId.is_valid(deployment_id) else deployment_id
+        doc = await self.db.deployments.find_one({"_id": object_id})
+        if doc:
+            doc["id"] = str(doc.pop("_id"))
+            return Deployment(**doc)
+        return None
+    
+    async def get_deployment_by_endpoint(self, endpoint_path: str) -> Optional[Deployment]:
+        """Get a deployment by endpoint path"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        doc = await self.db.deployments.find_one({"endpoint_path": endpoint_path})
+        if doc:
+            doc["id"] = str(doc.pop("_id"))
+            return Deployment(**doc)
+        return None
+    
+    async def update_deployment(self, deployment_id: str, updates: Dict[str, Any]) -> bool:
+        """Update a deployment"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(deployment_id) if ObjectId.is_valid(deployment_id) else deployment_id
+            updates["updated_at"] = datetime.utcnow()
+            result = await self.db.deployments.update_one(
+                {"_id": object_id},
+                {"$set": updates}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error updating deployment {deployment_id}: {e}")
+            return False
+    
+    async def delete_deployment(self, deployment_id: str) -> bool:
+        """Delete a deployment"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(deployment_id) if ObjectId.is_valid(deployment_id) else deployment_id
+            result = await self.db.deployments.delete_one({"_id": object_id})
+            return result.deleted_count > 0
+        except Exception as e:
+            print(f"Error deleting deployment {deployment_id}: {e}")
+            return False
+    
+    # ==================== Execution Log Methods ====================
+    
+    async def create_execution_log(self, log: ExecutionLog) -> ExecutionLog:
+        """Create a new execution log"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        log_dict = log.dict(exclude={"id"})
+        result = await self.db.execution_logs.insert_one(log_dict)
+        log.id = str(result.inserted_id)
+        return log
+    
+    async def get_execution_logs(self, deployment_id: Optional[str] = None, limit: int = 100) -> List[ExecutionLog]:
+        """Get execution logs, optionally filtered by deployment_id"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        query = {"deployment_id": deployment_id} if deployment_id else {}
+        logs = []
+        cursor = self.db.execution_logs.find(query).sort("started_at", -1).limit(limit)
+        async for doc in cursor:
+            doc["id"] = str(doc.pop("_id"))
+            logs.append(ExecutionLog(**doc))
+        return logs
+    
+    async def get_execution_log(self, log_id: str) -> Optional[ExecutionLog]:
+        """Get an execution log by ID"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        object_id = ObjectId(log_id) if ObjectId.is_valid(log_id) else log_id
+        doc = await self.db.execution_logs.find_one({"_id": object_id})
+        if doc:
+            doc["id"] = str(doc.pop("_id"))
+            return ExecutionLog(**doc)
+        return None
+    
+    async def update_execution_log(self, log_id: str, updates: Dict[str, Any]) -> bool:
+        """Update an execution log"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(log_id) if ObjectId.is_valid(log_id) else log_id
+            result = await self.db.execution_logs.update_one(
+                {"_id": object_id},
+                {"$set": updates}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error updating execution log {log_id}: {e}")
             return False

@@ -503,3 +503,39 @@ class OrchestrationExecution(BaseModel):
     completed_at: Optional[datetime] = None
     duration_ms: Optional[int] = None
     error: Optional[str] = None
+
+class ScheduleConfig(BaseModel):
+    """Schedule configuration for deployments"""
+    enabled: bool = False
+    cron_expression: Optional[str] = None  # e.g., "0 9 * * *" for daily at 9am
+    interval_seconds: Optional[int] = None  # Alternative to cron for simple intervals
+    timezone: str = "UTC"
+
+class Deployment(BaseModel):
+    """Deployed orchestration design"""
+    id: Optional[str] = None
+    design_id: str
+    design_name: str
+    endpoint_path: str  # e.g., "/api/deployed/my-design"
+    status: str  # "active", "inactive", "error"
+    schedule: Optional[ScheduleConfig] = None
+    created_at: datetime
+    updated_at: datetime
+    last_execution_at: Optional[datetime] = None
+    execution_count: int = 0
+
+class ExecutionLog(BaseModel):
+    """Execution log for deployed designs"""
+    id: Optional[str] = None
+    deployment_id: str
+    design_id: str
+    execution_id: str
+    status: str  # "running", "completed", "failed"
+    trigger_type: str  # "manual", "scheduled", "api"
+    triggered_by: Optional[str] = None
+    input_data: Optional[Dict[str, Any]] = None
+    result_data: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_ms: Optional[int] = None

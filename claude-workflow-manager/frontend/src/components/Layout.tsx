@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, Box, IconButton, Tooltip, Menu as MenuComponent, MenuItem, Avatar, Divider } from '@mui/material';
-import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle, Menu, ChevronLeft, ViewModule, Logout, Person, Settings, Psychology, AccountTree } from '@mui/icons-material';
+import { WorkOutline, Description, Computer, SmartToy, VpnKey, DesignServices, AccountCircle, Menu, ChevronLeft, ViewModule, Logout, Person, Settings, Psychology, AccountTree, CloudUpload } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import clodeBlueLogo from '../assets/clode-blue.png';
@@ -116,6 +116,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Multi-Agent', icon: <ViewModule />, path: '/multi-agent' },
     { text: 'Orchestration', icon: <Psychology />, path: '/orchestration' },
     { text: 'Orchestration Designer', icon: <AccountTree />, path: '/orchestration-designer' },
+    { text: 'Deployments', icon: <CloudUpload />, path: '/deployments' },
     { text: 'Design', icon: <DesignServices />, path: '/design' },
     { text: 'Prompts', icon: <Description />, path: '/prompts' },
     { text: 'Subagents', icon: <SmartToy />, path: '/subagents' },

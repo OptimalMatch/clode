@@ -1011,5 +1011,67 @@ export const orchestrationDesignApi = {
   },
 };
 
+// Deployment API
+export interface Deployment {
+  id?: string;
+  design_id: string;
+  design_name: string;
+  endpoint_path: string;
+  status: 'active' | 'inactive' | 'error';
+  schedule?: {
+    enabled: boolean;
+    cron_expression?: string;
+    interval_seconds?: number;
+    timezone: string;
+  };
+  created_at?: string;
+  updated_at?: string;
+  last_execution_at?: string;
+  execution_count?: number;
+}
+
+export interface ExecutionLog {
+  id?: string;
+  deployment_id: string;
+  design_id: string;
+  execution_id: string;
+  status: 'running' | 'completed' | 'failed';
+  trigger_type: 'manual' | 'scheduled' | 'api';
+  triggered_by?: string;
+  input_data?: any;
+  result_data?: any;
+  error?: string;
+  started_at: string;
+  completed_at?: string;
+  duration_ms?: number;
+}
+
+export const deploymentApi = {
+  deploy: (designId: string, endpointPath: string, schedule?: any) =>
+    api.post('/api/deployments', {
+      design_id: designId,
+      endpoint_path: endpointPath,
+      schedule,
+    }),
+
+  getDeployments: () => api.get('/api/deployments'),
+
+  getDeployment: (id: string) => api.get(`/api/deployments/${id}`),
+
+  updateDeployment: (id: string, updates: { status?: string; schedule?: any }) =>
+    api.put(`/api/deployments/${id}`, updates),
+
+  deleteDeployment: (id: string) => api.delete(`/api/deployments/${id}`),
+
+  executeDeployment: (id: string, inputData?: any) =>
+    api.post(`/api/deployments/${id}/execute`, { input_data: inputData }),
+
+  getExecutionLogs: (deploymentId: string, limit = 100) =>
+    api.get(`/api/deployments/${deploymentId}/logs`, { params: { limit } }),
+
+  getExecutionLog: (deploymentId: string, logId: string) =>
+    api.get(`/api/deployments/${deploymentId}/logs/${logId}`),
+};
+
 // Export the base axios instance as default for direct API calls
 export default api;
