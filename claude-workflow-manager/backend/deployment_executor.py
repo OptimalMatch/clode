@@ -167,8 +167,12 @@ class DeploymentExecutor:
             if isinstance(conn, str):
                 print(f"   ERROR: Connection is a string: {conn[:100]}")
                 raise ValueError(f"Connection {i} is a string, not a dictionary")
-            source_id = conn["source"]["blockId"]
-            target_id = conn["target"]["blockId"]
+            
+            # Handle both formats: {'source': 'block-1'} and {'source': {'blockId': 'block-1'}}
+            source = conn["source"]
+            target = conn["target"]
+            source_id = source["blockId"] if isinstance(source, dict) else source
+            target_id = target["blockId"] if isinstance(target, dict) else target
             
             if source_id in graph and target_id in graph:
                 graph[source_id].append(target_id)
@@ -196,7 +200,12 @@ class DeploymentExecutor:
     def _get_block_inputs(self, block_id: str, connections: List[Dict], context: Dict) -> str:
         """Get formatted inputs from connected blocks"""
         # Find connections targeting this block
-        incoming = [c for c in connections if c["target"]["blockId"] == block_id]
+        # Handle both formats: {'target': 'block-1'} and {'target': {'blockId': 'block-1'}}
+        def get_target_id(conn):
+            target = conn["target"]
+            return target["blockId"] if isinstance(target, dict) else target
+        
+        incoming = [c for c in connections if get_target_id(c) == block_id]
         
         if not incoming:
             return context["input"]
@@ -204,7 +213,8 @@ class DeploymentExecutor:
         # Format results from previous blocks
         inputs = []
         for conn in incoming:
-            source_id = conn["source"]["blockId"]
+            source = conn["source"]
+            source_id = source["blockId"] if isinstance(source, dict) else source
             if source_id in context["block_outputs"]:
                 result = context["block_outputs"][source_id]
                 if isinstance(result, dict):
