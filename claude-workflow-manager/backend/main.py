@@ -3737,7 +3737,7 @@ async def deploy_design(
         # Create deployment
         deployment = Deployment(
             design_id=design_id,
-            design_name=design.name,
+            design_name=design.get('name', 'Unknown'),
             endpoint_path=endpoint_path,
             status="active",
             schedule=ScheduleConfig(**schedule) if schedule else None,
@@ -3909,9 +3909,12 @@ async def execute_deployment(
             raise HTTPException(status_code=400, detail="Deployment is not active")
         
         # Get design
-        design = await db.get_orchestration_design(deployment.design_id)
-        if not design:
+        design_dict = await db.get_orchestration_design(deployment.design_id)
+        if not design_dict:
             raise HTTPException(status_code=404, detail="Design not found")
+        
+        # Convert dict to OrchestrationDesign object
+        design = OrchestrationDesign(**design_dict)
         
         # Create execution log
         log = ExecutionLog(
@@ -4015,9 +4018,12 @@ async def execute_via_endpoint(endpoint_path: str, request: Request):
             raise HTTPException(status_code=400, detail="Deployment is not active")
         
         # Get design
-        design = await db.get_orchestration_design(deployment.design_id)
-        if not design:
+        design_dict = await db.get_orchestration_design(deployment.design_id)
+        if not design_dict:
             raise HTTPException(status_code=404, detail="Design not found")
+        
+        # Convert dict to OrchestrationDesign object
+        design = OrchestrationDesign(**design_dict)
         
         # Parse input data from request body
         input_data = None
