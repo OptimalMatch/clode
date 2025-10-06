@@ -3474,13 +3474,11 @@ async def generate_orchestration_design(
 ):
     """Generate or improve an orchestration design using AI"""
     try:
-        import anthropic
         import json
         
-        # Get API key
+        # Check if we have an API key or should use max plan mode
         api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="No API key configured")
+        use_max_plan = not api_key
         
         # Get example designs from seed file
         from seed_orchestration_designs import SAMPLE_DESIGN_NAMES
@@ -3582,23 +3580,62 @@ Please create a new orchestration design based on this request. Think about:
 
 Return ONLY the complete design JSON, no other text."""
 
-        # Call Claude API
-        client = anthropic.Anthropic(api_key=api_key)
+        # Call Claude using the agent orchestration system
+        from agent_orchestrator import Agent, AgentRole
         
         async def generate_stream():
             """Stream the AI response"""
             accumulated_text = ""
             
-            with client.messages.stream(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4000,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_message}]
-            ) as stream:
-                for text in stream.text_stream:
-                    accumulated_text += text
-                    # Send chunk
-                    yield f"data: {json.dumps({'type': 'chunk', 'data': text})}\n\n"
+            if use_max_plan:
+                # Use ClaudeCodeManager for max plan mode
+                try:
+                    # Create a temporary file with the prompt
+                    prompt_file = f"/tmp/design_gen_{uuid.uuid4().hex}.txt"
+                    with open(prompt_file, 'w') as f:
+                        f.write(f"SYSTEM:\n{system_prompt}\n\nUSER:\n{user_message}")
+                    
+                    # Use ClaudeCodeManager to call Claude
+                    result = await claude_manager.spawn_and_execute_instance(
+                        prompt_file,
+                        None,  # No project
+                        None,  # No workflow
+                        None   # No subagents
+                    )
+                    
+                    # Clean up temp file
+                    if os.path.exists(prompt_file):
+                        os.remove(prompt_file)
+                    
+                    if result and result.get('result'):
+                        accumulated_text = result['result']
+                        # Send the entire response as chunks (simulated streaming)
+                        chunk_size = 50
+                        for i in range(0, len(accumulated_text), chunk_size):
+                            chunk = accumulated_text[i:i+chunk_size]
+                            yield f"data: {json.dumps({'type': 'chunk', 'data': chunk})}\n\n"
+                            await asyncio.sleep(0.01)  # Small delay for smooth streaming
+                    else:
+                        raise Exception("No response from Claude")
+                        
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'error', 'error': f'Max plan execution failed: {str(e)}'})}\n\n"
+                    return
+            else:
+                # Use Anthropic SDK for API key mode
+                import anthropic
+                client = anthropic.Anthropic(api_key=api_key)
+                
+                with client.messages.stream(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=4000,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_message}]
+                ) as stream:
+                    for text in stream.text_stream:
+                        accumulated_text += text
+                        # Send chunk
+                        yield f"data: {json.dumps({'type': 'chunk', 'data': text})}\n\n"
             
             # Parse the JSON from the response
             try:
@@ -3628,7 +3665,7 @@ Return ONLY the complete design JSON, no other text."""
         )
         
     except Exception as e:
-        logger.error(f"Error generating design: {e}")
+        print(f"Error generating design: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate design: {str(e)}")
 
 if __name__ == "__main__":
