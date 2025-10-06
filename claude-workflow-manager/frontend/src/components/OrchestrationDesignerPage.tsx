@@ -165,6 +165,8 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [aiMode, setAiMode] = useState<'create' | 'improve'>('create');
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiStreamOutput, setAiStreamOutput] = useState('');
+  const [aiGenerationStartTime, setAiGenerationStartTime] = useState<number | null>(null);
+  const [aiElapsedMs, setAiElapsedMs] = useState(0);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('orchestrationDesignerDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -197,10 +199,15 @@ const OrchestrationDesignerPage: React.FC = () => {
           }
         }))
       );
+      
+      // Update AI generation elapsed time
+      if (aiGenerationStartTime) {
+        setAiElapsedMs(Date.now() - aiGenerationStartTime);
+      }
     }, 100); // Update every 100ms for smooth counter
 
     return () => clearInterval(interval);
-  }, []);
+  }, [aiGenerationStartTime]);
 
   // Fetch workflows for git repo selection
   const { data: workflows = [] } = useQuery({
@@ -688,6 +695,8 @@ const OrchestrationDesignerPage: React.FC = () => {
 
     setAiGenerating(true);
     setAiStreamOutput('');
+    setAiGenerationStartTime(Date.now());
+    setAiElapsedMs(0);
 
     try {
       const currentDesignForAI = aiMode === 'improve' ? {
@@ -728,6 +737,8 @@ const OrchestrationDesignerPage: React.FC = () => {
         setAiAssistantOpen(false);
         setAiPrompt('');
         setAiStreamOutput('');
+        setAiGenerationStartTime(null);
+        setAiElapsedMs(0);
       }
     } catch (error: any) {
       console.error('Error generating design:', error);
@@ -738,6 +749,7 @@ const OrchestrationDesignerPage: React.FC = () => {
       });
     } finally {
       setAiGenerating(false);
+      setAiGenerationStartTime(null);
     }
   };
 
@@ -3107,29 +3119,35 @@ Format your response as JSON:
 
             {aiGenerating && (
               <Box sx={{ mt: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <CircularProgress size={20} />
-                  <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
-                    Generating design...
-                  </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  <CircularProgress size={24} />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body1" sx={{ color: darkMode ? '#ffffff' : 'text.primary', fontWeight: 500 }}>
+                      🤖 AI is generating your design...
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                      ⏱️ {aiElapsedMs}ms
+                    </Typography>
+                  </Box>
                 </Box>
-                {aiStreamOutput && (
-                  <Paper
-                    sx={{
-                      p: 2,
-                      backgroundColor: darkMode ? '#2d2d2d' : '#f5f5f5',
-                      maxHeight: 300,
-                      overflow: 'auto',
-                      fontFamily: 'monospace',
-                      fontSize: '0.875rem',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      color: darkMode ? '#ffffff' : '#000000',
-                    }}
-                  >
-                    {aiStreamOutput}
-                  </Paper>
-                )}
+                
+                <Paper
+                  sx={{
+                    p: 2,
+                    backgroundColor: darkMode ? '#1a1a1a' : '#f9f9f9',
+                    border: `1px solid ${darkMode ? '#444' : '#e0e0e0'}`,
+                    maxHeight: 400,
+                    overflow: 'auto',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    color: darkMode ? '#00ff00' : '#006600',
+                    minHeight: aiStreamOutput ? '100px' : '50px',
+                  }}
+                >
+                  {aiStreamOutput || '⏳ Waiting for response...'}
+                </Paper>
               </Box>
             )}
           </Box>
