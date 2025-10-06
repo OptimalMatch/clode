@@ -54,13 +54,7 @@ class DeploymentExecutor:
             blocks = design.blocks
             connections = design.connections
             
-            print(f"🔍 Before topological sort:")
-            print(f"   Blocks type: {type(blocks)}, length: {len(blocks)}")
-            print(f"   First block type: {type(blocks[0])}")
-            print(f"   First block: {blocks[0]}")
-            
             execution_order = self._topological_sort(blocks, connections)
-            print(f"✅ Topological sort complete: {execution_order}")
             
             # Context to pass data between blocks
             context = {
@@ -74,11 +68,6 @@ class DeploymentExecutor:
                 block = next((b for b in blocks if b["id"] == block_id), None)
                 if not block:
                     continue
-                
-                print(f"🎯 Executing block: {block['data']['label']} ({block['type']})")
-                print(f"   Block data keys: {block['data'].keys()}")
-                print(f"   Block agents type: {type(block['data']['agents'])}")
-                print(f"   Number of agents: {len(block['data']['agents'])}")
                 
                 # Get inputs from connected blocks
                 block_input = self._get_block_inputs(block_id, connections, context)
@@ -163,9 +152,7 @@ class DeploymentExecutor:
         in_degree: Dict[str, int] = {block["id"]: 0 for block in blocks}
         
         for i, conn in enumerate(connections):
-            print(f"   Processing connection {i}: type={type(conn)}")
             if isinstance(conn, str):
-                print(f"   ERROR: Connection is a string: {conn[:100]}")
                 raise ValueError(f"Connection {i} is a string, not a dictionary")
             
             # Handle both formats: {'source': 'block-1'} and {'source': {'blockId': 'block-1'}}
@@ -252,19 +239,12 @@ class DeploymentExecutor:
         agents = block["data"]["agents"]
         task = block["data"]["task"]
         
-        print(f"🔍 Parallel execution debug:")
-        print(f"   Agents type: {type(agents)}")
-        print(f"   First agent type: {type(agents[0]) if agents else 'No agents'}")
-        print(f"   First agent keys: {agents[0].keys() if agents and isinstance(agents[0], dict) else 'Not a dict'}")
-        
         full_task = f"{task}\n\nInput: {block_input}" if block_input else task
         
         # Add agents
         agent_names = []
         for i, agent in enumerate(agents):
-            print(f"   Processing agent {i}: type={type(agent)}")
             if not isinstance(agent, dict):
-                print(f"   ERROR: Agent is not a dict, it's: {agent[:100] if isinstance(agent, str) else agent}")
                 raise ValueError(f"Agent {i} is not a dictionary")
             
             self.orchestrator.add_agent(
@@ -275,7 +255,7 @@ class DeploymentExecutor:
             agent_names.append(agent["name"])
         
         # Execute
-        result = await self.orchestrator.parallel_pipeline(full_task, agent_names)
+        result = await self.orchestrator.parallel_aggregate(full_task, agent_names)
         return result
     
     async def _execute_hierarchical(self, block: Dict, block_input: Any, log_id: str) -> Dict[str, Any]:
@@ -309,7 +289,7 @@ class DeploymentExecutor:
             })
         
         # Execute
-        result = await self.orchestrator.hierarchical_pipeline(
+        result = await self.orchestrator.hierarchical_execution(
             full_task,
             manager["name"],
             worker_list
@@ -339,7 +319,7 @@ class DeploymentExecutor:
             })
         
         # Execute
-        result = await self.orchestrator.debate_pipeline(
+        result = await self.orchestrator.debate(
             full_task,
             debater_list,
             rounds=rounds
@@ -377,7 +357,7 @@ class DeploymentExecutor:
             })
         
         # Execute
-        result = await self.orchestrator.routing_pipeline(
+        result = await self.orchestrator.dynamic_routing(
             full_task,
             router["name"],
             specialist_list
