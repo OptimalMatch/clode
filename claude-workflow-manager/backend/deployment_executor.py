@@ -69,6 +69,9 @@ class DeploymentExecutor:
                     continue
                 
                 print(f"🎯 Executing block: {block['data']['label']} ({block['type']})")
+                print(f"   Block data keys: {block['data'].keys()}")
+                print(f"   Block agents type: {type(block['data']['agents'])}")
+                print(f"   Number of agents: {len(block['data']['agents'])}")
                 
                 # Get inputs from connected blocks
                 block_input = self._get_block_inputs(block_id, connections, context)
@@ -222,11 +225,21 @@ class DeploymentExecutor:
         agents = block["data"]["agents"]
         task = block["data"]["task"]
         
+        print(f"🔍 Parallel execution debug:")
+        print(f"   Agents type: {type(agents)}")
+        print(f"   First agent type: {type(agents[0]) if agents else 'No agents'}")
+        print(f"   First agent keys: {agents[0].keys() if agents and isinstance(agents[0], dict) else 'Not a dict'}")
+        
         full_task = f"{task}\n\nInput: {block_input}" if block_input else task
         
         # Add agents
         agent_names = []
-        for agent in agents:
+        for i, agent in enumerate(agents):
+            print(f"   Processing agent {i}: type={type(agent)}")
+            if not isinstance(agent, dict):
+                print(f"   ERROR: Agent is not a dict, it's: {agent[:100] if isinstance(agent, str) else agent}")
+                raise ValueError(f"Agent {i} is not a dictionary")
+            
             self.orchestrator.add_agent(
                 name=agent["name"],
                 system_prompt=agent["system_prompt"],
