@@ -3588,35 +3588,42 @@ Return ONLY the complete design JSON, no other text."""
             accumulated_text = ""
             
             if use_max_plan:
-                # Use ClaudeCodeManager for max plan mode
+                # Use Claude CLI directly for max plan mode
                 try:
-                    # Create a temporary file with the prompt
-                    prompt_file = f"/tmp/design_gen_{uuid.uuid4().hex}.txt"
-                    with open(prompt_file, 'w') as f:
-                        f.write(f"SYSTEM:\n{system_prompt}\n\nUSER:\n{user_message}")
+                    # Combine system prompt and user message
+                    full_prompt = f"{system_prompt}\n\n{user_message}"
                     
-                    # Use ClaudeCodeManager to call Claude
-                    result = await claude_manager.spawn_and_execute_instance(
-                        prompt_file,
-                        None,  # No project
-                        None,  # No workflow
-                        None   # No subagents
+                    # Call claude-code CLI directly
+                    cmd = ["claude-code", "--prompt", full_prompt]
+                    
+                    # Execute with streaming
+                    process = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        env={**os.environ, "TERM": "xterm-256color"}
                     )
                     
-                    # Clean up temp file
-                    if os.path.exists(prompt_file):
-                        os.remove(prompt_file)
+                    # Read output in chunks
+                    while True:
+                        chunk = await process.stdout.read(100)
+                        if not chunk:
+                            break
+                        
+                        text = chunk.decode('utf-8', errors='ignore')
+                        accumulated_text += text
+                        
+                        # Send chunk
+                        yield f"data: {json.dumps({'type': 'chunk', 'data': text})}\n\n"
+                        await asyncio.sleep(0.01)
                     
-                    if result and result.get('result'):
-                        accumulated_text = result['result']
-                        # Send the entire response as chunks (simulated streaming)
-                        chunk_size = 50
-                        for i in range(0, len(accumulated_text), chunk_size):
-                            chunk = accumulated_text[i:i+chunk_size]
-                            yield f"data: {json.dumps({'type': 'chunk', 'data': chunk})}\n\n"
-                            await asyncio.sleep(0.01)  # Small delay for smooth streaming
-                    else:
-                        raise Exception("No response from Claude")
+                    # Wait for process to complete
+                    await process.wait()
+                    
+                    if process.returncode != 0:
+                        stderr = await process.stderr.read()
+                        error_msg = stderr.decode('utf-8', errors='ignore')
+                        raise Exception(f"Claude CLI failed: {error_msg}")
                         
                 except Exception as e:
                     yield f"data: {json.dumps({'type': 'error', 'error': f'Max plan execution failed: {str(e)}'})}\n\n"
