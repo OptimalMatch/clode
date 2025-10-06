@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Container,
@@ -33,6 +33,7 @@ import {
   CircularProgress,
   Tabs,
   Tab,
+  LinearProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -60,6 +61,8 @@ const DeploymentsPage: React.FC = () => {
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
   const [selectedDeployment, setSelectedDeployment] = useState<Deployment | null>(null);
+  const [selectedLog, setSelectedLog] = useState<ExecutionLog | null>(null);
+  const [logDetailOpen, setLogDetailOpen] = useState(false);
 
   // Deploy dialog state
   const [selectedDesignId, setSelectedDesignId] = useState('');
@@ -72,6 +75,8 @@ const DeploymentsPage: React.FC = () => {
 
   // Execute dialog state
   const [executeInputData, setExecuteInputData] = useState('{}');
+  const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Configure dialog state
   const [configStatus, setConfigStatus] = useState<'active' | 'inactive' | 'error'>('active');
@@ -199,13 +204,13 @@ const DeploymentsPage: React.FC = () => {
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['deployments'] });
-      queryClient.invalidateQueries({ queryKey: ['deployment-logs'] });
-      enqueueSnackbar('Execution started successfully!', { variant: 'success' });
+      enqueueSnackbar('✅ Execution started in background!', { variant: 'success' });
       setExecuteDialogOpen(false);
       
-      // Show result
-      if (response) {
-        console.log('Execution result:', response.data);
+      // Start polling for this execution
+      if (response?.data?.log_id) {
+        setActiveExecutionId(response.data.log_id);
+        startPolling(response.data.log_id, selectedDeployment?.id || '');
       }
     },
     onError: (error: any) => {
@@ -214,6 +219,70 @@ const DeploymentsPage: React.FC = () => {
       });
     },
   });
+
+  // Polling for execution status
+  const startPolling = (logId: string, deploymentId: string) => {
+    let lastSeenBlocks = new Set<string>();
+
+    const poll = async () => {
+      try {
+        const response = await deploymentApi.getExecutionLog(deploymentId, logId);
+        const log = response.data.log;
+
+        // Check if completed
+        if (log.status === 'completed') {
+          stopPolling();
+          enqueueSnackbar('🎉 Execution completed successfully!', { variant: 'success' });
+          queryClient.invalidateQueries({ queryKey: ['deployment-logs'] });
+          setActiveExecutionId(null);
+          return;
+        }
+
+        if (log.status === 'failed') {
+          stopPolling();
+          enqueueSnackbar(`❌ Execution failed: ${log.error}`, { variant: 'error' });
+          queryClient.invalidateQueries({ queryKey: ['deployment-logs'] });
+          setActiveExecutionId(null);
+          return;
+        }
+
+        // Check for block completions
+        if (log.result_data?.results) {
+          const blocks = Object.keys(log.result_data.results);
+          blocks.forEach(blockId => {
+            if (!lastSeenBlocks.has(blockId)) {
+              lastSeenBlocks.add(blockId);
+              const blockData = log.result_data.results[blockId];
+              enqueueSnackbar(`✅ Block completed: ${blockData.task?.substring(0, 50) || blockId}...`, { 
+                variant: 'info',
+                autoHideDuration: 3000,
+              });
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    };
+
+    // Start polling every 2 seconds
+    pollingIntervalRef.current = setInterval(poll, 2000);
+    poll(); // Initial poll
+  };
+
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopPolling();
+    };
+  }, []);
 
   // Handlers
   const resetDeployForm = () => {
@@ -657,6 +726,7 @@ const DeploymentsPage: React.FC = () => {
                     <TableCell>Trigger</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Duration</TableCell>
+                    <TableCell>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -677,9 +747,22 @@ const DeploymentsPage: React.FC = () => {
                               ? 'error'
                               : 'default'
                           }
+                          icon={log.status === 'running' ? <CircularProgress size={16} /> : undefined}
                         />
                       </TableCell>
                       <TableCell>{formatDuration(log.duration_ms)}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            setSelectedLog(log);
+                            setLogDetailOpen(true);
+                          }}
+                          disabled={!log.result_data}
+                        >
+                          View Results
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -689,6 +772,108 @@ const DeploymentsPage: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setLogsDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Log Detail Dialog */}
+      <Dialog
+        open={logDetailOpen}
+        onClose={() => setLogDetailOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        disableEnforceFocus
+        disableRestoreFocus
+      >
+        <DialogTitle>
+          Execution Results
+          {selectedLog && (
+            <Chip
+              label={selectedLog.status}
+              size="small"
+              color={
+                selectedLog.status === 'completed'
+                  ? 'success'
+                  : selectedLog.status === 'failed'
+                  ? 'error'
+                  : 'default'
+              }
+              sx={{ ml: 2 }}
+            />
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {selectedLog ? (
+            <Box>
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Started:</Typography>
+                  <Typography variant="body1">{formatDate(selectedLog.started_at)}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Duration:</Typography>
+                  <Typography variant="body1">{formatDuration(selectedLog.duration_ms)}</Typography>
+                </Grid>
+              </Grid>
+
+              {selectedLog.result_data?.results && (
+                <Box>
+                  <Typography variant="h6" gutterBottom>Block Results:</Typography>
+                  {Object.entries(selectedLog.result_data.results).map(([blockId, blockData]: [string, any]) => (
+                    <Card key={blockId} sx={{ mb: 2 }}>
+                      <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                          {blockData.task?.substring(0, 100)}...
+                        </Typography>
+                        <Chip label={blockData.pattern} size="small" sx={{ mb: 2 }} />
+                        
+                        {blockData.final_result && (
+                          <Box sx={{ mt: 2 }}>
+                            <Typography variant="subtitle2" gutterBottom>Final Result:</Typography>
+                            <Paper sx={{ p: 2, bgcolor: 'background.default', maxHeight: 400, overflow: 'auto' }}>
+                              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                {typeof blockData.final_result === 'string' 
+                                  ? blockData.final_result 
+                                  : JSON.stringify(blockData.final_result, null, 2)}
+                              </pre>
+                            </Paper>
+                          </Box>
+                        )}
+
+                        {blockData.agent_steps && blockData.agent_steps.length > 0 && (
+                          <Box sx={{ mt: 2 }}>
+                            <Typography variant="subtitle2" gutterBottom>Agent Outputs:</Typography>
+                            {blockData.agent_steps.map((step: any, idx: number) => (
+                              <Box key={idx} sx={{ mb: 2 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                  {step.agent || step.worker}: ({formatDuration(step.duration_ms)})
+                                </Typography>
+                                <Paper sx={{ p: 1, bgcolor: 'background.default', maxHeight: 200, overflow: 'auto' }}>
+                                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                                    {typeof step.result === 'string' ? step.result : JSON.stringify(step.result, null, 2)}
+                                  </Typography>
+                                </Paper>
+                              </Box>
+                            ))}
+                          </Box>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+              )}
+
+              {selectedLog.error && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {selectedLog.error}
+                </Alert>
+              )}
+            </Box>
+          ) : (
+            <Typography>No log selected</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLogDetailOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Container>
