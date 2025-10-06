@@ -167,6 +167,7 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [aiStreamOutput, setAiStreamOutput] = useState('');
   const [aiGenerationStartTime, setAiGenerationStartTime] = useState<number | null>(null);
   const [aiElapsedMs, setAiElapsedMs] = useState(0);
+  const [aiGenerationStatus, setAiGenerationStatus] = useState('Connecting...');
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('orchestrationDesignerDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -697,6 +698,7 @@ const OrchestrationDesignerPage: React.FC = () => {
     setAiStreamOutput('');
     setAiGenerationStartTime(Date.now());
     setAiElapsedMs(0);
+    setAiGenerationStatus('Connecting to AI...');
 
     try {
       const currentDesignForAI = aiMode === 'improve' ? {
@@ -713,6 +715,16 @@ const OrchestrationDesignerPage: React.FC = () => {
         aiMode,
         (chunk) => {
           setAiStreamOutput(prev => prev + chunk);
+        },
+        (agent, status) => {
+          // Update status based on agent activity
+          if (status === 'executing') {
+            setAiGenerationStatus(`🤖 ${agent} is analyzing your request...`);
+          } else if (status === 'waiting') {
+            setAiGenerationStatus(`⏳ ${agent} is preparing...`);
+          } else if (status === 'completed') {
+            setAiGenerationStatus(`✓ ${agent} completed - parsing design...`);
+          }
         }
       );
 
@@ -739,6 +751,7 @@ const OrchestrationDesignerPage: React.FC = () => {
         setAiStreamOutput('');
         setAiGenerationStartTime(null);
         setAiElapsedMs(0);
+        setAiGenerationStatus('Connecting...');
       }
     } catch (error: any) {
       console.error('Error generating design:', error);
@@ -750,6 +763,7 @@ const OrchestrationDesignerPage: React.FC = () => {
     } finally {
       setAiGenerating(false);
       setAiGenerationStartTime(null);
+      setAiGenerationStatus('Connecting...');
     }
   };
 
@@ -2043,7 +2057,7 @@ Format your response as JSON:
                 }
               }}
             >
-              AI Assistant
+              Design Assistant
             </Button>
             <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
             <Button
@@ -3065,7 +3079,7 @@ Format your response as JSON:
         <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <SmartToy sx={{ color: '#667eea' }} />
-            <span>AI Design Assistant</span>
+            <span>Design Assistant</span>
           </Box>
           <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary', mt: 0.5 }}>
             {aiMode === 'create' 
@@ -3123,7 +3137,7 @@ Format your response as JSON:
                   <CircularProgress size={24} />
                   <Box sx={{ flex: 1 }}>
                     <Typography variant="body1" sx={{ color: darkMode ? '#ffffff' : 'text.primary', fontWeight: 500 }}>
-                      🤖 AI is generating your design...
+                      {aiGenerationStatus}
                     </Typography>
                     <Typography variant="body2" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
                       ⏱️ {aiElapsedMs}ms
@@ -3146,7 +3160,7 @@ Format your response as JSON:
                     minHeight: aiStreamOutput ? '100px' : '50px',
                   }}
                 >
-                  {aiStreamOutput || '⏳ Waiting for response...'}
+                  {aiStreamOutput || aiGenerationStatus}
                 </Paper>
               </Box>
             )}
