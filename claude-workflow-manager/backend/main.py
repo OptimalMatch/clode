@@ -3888,17 +3888,48 @@ async def delete_deployment(deployment_id: str):
         print(f"Error deleting deployment: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete deployment: {str(e)}")
 
+async def _execute_deployment_background(
+    deployment_id: str,
+    design: OrchestrationDesign,
+    input_data: Optional[Dict[str, Any]],
+    log_id: str,
+    db: Database
+):
+    """Background task to execute deployment"""
+    try:
+        model = await db.get_default_model() or "claude-sonnet-4-20250514"
+        cwd = os.getenv("PROJECT_ROOT_DIR")
+        executor = DeploymentExecutor(db=db, model=model, cwd=cwd)
+        
+        await executor.execute_design(design, input_data, log_id)
+        
+        # Update deployment stats
+        deployment = await db.get_deployment(deployment_id)
+        if deployment:
+            await db.update_deployment(deployment_id, {
+                "last_execution_at": datetime.utcnow(),
+                "execution_count": deployment.execution_count + 1
+            })
+    except Exception as e:
+        print(f"Background execution error: {e}")
+        # Update log with error
+        await db.update_execution_log(log_id, {
+            "status": "failed",
+            "error": str(e),
+            "completed_at": datetime.utcnow()
+        })
+
 @app.post(
     "/api/deployments/{deployment_id}/execute",
     summary="Execute Deployment",
-    description="Manually trigger execution of a deployed design",
+    description="Manually trigger execution of a deployed design (returns immediately)",
     tags=["Deployments"]
 )
 async def execute_deployment(
     deployment_id: str,
     input_data: Optional[Dict[str, Any]] = Body(None)
 ):
-    """Execute a deployment"""
+    """Execute a deployment (non-blocking - returns immediately)"""
     try:
         # Get deployment
         deployment = await db.get_deployment(deployment_id)
@@ -3928,29 +3959,23 @@ async def execute_deployment(
         )
         created_log = await db.create_execution_log(log)
         
-        # Execute design
-        model = await db.get_default_model() or "claude-sonnet-4-20250514"
-        cwd = os.getenv("PROJECT_ROOT_DIR")
-        executor = DeploymentExecutor(db=db, model=model, cwd=cwd)
+        # Start execution in background
+        asyncio.create_task(_execute_deployment_background(
+            deployment_id, design, input_data, created_log.id, db
+        ))
         
-        result = await executor.execute_design(design, input_data, created_log.id)
-        
-        # Update deployment stats
-        await db.update_deployment(deployment_id, {
-            "last_execution_at": datetime.utcnow(),
-            "execution_count": deployment.execution_count + 1
-        })
-        
+        # Return immediately
         return {
             "success": True,
             "execution_id": created_log.id,
-            "result": result
+            "message": "Execution started in background",
+            "log_id": created_log.id
         }
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error executing deployment: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to execute deployment: {str(e)}")
+        print(f"Error starting deployment execution: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start execution: {str(e)}")
 
 @app.get(
     "/api/deployments/{deployment_id}/logs",
