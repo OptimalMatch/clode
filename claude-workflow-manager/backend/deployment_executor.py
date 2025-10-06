@@ -97,6 +97,15 @@ class DeploymentExecutor:
                 context["block_outputs"][block_id] = result
                 
                 print(f"✅ Block completed: {block['data']['label']}")
+                
+                # Update log with incremental progress
+                await self.db.update_execution_log(log_id, {
+                    "result_data": {
+                        "success": True,
+                        "results": context["results"],
+                        "in_progress": True
+                    }
+                })
             
             # Execution complete
             end_time = datetime.utcnow()
@@ -105,7 +114,8 @@ class DeploymentExecutor:
             final_result = {
                 "success": True,
                 "results": context["results"],
-                "duration_ms": duration_ms
+                "duration_ms": duration_ms,
+                "in_progress": False
             }
             
             await self.db.update_execution_log(log_id, {
@@ -125,7 +135,9 @@ class DeploymentExecutor:
             error_result = {
                 "success": False,
                 "error": str(e),
-                "duration_ms": duration_ms
+                "results": context.get("results", {}),  # Include partial results
+                "duration_ms": duration_ms,
+                "in_progress": False
             }
             
             await self.db.update_execution_log(log_id, {
