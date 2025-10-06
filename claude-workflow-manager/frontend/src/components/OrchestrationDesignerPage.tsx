@@ -2451,6 +2451,8 @@ Format your response as JSON:
         onClose={() => setDrawerOpen(false)}
         ModalProps={{
           keepMounted: false,
+          disableEnforceFocus: true,
+          disableRestoreFocus: true,
         }}
         sx={{ 
           '& .MuiDrawer-paper': { 
