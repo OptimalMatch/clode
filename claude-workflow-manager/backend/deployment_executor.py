@@ -53,7 +53,14 @@ class DeploymentExecutor:
             # Build execution order using topological sort
             blocks = design.blocks
             connections = design.connections
+            
+            print(f"🔍 Before topological sort:")
+            print(f"   Blocks type: {type(blocks)}, length: {len(blocks)}")
+            print(f"   First block type: {type(blocks[0])}")
+            print(f"   First block: {blocks[0]}")
+            
             execution_order = self._topological_sort(blocks, connections)
+            print(f"✅ Topological sort complete: {execution_order}")
             
             # Context to pass data between blocks
             context = {
