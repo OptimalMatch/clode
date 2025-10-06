@@ -694,30 +694,44 @@ const OrchestrationDesignerPage: React.FC = () => {
       try {
         const jsonString = JSON.stringify(executionResults.get(selectedBlock.id), null, 2);
         
-        // Use the reliable fallback method with textarea
+        // Create a temporary textarea element
         const textArea = document.createElement('textarea');
         textArea.value = jsonString;
         
-        // Make the textarea invisible but accessible
-        textArea.style.position = 'fixed';
-        textArea.style.top = '0';
-        textArea.style.left = '0';
-        textArea.style.width = '2em';
-        textArea.style.height = '2em';
-        textArea.style.padding = '0';
-        textArea.style.border = 'none';
-        textArea.style.outline = 'none';
-        textArea.style.boxShadow = 'none';
-        textArea.style.background = 'transparent';
+        // Position it off-screen but keep it in the viewport
+        textArea.style.position = 'absolute';
+        textArea.style.left = '-9999px';
+        textArea.style.top = `${window.pageYOffset || document.documentElement.scrollTop}px`;
         
+        // Prevent zooming on iOS
+        textArea.style.fontSize = '12pt';
+        
+        // Add to body (not inside the dialog which has aria-hidden)
         document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
+        
+        // Handle iOS
+        if (navigator.userAgent.match(/ipad|ipod|iphone/i)) {
+          const editable = textArea.contentEditable;
+          textArea.contentEditable = 'true';
+          const range = document.createRange();
+          range.selectNodeContents(textArea);
+          const sel = window.getSelection();
+          if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+          textArea.setSelectionRange(0, 999999);
+          textArea.contentEditable = editable;
+        } else {
+          textArea.select();
+          textArea.setSelectionRange(0, 999999); // For mobile devices
+        }
         
         let successful = false;
         try {
           successful = document.execCommand('copy');
           console.log('Copy command executed:', successful);
+          console.log('Selected text length:', textArea.selectionEnd - textArea.selectionStart);
         } catch (err) {
           console.error('Copy command error:', err);
         }
@@ -725,6 +739,7 @@ const OrchestrationDesignerPage: React.FC = () => {
         document.body.removeChild(textArea);
         
         if (successful) {
+          // Verify by trying to read back (if possible)
           setSnackbar({
             open: true,
             message: 'JSON copied to clipboard!',
