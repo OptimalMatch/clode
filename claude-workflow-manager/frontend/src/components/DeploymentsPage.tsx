@@ -223,14 +223,20 @@ const DeploymentsPage: React.FC = () => {
   // Polling for execution status
   const startPolling = (logId: string, deploymentId: string) => {
     let lastSeenBlocks = new Set<string>();
+    console.log(`🔄 Starting polling for log ${logId} on deployment ${deploymentId}`);
 
     const poll = async () => {
       try {
+        console.log(`📡 Polling for log ${logId}...`);
         const response = await deploymentApi.getExecutionLog(deploymentId, logId);
+        console.log('📥 Poll response:', response);
         const log = response.data.log;
+        console.log('📋 Log status:', log.status);
+        console.log('📋 Log result_data:', log.result_data);
 
         // Check if completed
         if (log.status === 'completed') {
+          console.log('✅ Execution completed!');
           stopPolling();
           enqueueSnackbar('🎉 Execution completed successfully!', { variant: 'success' });
           queryClient.invalidateQueries({ queryKey: ['deployment-logs'] });
@@ -239,6 +245,7 @@ const DeploymentsPage: React.FC = () => {
         }
 
         if (log.status === 'failed') {
+          console.log('❌ Execution failed:', log.error);
           stopPolling();
           enqueueSnackbar(`❌ Execution failed: ${log.error}`, { variant: 'error' });
           queryClient.invalidateQueries({ queryKey: ['deployment-logs'] });
@@ -249,19 +256,26 @@ const DeploymentsPage: React.FC = () => {
         // Check for block completions
         if (log.result_data?.results) {
           const blocks = Object.keys(log.result_data.results);
+          console.log('🧱 Found blocks:', blocks);
+          console.log('👁️ Last seen blocks:', Array.from(lastSeenBlocks));
+          
           blocks.forEach(blockId => {
             if (!lastSeenBlocks.has(blockId)) {
+              console.log(`✨ New block completed: ${blockId}`);
               lastSeenBlocks.add(blockId);
               const blockData = log.result_data.results[blockId];
-              enqueueSnackbar(`✅ Block completed: ${blockData.task?.substring(0, 50) || blockId}...`, { 
+              const blockLabel = blockData.task?.split('\n')[0].substring(0, 50) || blockId;
+              enqueueSnackbar(`✅ Block completed: ${blockLabel}...`, { 
                 variant: 'info',
                 autoHideDuration: 3000,
               });
             }
           });
+        } else {
+          console.log('⚠️ No results in result_data yet');
         }
       } catch (error) {
-        console.error('Polling error:', error);
+        console.error('❌ Polling error:', error);
       }
     };
 
