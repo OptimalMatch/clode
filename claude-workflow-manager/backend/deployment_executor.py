@@ -279,24 +279,20 @@ class DeploymentExecutor:
             role=AgentRole.MANAGER
         )
         
-        worker_list = []
+        worker_names = []
         for worker in workers:
             self.orchestrator.add_agent(
                 name=worker["name"],
                 system_prompt=worker["system_prompt"],
                 role=AgentRole.WORKER
             )
-            worker_list.append({
-                "name": worker["name"],
-                "system_prompt": worker["system_prompt"],
-                "role": "worker"
-            })
+            worker_names.append(worker["name"])
         
         # Execute
         result = await self.orchestrator.hierarchical_execution(
             full_task,
             manager["name"],
-            worker_list
+            worker_names
         )
         return result
     
@@ -309,23 +305,19 @@ class DeploymentExecutor:
         full_task = f"{task}\n\nInput: {block_input}" if block_input else task
         
         # Add agents
-        debater_list = []
+        debater_names = []
         for agent in agents:
             self.orchestrator.add_agent(
                 name=agent["name"],
                 system_prompt=agent["system_prompt"],
                 role=self._map_role(agent["role"])
             )
-            debater_list.append({
-                "name": agent["name"],
-                "system_prompt": agent["system_prompt"],
-                "role": agent.get("role", "specialist")
-            })
+            debater_names.append(agent["name"])
         
         # Execute
         result = await self.orchestrator.debate(
             full_task,
-            debater_list,
+            debater_names,
             rounds=rounds
         )
         return result
@@ -347,24 +339,20 @@ class DeploymentExecutor:
             role=AgentRole.MODERATOR
         )
         
-        specialist_list = []
+        specialist_names = []
         for specialist in specialists:
             self.orchestrator.add_agent(
                 name=specialist["name"],
                 system_prompt=specialist["system_prompt"],
                 role=AgentRole.SPECIALIST
             )
-            specialist_list.append({
-                "name": specialist["name"],
-                "system_prompt": specialist["system_prompt"],
-                "role": "specialist"
-            })
+            specialist_names.append(specialist["name"])
         
         # Execute
         result = await self.orchestrator.dynamic_routing(
             full_task,
             router["name"],
-            specialist_list
+            specialist_names
         )
         return result
     
