@@ -688,64 +688,68 @@ const OrchestrationDesignerPage: React.FC = () => {
     }
   };
 
-  // Copy JSON to clipboard
-  const handleCopyToClipboard = async () => {
-    if (selectedBlock && executionResults.has(selectedBlock.id)) {
-      const jsonString = JSON.stringify(executionResults.get(selectedBlock.id), null, 2);
-      
+  // Copy JSON to clipboard - select the pre element text
+  const handleCopyToClipboard = () => {
+    // Find the pre element containing the JSON
+    const preElements = document.querySelectorAll('pre');
+    let jsonPre: HTMLPreElement | null = null;
+    
+    // Find the pre element that contains our JSON (in the results dialog)
+    for (const pre of Array.from(preElements)) {
+      if (pre.textContent && pre.textContent.includes('"pattern"') && pre.textContent.length > 100) {
+        jsonPre = pre;
+        break;
+      }
+    }
+    
+    if (jsonPre) {
       try {
-        // Use the same approach as AgentTerminal.tsx
-        await navigator.clipboard.writeText(jsonString);
-        console.log('📋 JSON copied to clipboard successfully');
-        setSnackbar({
-          open: true,
-          message: 'JSON copied to clipboard!',
-          severity: 'success'
-        });
-      } catch (error) {
-        console.error('❌ Failed to copy to clipboard:', error);
+        // Create a range and select the pre element's content
+        const range = document.createRange();
+        range.selectNodeContents(jsonPre);
         
-        // Fallback for older browsers or security restrictions
-        try {
-          const textArea = document.createElement('textarea');
-          textArea.value = jsonString;
-          textArea.style.position = 'fixed';
-          textArea.style.top = '0';
-          textArea.style.left = '0';
-          textArea.style.width = '2em';
-          textArea.style.height = '2em';
-          textArea.style.padding = '0';
-          textArea.style.border = 'none';
-          textArea.style.outline = 'none';
-          textArea.style.boxShadow = 'none';
-          textArea.style.background = 'transparent';
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
           
-          document.body.appendChild(textArea);
-          textArea.focus();
-          textArea.select();
-          
-          const successful = document.execCommand('copy');
-          document.body.removeChild(textArea);
-          
-          if (successful) {
-            console.log('📋 Fallback copy succeeded');
-            setSnackbar({
-              open: true,
-              message: 'JSON copied to clipboard!',
-              severity: 'success'
-            });
-          } else {
-            throw new Error('Fallback copy failed');
-          }
-        } catch (fallbackError) {
-          console.error('❌ Fallback copy also failed:', fallbackError);
+          console.log('📋 JSON text selected - press Ctrl+C to copy');
           setSnackbar({
             open: true,
-            message: 'Failed to copy to clipboard. Please manually select and copy the text.',
-            severity: 'error'
+            message: 'JSON text selected! Press Ctrl+C to copy.',
+            severity: 'info'
           });
+          
+          // Try to copy automatically
+          try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+              console.log('📋 Copy command executed successfully');
+              setSnackbar({
+                open: true,
+                message: 'JSON copied to clipboard!',
+                severity: 'success'
+              });
+            }
+          } catch (copyErr) {
+            console.log('Auto-copy failed, text is selected for manual copy');
+          }
         }
+      } catch (error) {
+        console.error('❌ Failed to select text:', error);
+        setSnackbar({
+          open: true,
+          message: 'Failed to select text. Please manually select and copy.',
+          severity: 'error'
+        });
       }
+    } else {
+      console.error('❌ Could not find JSON pre element');
+      setSnackbar({
+        open: true,
+        message: 'Could not find JSON text to copy.',
+        severity: 'error'
+      });
     }
   };
 
