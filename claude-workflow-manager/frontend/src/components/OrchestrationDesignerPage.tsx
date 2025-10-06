@@ -689,47 +689,49 @@ const OrchestrationDesignerPage: React.FC = () => {
   };
 
   // Copy JSON to clipboard
-  const handleCopyToClipboard = async () => {
+  const handleCopyToClipboard = () => {
     if (selectedBlock && executionResults.has(selectedBlock.id)) {
       try {
         const jsonString = JSON.stringify(executionResults.get(selectedBlock.id), null, 2);
         
-        // Try modern clipboard API first
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(jsonString);
+        // Use the reliable fallback method with textarea
+        const textArea = document.createElement('textarea');
+        textArea.value = jsonString;
+        
+        // Make the textarea invisible but accessible
+        textArea.style.position = 'fixed';
+        textArea.style.top = '0';
+        textArea.style.left = '0';
+        textArea.style.width = '2em';
+        textArea.style.height = '2em';
+        textArea.style.padding = '0';
+        textArea.style.border = 'none';
+        textArea.style.outline = 'none';
+        textArea.style.boxShadow = 'none';
+        textArea.style.background = 'transparent';
+        
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        let successful = false;
+        try {
+          successful = document.execCommand('copy');
+          console.log('Copy command executed:', successful);
+        } catch (err) {
+          console.error('Copy command error:', err);
+        }
+        
+        document.body.removeChild(textArea);
+        
+        if (successful) {
           setSnackbar({
             open: true,
             message: 'JSON copied to clipboard!',
             severity: 'success'
           });
         } else {
-          // Fallback for browsers that don't support clipboard API
-          const textArea = document.createElement('textarea');
-          textArea.value = jsonString;
-          textArea.style.position = 'fixed';
-          textArea.style.left = '-999999px';
-          textArea.style.top = '-999999px';
-          document.body.appendChild(textArea);
-          textArea.focus();
-          textArea.select();
-          
-          try {
-            const successful = document.execCommand('copy');
-            document.body.removeChild(textArea);
-            
-            if (successful) {
-              setSnackbar({
-                open: true,
-                message: 'JSON copied to clipboard!',
-                severity: 'success'
-              });
-            } else {
-              throw new Error('Copy command failed');
-            }
-          } catch (err) {
-            document.body.removeChild(textArea);
-            throw err;
-          }
+          throw new Error('Copy command failed - please try selecting and copying the text manually');
         }
       } catch (error: any) {
         console.error('Copy to clipboard failed:', error);
