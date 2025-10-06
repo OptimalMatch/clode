@@ -35,7 +35,8 @@ from models import (
     ModelSettingsRequest, ModelSettingsResponse, OrchestrationPattern,
     AgentRole, OrchestrationAgent, SequentialPipelineRequest,
     DebateRequest, HierarchicalRequest, ParallelAggregateRequest,
-    DynamicRoutingRequest, OrchestrationResult, OrchestrationDesign
+    DynamicRoutingRequest, OrchestrationResult, OrchestrationDesign,
+    Deployment, ExecutionLog, ScheduleConfig
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -44,6 +45,8 @@ from agent_discovery import AgentDiscovery
 from auth_utils import hash_password, verify_password, create_access_token, decode_access_token
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from agent_orchestrator import MultiAgentOrchestrator, AgentRole as OrchestratorAgentRole, ensure_orchestration_credentials
+from deployment_executor import DeploymentExecutor
+from deployment_scheduler import DeploymentScheduler, set_scheduler, get_scheduler
 
 # Ensure ANTHROPIC_API_KEY is set for claude-cli
 claude_api_key = os.getenv("CLAUDE_API_KEY")
@@ -289,13 +292,25 @@ async def lifespan(app: FastAPI):
     try:
         await db.connect()
         print("✅ APPLICATION: Database connected successfully")
+        
+        # Initialize and start the deployment scheduler
+        scheduler = DeploymentScheduler(db)
+        set_scheduler(scheduler)
+        await scheduler.start()
+        
     except Exception as e:
-        print(f"❌ APPLICATION: Failed to connect to database: {e}")
+        print(f"❌ APPLICATION: Failed to start: {e}")
         raise
     
     yield
     
     print("🔄 APPLICATION: Shutting down...")
+    
+    # Stop the scheduler
+    scheduler = get_scheduler()
+    if scheduler:
+        await scheduler.stop()
+    
     await db.disconnect()
     print("✅ APPLICATION: Database disconnected")
 
@@ -3689,6 +3704,359 @@ Return ONLY the complete design JSON, no other text."""
     except Exception as e:
         print(f"Error generating design: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate design: {str(e)}")
+
+# ==================== Deployment Endpoints ====================
+
+@app.post(
+    "/api/deployments",
+    summary="Deploy an Orchestration Design",
+    description="Deploy a design to make it executable via REST API and/or scheduled execution",
+    tags=["Deployments"]
+)
+async def deploy_design(
+    design_id: str = Body(...),
+    endpoint_path: str = Body(...),
+    schedule: Optional[Dict[str, Any]] = Body(None)
+):
+    """Deploy an orchestration design"""
+    try:
+        # Validate design exists
+        design = await db.get_orchestration_design(design_id)
+        if not design:
+            raise HTTPException(status_code=404, detail="Design not found")
+        
+        # Validate endpoint path is unique
+        existing = await db.get_deployment_by_endpoint(endpoint_path)
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Endpoint path '{endpoint_path}' is already in use")
+        
+        # Validate endpoint path format (URL-safe)
+        if not endpoint_path.startswith("/"):
+            endpoint_path = f"/{endpoint_path}"
+        
+        # Create deployment
+        deployment = Deployment(
+            design_id=design_id,
+            design_name=design.name,
+            endpoint_path=endpoint_path,
+            status="active",
+            schedule=ScheduleConfig(**schedule) if schedule else None,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            execution_count=0
+        )
+        
+        created = await db.create_deployment(deployment)
+        
+        # Schedule if schedule is configured and enabled
+        if created.schedule and created.schedule.enabled:
+            scheduler = get_scheduler()
+            if scheduler:
+                await scheduler.schedule_deployment(created.id)
+        
+        return {
+            "success": True,
+            "deployment": created.dict(),
+            "message": f"Design deployed successfully at {endpoint_path}"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deploying design: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to deploy design: {str(e)}")
+
+@app.get(
+    "/api/deployments",
+    summary="List all Deployments",
+    description="Get list of all deployed designs",
+    tags=["Deployments"]
+)
+async def list_deployments():
+    """Get all deployments"""
+    try:
+        deployments = await db.get_deployments()
+        return {
+            "success": True,
+            "deployments": [d.dict() for d in deployments],
+            "count": len(deployments)
+        }
+    except Exception as e:
+        print(f"Error listing deployments: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list deployments: {str(e)}")
+
+@app.get(
+    "/api/deployments/{deployment_id}",
+    summary="Get Deployment Details",
+    description="Get details of a specific deployment",
+    tags=["Deployments"]
+)
+async def get_deployment(deployment_id: str):
+    """Get a deployment by ID"""
+    try:
+        deployment = await db.get_deployment(deployment_id)
+        if not deployment:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+        
+        return {
+            "success": True,
+            "deployment": deployment.dict()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting deployment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get deployment: {str(e)}")
+
+@app.put(
+    "/api/deployments/{deployment_id}",
+    summary="Update Deployment",
+    description="Update deployment status or schedule",
+    tags=["Deployments"]
+)
+async def update_deployment(
+    deployment_id: str,
+    status: Optional[str] = Body(None),
+    schedule: Optional[Dict[str, Any]] = Body(None)
+):
+    """Update a deployment"""
+    try:
+        deployment = await db.get_deployment(deployment_id)
+        if not deployment:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+        
+        updates = {}
+        if status:
+            updates["status"] = status
+        if schedule is not None:
+            updates["schedule"] = ScheduleConfig(**schedule) if schedule else None
+        
+        if updates:
+            success = await db.update_deployment(deployment_id, updates)
+            if not success:
+                raise HTTPException(status_code=500, detail="Failed to update deployment")
+        
+        updated_deployment = await db.get_deployment(deployment_id)
+        
+        # Update scheduler if schedule or status changed
+        scheduler = get_scheduler()
+        if scheduler and updated_deployment:
+            if updated_deployment.status == "active" and updated_deployment.schedule and updated_deployment.schedule.enabled:
+                await scheduler.schedule_deployment(deployment_id)
+            else:
+                await scheduler.unschedule_deployment(deployment_id)
+        
+        return {
+            "success": True,
+            "deployment": updated_deployment.dict() if updated_deployment else None,
+            "message": "Deployment updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating deployment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update deployment: {str(e)}")
+
+@app.delete(
+    "/api/deployments/{deployment_id}",
+    summary="Undeploy Design",
+    description="Remove a deployment (undeploy)",
+    tags=["Deployments"]
+)
+async def delete_deployment(deployment_id: str):
+    """Delete a deployment"""
+    try:
+        deployment = await db.get_deployment(deployment_id)
+        if not deployment:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+        
+        # Unschedule from scheduler
+        scheduler = get_scheduler()
+        if scheduler:
+            await scheduler.unschedule_deployment(deployment_id)
+        
+        success = await db.delete_deployment(deployment_id)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete deployment")
+        
+        return {
+            "success": True,
+            "message": "Deployment removed successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting deployment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete deployment: {str(e)}")
+
+@app.post(
+    "/api/deployments/{deployment_id}/execute",
+    summary="Execute Deployment",
+    description="Manually trigger execution of a deployed design",
+    tags=["Deployments"]
+)
+async def execute_deployment(
+    deployment_id: str,
+    input_data: Optional[Dict[str, Any]] = Body(None)
+):
+    """Execute a deployment"""
+    try:
+        # Get deployment
+        deployment = await db.get_deployment(deployment_id)
+        if not deployment:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+        
+        if deployment.status != "active":
+            raise HTTPException(status_code=400, detail="Deployment is not active")
+        
+        # Get design
+        design = await db.get_orchestration_design(deployment.design_id)
+        if not design:
+            raise HTTPException(status_code=404, detail="Design not found")
+        
+        # Create execution log
+        log = ExecutionLog(
+            deployment_id=deployment_id,
+            design_id=deployment.design_id,
+            execution_id=f"exec-{datetime.utcnow().timestamp()}",
+            status="running",
+            trigger_type="manual",
+            input_data=input_data,
+            started_at=datetime.utcnow()
+        )
+        created_log = await db.create_execution_log(log)
+        
+        # Execute design
+        model = await db.get_default_model() or "claude-sonnet-4-20250514"
+        cwd = os.getenv("PROJECT_ROOT_DIR")
+        executor = DeploymentExecutor(db=db, model=model, cwd=cwd)
+        
+        result = await executor.execute_design(design, input_data, created_log.id)
+        
+        # Update deployment stats
+        await db.update_deployment(deployment_id, {
+            "last_execution_at": datetime.utcnow(),
+            "execution_count": deployment.execution_count + 1
+        })
+        
+        return {
+            "success": True,
+            "execution_id": created_log.id,
+            "result": result
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error executing deployment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to execute deployment: {str(e)}")
+
+@app.get(
+    "/api/deployments/{deployment_id}/logs",
+    summary="Get Execution Logs",
+    description="Get execution history for a deployment",
+    tags=["Deployments"]
+)
+async def get_deployment_logs(deployment_id: str, limit: int = 100):
+    """Get execution logs for a deployment"""
+    try:
+        logs = await db.get_execution_logs(deployment_id=deployment_id, limit=limit)
+        return {
+            "success": True,
+            "logs": [log.dict() for log in logs],
+            "count": len(logs)
+        }
+    except Exception as e:
+        print(f"Error getting deployment logs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get logs: {str(e)}")
+
+@app.get(
+    "/api/deployments/{deployment_id}/logs/{log_id}",
+    summary="Get Execution Log Details",
+    description="Get details of a specific execution",
+    tags=["Deployments"]
+)
+async def get_deployment_log(deployment_id: str, log_id: str):
+    """Get a specific execution log"""
+    try:
+        log = await db.get_execution_log(log_id)
+        if not log or log.deployment_id != deployment_id:
+            raise HTTPException(status_code=404, detail="Execution log not found")
+        
+        return {
+            "success": True,
+            "log": log.dict()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting execution log: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get log: {str(e)}")
+
+# Dynamic endpoint for deployed designs
+@app.api_route(
+    "/api/deployed/{endpoint_path:path}",
+    methods=["POST", "GET"],
+    summary="Execute via Custom Endpoint",
+    description="Execute a deployed design via its custom endpoint",
+    tags=["Deployments"]
+)
+async def execute_via_endpoint(endpoint_path: str, request: Request):
+    """Execute a deployment via its custom endpoint"""
+    try:
+        # Normalize endpoint path
+        if not endpoint_path.startswith("/"):
+            endpoint_path = f"/{endpoint_path}"
+        
+        # Find deployment by endpoint
+        deployment = await db.get_deployment_by_endpoint(endpoint_path)
+        if not deployment:
+            raise HTTPException(status_code=404, detail=f"No deployment found at {endpoint_path}")
+        
+        if deployment.status != "active":
+            raise HTTPException(status_code=400, detail="Deployment is not active")
+        
+        # Get design
+        design = await db.get_orchestration_design(deployment.design_id)
+        if not design:
+            raise HTTPException(status_code=404, detail="Design not found")
+        
+        # Parse input data from request body
+        input_data = None
+        try:
+            input_data = await request.json()
+        except:
+            pass
+        
+        # Create execution log
+        log = ExecutionLog(
+            deployment_id=deployment.id,
+            design_id=deployment.design_id,
+            execution_id=f"exec-{datetime.utcnow().timestamp()}",
+            status="running",
+            trigger_type="api",
+            input_data=input_data,
+            started_at=datetime.utcnow()
+        )
+        created_log = await db.create_execution_log(log)
+        
+        # Execute design
+        model = await db.get_default_model() or "claude-sonnet-4-20250514"
+        cwd = os.getenv("PROJECT_ROOT_DIR")
+        executor = DeploymentExecutor(db=db, model=model, cwd=cwd)
+        
+        result = await executor.execute_design(design, input_data, created_log.id)
+        
+        # Update deployment stats
+        await db.update_deployment(deployment.id, {
+            "last_execution_at": datetime.utcnow(),
+            "execution_count": deployment.execution_count + 1
+        })
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error executing via endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to execute: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -19,6 +19,7 @@ import MultiAgentView from './components/MultiAgentView';
 import SettingsPage from './components/SettingsPage';
 import AgentOrchestrationPage from './components/AgentOrchestrationPage';
 import OrchestrationDesignerPage from './components/OrchestrationDesignerPage';
+import DeploymentsPage from './components/DeploymentsPage';
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ function App() {
               <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
               <Route path="/orchestration" element={<Layout><AgentOrchestrationPage /></Layout>} />
               <Route path="/orchestration-designer" element={<Layout><OrchestrationDesignerPage /></Layout>} />
+              <Route path="/deployments" element={<Layout><DeploymentsPage /></Layout>} />
               <Route path="/agents/:workflowId" element={<Layout><AgentsPage /></Layout>} />
               <Route path="/multi-agent" element={<Layout><MultiAgentView /></Layout>} />
             </Routes>
