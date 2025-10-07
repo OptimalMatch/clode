@@ -2740,6 +2740,7 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
 async def execute_debate(request: DebateRequest):
     """Execute debate orchestration pattern."""
     temp_dir = None
+    agent_dir_mapping = None
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
@@ -2748,8 +2749,17 @@ async def execute_debate(request: DebateRequest):
         
         # Clone git repo if specified
         if request.git_repo:
-            temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
-            cwd = temp_dir
+            if request.isolate_agent_workspaces:
+                # Clone repo separately for each agent
+                temp_dir, agent_dir_mapping = await clone_git_repo_per_agent(
+                    request.git_repo,
+                    [agent.name for agent in request.agents]
+                )
+                cwd = temp_dir
+            else:
+                # Single shared clone
+                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                cwd = temp_dir
         else:
             cwd = os.getenv("PROJECT_ROOT_DIR")
         
@@ -2757,9 +2767,20 @@ async def execute_debate(request: DebateRequest):
         
         # Add agents
         for agent in request.agents:
+            system_prompt = agent.system_prompt
+            
+            # If using isolated workspaces, prepend workspace instructions
+            if agent_dir_mapping and agent.name in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent.name]}/'.\n"
+                    f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                    f"Example: To list files, use 'ls ./{agent_dir_mapping[agent.name]}/' or cd into it first.\n\n"
+                )
+                system_prompt = workspace_instruction + system_prompt
+            
             orchestrator.add_agent(
                 name=agent.name,
-                system_prompt=agent.system_prompt,
+                system_prompt=system_prompt,
                 role=OrchestratorAgentRole(agent.role.value)
             )
         
@@ -2801,6 +2822,7 @@ async def execute_debate_stream(request: DebateRequest):
     
     async def event_generator():
         temp_dir = None
+        agent_dir_mapping = None
         try:
             # Send initial status
             yield f"data: {json.dumps({'type': 'start', 'pattern': 'debate', 'agents': request.participant_names, 'rounds': request.rounds})}\n\n"
@@ -2810,8 +2832,17 @@ async def execute_debate_stream(request: DebateRequest):
             
             # Clone git repo if specified
             if request.git_repo:
-                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
-                cwd = temp_dir
+                if request.isolate_agent_workspaces:
+                    # Clone repo separately for each agent
+                    temp_dir, agent_dir_mapping = await clone_git_repo_per_agent(
+                        request.git_repo,
+                        [agent.name for agent in request.agents]
+                    )
+                    cwd = temp_dir
+                else:
+                    # Single shared clone
+                    temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                    cwd = temp_dir
             else:
                 cwd = os.getenv("PROJECT_ROOT_DIR")
             
@@ -2819,9 +2850,20 @@ async def execute_debate_stream(request: DebateRequest):
             
             # Add agents
             for agent in request.agents:
+                system_prompt = agent.system_prompt
+                
+                # If using isolated workspaces, prepend workspace instructions
+                if agent_dir_mapping and agent.name in agent_dir_mapping:
+                    workspace_instruction = (
+                        f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent.name]}/'.\n"
+                        f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                        f"Example: To list files, use 'ls ./{agent_dir_mapping[agent.name]}/' or cd into it first.\n\n"
+                    )
+                    system_prompt = workspace_instruction + system_prompt
+                
                 orchestrator.add_agent(
                     name=agent.name,
-                    system_prompt=agent.system_prompt,
+                    system_prompt=system_prompt,
                     role=OrchestratorAgentRole(agent.role.value)
                 )
             
@@ -2919,6 +2961,7 @@ async def execute_hierarchical_stream(request: HierarchicalRequest):
     
     async def event_generator():
         temp_dir = None
+        agent_dir_mapping = None
         try:
             # Send initial status
             agent_names = [request.manager.name] + [w.name for w in request.workers]
@@ -2929,26 +2972,54 @@ async def execute_hierarchical_stream(request: HierarchicalRequest):
             
             # Clone git repo if specified
             if request.git_repo:
-                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
-                cwd = temp_dir
+                if request.isolate_agent_workspaces:
+                    # Clone repo separately for each agent (manager + workers)
+                    all_agents = [request.manager.name] + [w.name for w in request.workers]
+                    temp_dir, agent_dir_mapping = await clone_git_repo_per_agent(
+                        request.git_repo,
+                        all_agents
+                    )
+                    cwd = temp_dir
+                else:
+                    # Single shared clone
+                    temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                    cwd = temp_dir
             else:
                 cwd = os.getenv("PROJECT_ROOT_DIR")
             
             orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
             
             # Add manager
+            manager_prompt = request.manager.system_prompt
+            if agent_dir_mapping and request.manager.name in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[request.manager.name]}/'.\n"
+                    f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                    f"Example: To list files, use 'ls ./{agent_dir_mapping[request.manager.name]}/' or cd into it first.\n\n"
+                )
+                manager_prompt = workspace_instruction + manager_prompt
+            
             orchestrator.add_agent(
                 name=request.manager.name,
-                system_prompt=request.manager.system_prompt,
+                system_prompt=manager_prompt,
                 role=OrchestratorAgentRole(request.manager.role.value)
             )
             
             # Add workers
             worker_names = []
             for worker in request.workers:
+                worker_prompt = worker.system_prompt
+                if agent_dir_mapping and worker.name in agent_dir_mapping:
+                    workspace_instruction = (
+                        f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[worker.name]}/'.\n"
+                        f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                        f"Example: To list files, use 'ls ./{agent_dir_mapping[worker.name]}/' or cd into it first.\n\n"
+                    )
+                    worker_prompt = workspace_instruction + worker_prompt
+                
                 orchestrator.add_agent(
                     name=worker.name,
-                    system_prompt=worker.system_prompt,
+                    system_prompt=worker_prompt,
                     role=OrchestratorAgentRole(worker.role.value)
                 )
                 worker_names.append(worker.name)
@@ -3039,6 +3110,7 @@ async def execute_hierarchical_stream(request: HierarchicalRequest):
 async def execute_hierarchical(request: HierarchicalRequest):
     """Execute hierarchical orchestration pattern."""
     temp_dir = None
+    agent_dir_mapping = None
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
@@ -3047,25 +3119,53 @@ async def execute_hierarchical(request: HierarchicalRequest):
         
         # Clone git repo if specified
         if request.git_repo:
-            temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
-            cwd = temp_dir
+            if request.isolate_agent_workspaces:
+                # Clone repo separately for each agent (manager + workers)
+                all_agents = [request.manager.name] + [w.name for w in request.workers]
+                temp_dir, agent_dir_mapping = await clone_git_repo_per_agent(
+                    request.git_repo,
+                    all_agents
+                )
+                cwd = temp_dir
+            else:
+                # Single shared clone
+                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                cwd = temp_dir
         else:
             cwd = os.getenv("PROJECT_ROOT_DIR")
         
         orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
         
         # Add manager
+        manager_prompt = request.manager.system_prompt
+        if agent_dir_mapping and request.manager.name in agent_dir_mapping:
+            workspace_instruction = (
+                f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[request.manager.name]}/'.\n"
+                f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                f"Example: To list files, use 'ls ./{agent_dir_mapping[request.manager.name]}/' or cd into it first.\n\n"
+            )
+            manager_prompt = workspace_instruction + manager_prompt
+        
         orchestrator.add_agent(
             name=request.manager.name,
-            system_prompt=request.manager.system_prompt,
+            system_prompt=manager_prompt,
             role=OrchestratorAgentRole(request.manager.role.value)
         )
         
         # Add workers
         for worker in request.workers:
+            worker_prompt = worker.system_prompt
+            if agent_dir_mapping and worker.name in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[worker.name]}/'.\n"
+                    f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                    f"Example: To list files, use 'ls ./{agent_dir_mapping[worker.name]}/' or cd into it first.\n\n"
+                )
+                worker_prompt = workspace_instruction + worker_prompt
+            
             orchestrator.add_agent(
                 name=worker.name,
-                system_prompt=worker.system_prompt,
+                system_prompt=worker_prompt,
                 role=OrchestratorAgentRole(worker.role.value)
             )
         
@@ -3107,6 +3207,7 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
     
     async def event_generator():
         temp_dir = None
+        agent_dir_mapping = None
         try:
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
             
@@ -3115,8 +3216,17 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
             
             # Clone git repo if specified
             if request.git_repo:
-                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
-                cwd = temp_dir
+                if request.isolate_agent_workspaces:
+                    # Clone repo separately for each agent
+                    temp_dir, agent_dir_mapping = await clone_git_repo_per_agent(
+                        request.git_repo,
+                        [agent.name for agent in request.agents]
+                    )
+                    cwd = temp_dir
+                else:
+                    # Single shared clone
+                    temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                    cwd = temp_dir
             else:
                 cwd = os.getenv("PROJECT_ROOT_DIR")
             
@@ -3124,9 +3234,20 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
             
             # Add agents
             for agent in request.agents:
+                system_prompt = agent.system_prompt
+                
+                # If using isolated workspaces, prepend workspace instructions
+                if agent_dir_mapping and agent.name in agent_dir_mapping:
+                    workspace_instruction = (
+                        f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent.name]}/'.\n"
+                        f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                        f"Example: To list files, use 'ls ./{agent_dir_mapping[agent.name]}/' or cd into it first.\n\n"
+                    )
+                    system_prompt = workspace_instruction + system_prompt
+                
                 orchestrator.add_agent(
                     name=agent.name,
-                    system_prompt=agent.system_prompt,
+                    system_prompt=system_prompt,
                     role=OrchestratorAgentRole(agent.role.value)
                 )
             
@@ -3231,6 +3352,7 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
 async def execute_parallel_aggregate(request: ParallelAggregateRequest):
     """Execute parallel aggregation orchestration pattern."""
     temp_dir = None
+    agent_dir_mapping = None
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
@@ -3239,8 +3361,17 @@ async def execute_parallel_aggregate(request: ParallelAggregateRequest):
         
         # Clone git repo if specified
         if request.git_repo:
-            temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
-            cwd = temp_dir
+            if request.isolate_agent_workspaces:
+                # Clone repo separately for each agent
+                temp_dir, agent_dir_mapping = await clone_git_repo_per_agent(
+                    request.git_repo,
+                    [agent.name for agent in request.agents]
+                )
+                cwd = temp_dir
+            else:
+                # Single shared clone
+                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                cwd = temp_dir
         else:
             cwd = os.getenv("PROJECT_ROOT_DIR")
         
@@ -3248,9 +3379,20 @@ async def execute_parallel_aggregate(request: ParallelAggregateRequest):
         
         # Add agents
         for agent in request.agents:
+            system_prompt = agent.system_prompt
+            
+            # If using isolated workspaces, prepend workspace instructions
+            if agent_dir_mapping and agent.name in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent.name]}/'.\n"
+                    f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                    f"Example: To list files, use 'ls ./{agent_dir_mapping[agent.name]}/' or cd into it first.\n\n"
+                )
+                system_prompt = workspace_instruction + system_prompt
+            
             orchestrator.add_agent(
                 name=agent.name,
-                system_prompt=agent.system_prompt,
+                system_prompt=system_prompt,
                 role=OrchestratorAgentRole(agent.role.value)
             )
         
@@ -3299,6 +3441,7 @@ async def execute_parallel_aggregate(request: ParallelAggregateRequest):
 async def execute_dynamic_routing(request: DynamicRoutingRequest):
     """Execute dynamic routing orchestration pattern."""
     temp_dir = None
+    agent_dir_mapping = None
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
@@ -3307,25 +3450,53 @@ async def execute_dynamic_routing(request: DynamicRoutingRequest):
         
         # Clone git repo if specified
         if request.git_repo:
-            temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
-            cwd = temp_dir
+            if request.isolate_agent_workspaces:
+                # Clone repo separately for each agent (router + specialists)
+                all_agents = [request.router.name] + [s.name for s in request.specialists]
+                temp_dir, agent_dir_mapping = await clone_git_repo_per_agent(
+                    request.git_repo,
+                    all_agents
+                )
+                cwd = temp_dir
+            else:
+                # Single shared clone
+                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                cwd = temp_dir
         else:
             cwd = os.getenv("PROJECT_ROOT_DIR")
         
         orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
         
         # Add router
+        router_prompt = request.router.system_prompt
+        if agent_dir_mapping and request.router.name in agent_dir_mapping:
+            workspace_instruction = (
+                f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[request.router.name]}/'.\n"
+                f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                f"Example: To list files, use 'ls ./{agent_dir_mapping[request.router.name]}/' or cd into it first.\n\n"
+            )
+            router_prompt = workspace_instruction + router_prompt
+        
         orchestrator.add_agent(
             name=request.router.name,
-            system_prompt=request.router.system_prompt,
+            system_prompt=router_prompt,
             role=OrchestratorAgentRole(request.router.role.value)
         )
         
         # Add specialists
         for specialist in request.specialists:
+            specialist_prompt = specialist.system_prompt
+            if agent_dir_mapping and specialist.name in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[specialist.name]}/'.\n"
+                    f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                    f"Example: To list files, use 'ls ./{agent_dir_mapping[specialist.name]}/' or cd into it first.\n\n"
+                )
+                specialist_prompt = workspace_instruction + specialist_prompt
+            
             orchestrator.add_agent(
                 name=specialist.name,
-                system_prompt=specialist.system_prompt,
+                system_prompt=specialist_prompt,
                 role=OrchestratorAgentRole(specialist.role.value)
             )
         
@@ -3369,6 +3540,7 @@ async def execute_dynamic_routing_stream(request: DynamicRoutingRequest):
     
     async def event_generator():
         temp_dir = None
+        agent_dir_mapping = None
         try:
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
             
@@ -3377,25 +3549,53 @@ async def execute_dynamic_routing_stream(request: DynamicRoutingRequest):
             
             # Clone git repo if specified
             if request.git_repo:
-                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
-                cwd = temp_dir
+                if request.isolate_agent_workspaces:
+                    # Clone repo separately for each agent (router + specialists)
+                    all_agents = [request.router.name] + [s.name for s in request.specialists]
+                    temp_dir, agent_dir_mapping = await clone_git_repo_per_agent(
+                        request.git_repo,
+                        all_agents
+                    )
+                    cwd = temp_dir
+                else:
+                    # Single shared clone
+                    temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                    cwd = temp_dir
             else:
                 cwd = os.getenv("PROJECT_ROOT_DIR")
             
             orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
             
             # Add router
+            router_prompt = request.router.system_prompt
+            if agent_dir_mapping and request.router.name in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[request.router.name]}/'.\n"
+                    f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                    f"Example: To list files, use 'ls ./{agent_dir_mapping[request.router.name]}/' or cd into it first.\n\n"
+                )
+                router_prompt = workspace_instruction + router_prompt
+            
             orchestrator.add_agent(
                 name=request.router.name,
-                system_prompt=request.router.system_prompt,
+                system_prompt=router_prompt,
                 role=OrchestratorAgentRole(request.router.role.value)
             )
             
             # Add specialists
             for specialist in request.specialists:
+                specialist_prompt = specialist.system_prompt
+                if agent_dir_mapping and specialist.name in agent_dir_mapping:
+                    workspace_instruction = (
+                        f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[specialist.name]}/'.\n"
+                        f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                        f"Example: To list files, use 'ls ./{agent_dir_mapping[specialist.name]}/' or cd into it first.\n\n"
+                    )
+                    specialist_prompt = workspace_instruction + specialist_prompt
+                
                 orchestrator.add_agent(
                     name=specialist.name,
-                    system_prompt=specialist.system_prompt,
+                    system_prompt=specialist_prompt,
                     role=OrchestratorAgentRole(specialist.role.value)
                 )
             
