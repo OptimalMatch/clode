@@ -107,6 +107,16 @@ async def clone_git_repo_for_orchestration(git_repo: str) -> str:
         if process.returncode != 0:
             error_msg = stderr.decode() if stderr else "Unknown error"
             raise Exception(f"Failed to clone repository: {error_msg}")
+        
+        print(f"✅ Git repo cloned successfully to {temp_dir}")
+        return temp_dir
+        
+    except Exception as e:
+        print(f"❌ Error cloning git repo: {e}")
+        # Try to clean up the failed clone
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        raise
 
 async def clone_git_repo_per_agent(git_repo: str, agent_names: List[str]) -> Tuple[str, Dict[str, str]]:
     """
