@@ -1294,7 +1294,8 @@ const OrchestrationDesignerPage: React.FC = () => {
             system_prompt: a.system_prompt,
             role: a.role
           })),
-          agent_sequence: block.data.agents.map(a => a.name)
+          agent_sequence: block.data.agents.map(a => a.name),
+          git_repo: block.data.git_repo || null
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
@@ -1335,7 +1336,8 @@ const OrchestrationDesignerPage: React.FC = () => {
             role: a.role
           })),
           agent_names: block.data.agents.map(a => a.name),
-          aggregator: null
+          aggregator: null,
+          git_repo: block.data.git_repo || null
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
@@ -1386,7 +1388,8 @@ const OrchestrationDesignerPage: React.FC = () => {
             system_prompt: w.system_prompt,
             role: w.role
           })),
-          worker_names: workers.map(w => w.name)
+          worker_names: workers.map(w => w.name),
+          git_repo: block.data.git_repo || null
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
@@ -1431,7 +1434,8 @@ const OrchestrationDesignerPage: React.FC = () => {
           topic: task,
           agents: block.data.agents,
           participant_names: debaters.map(d => d.name),
-          rounds: block.data.rounds || 3
+          rounds: block.data.rounds || 3,
+          git_repo: block.data.git_repo || null
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
@@ -1486,7 +1490,8 @@ const OrchestrationDesignerPage: React.FC = () => {
             system_prompt: s.system_prompt,
             role: s.role
           })),
-          specialist_names: specialists.map(s => s.name)
+          specialist_names: specialists.map(s => s.name),
+          git_repo: block.data.git_repo || null
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
