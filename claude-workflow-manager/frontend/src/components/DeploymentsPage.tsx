@@ -468,7 +468,7 @@ const DeploymentsPage: React.FC = () => {
                           title={
                             <Box sx={{ p: 1 }}>
                               <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                                Usage Instructions:
+                                Usage Instructions (Async Execution):
                               </Typography>
                               <Typography variant="body2" sx={{ mb: 1 }}>
                                 <strong>Option 1: GET Request (No Input)</strong>
@@ -500,12 +500,30 @@ const DeploymentsPage: React.FC = () => {
                                   backgroundColor: 'rgba(0,0,0,0.2)',
                                   padding: 1,
                                   borderRadius: 1,
+                                  mb: 1.5,
                                   display: 'block'
                                 }}
                               >
                                 {`curl -X POST ${getApiUrl()}/api/deployed${deployment.endpoint_path} \\
   -H "Content-Type: application/json" \\
   -d '{"key": "value"}'`}
+                              </Typography>
+                              <Typography variant="body2" sx={{ mb: 1, mt: 2, color: '#90caf9' }}>
+                                <strong>Response includes status_url to check progress:</strong>
+                              </Typography>
+                              <Typography 
+                                variant="caption" 
+                                component="pre" 
+                                sx={{ 
+                                  fontFamily: 'monospace', 
+                                  whiteSpace: 'pre-wrap',
+                                  backgroundColor: 'rgba(0,0,0,0.2)',
+                                  padding: 1,
+                                  borderRadius: 1,
+                                  display: 'block'
+                                }}
+                              >
+                                {`# Use the status_url from response:\ncurl ${getApiUrl()}/api/deployments/${deployment.id}/logs/{{log_id}}`}
                               </Typography>
                             </Box>
                           }
@@ -514,7 +532,7 @@ const DeploymentsPage: React.FC = () => {
                           componentsProps={{
                             tooltip: {
                               sx: {
-                                maxWidth: 600,
+                                maxWidth: 650,
                                 backgroundColor: 'rgba(33, 33, 33, 0.98)',
                                 fontSize: '0.875rem',
                               },

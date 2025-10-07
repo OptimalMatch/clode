@@ -4024,11 +4024,11 @@ async def get_deployment_log(deployment_id: str, log_id: str):
     "/api/deployed/{endpoint_path:path}",
     methods=["POST", "GET"],
     summary="Execute via Custom Endpoint",
-    description="Execute a deployed design via its custom endpoint",
+    description="Execute a deployed design via its custom endpoint (returns immediately, executes in background)",
     tags=["Deployments"]
 )
 async def execute_via_endpoint(endpoint_path: str, request: Request):
-    """Execute a deployment via its custom endpoint"""
+    """Execute a deployment via its custom endpoint (async - returns immediately)"""
     try:
         # Normalize endpoint path
         if not endpoint_path.startswith("/"):
@@ -4069,20 +4069,21 @@ async def execute_via_endpoint(endpoint_path: str, request: Request):
         )
         created_log = await db.create_execution_log(log)
         
-        # Execute design
-        model = await db.get_default_model() or "claude-sonnet-4-20250514"
-        cwd = os.getenv("PROJECT_ROOT_DIR")
-        executor = DeploymentExecutor(db=db, model=model, cwd=cwd)
+        # Start execution in background (non-blocking)
+        asyncio.create_task(_execute_deployment_background(
+            deployment.id, design, input_data, created_log.id, db
+        ))
         
-        result = await executor.execute_design(design, input_data, created_log.id)
-        
-        # Update deployment stats
-        await db.update_deployment(deployment.id, {
-            "last_execution_at": datetime.utcnow(),
-            "execution_count": deployment.execution_count + 1
-        })
-        
-        return result
+        # Return immediately with status URLs
+        return {
+            "success": True,
+            "message": "Execution started in background",
+            "execution_id": created_log.id,
+            "log_id": created_log.id,
+            "deployment_id": deployment.id,
+            "status_url": f"/api/deployments/{deployment.id}/logs/{created_log.id}",
+            "all_logs_url": f"/api/deployments/{deployment.id}/logs"
+        }
     except HTTPException:
         raise
     except Exception as e:
