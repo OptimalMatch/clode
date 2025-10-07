@@ -341,10 +341,71 @@ const DeploymentsPage: React.FC = () => {
     setLogsDialogOpen(true);
   };
 
+  const getApiUrl = () => {
+    const currentHostname = window.location.hostname;
+    const apiPort = process.env.REACT_APP_API_PORT || '8005';
+    let apiUrl: string;
+    
+    if (process.env.REACT_APP_API_URL) {
+      try {
+        const envUrl = new URL(process.env.REACT_APP_API_URL);
+        if (envUrl.hostname === currentHostname) {
+          apiUrl = process.env.REACT_APP_API_URL;
+        } else {
+          apiUrl = `${window.location.protocol}//${currentHostname}:${apiPort}`;
+        }
+      } catch {
+        apiUrl = `${window.location.protocol}//${currentHostname}:${apiPort}`;
+      }
+    } else {
+      apiUrl = `${window.location.protocol}//${currentHostname}:${apiPort}`;
+    }
+    
+    return apiUrl;
+  };
+
   const handleCopyEndpoint = (endpoint: string) => {
-    const fullUrl = `${window.location.origin}/api/deployed${endpoint}`;
-    navigator.clipboard.writeText(fullUrl);
-    enqueueSnackbar('Endpoint URL copied to clipboard!', { variant: 'success' });
+    const fullUrl = `${getApiUrl()}/api/deployed${endpoint}`;
+    
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(fullUrl)
+        .then(() => {
+          enqueueSnackbar('Endpoint URL copied to clipboard!', { variant: 'success' });
+        })
+        .catch(() => {
+          // Fallback if clipboard API fails
+          fallbackCopyToClipboard(fullUrl);
+        });
+    } else {
+      // Fallback for browsers without clipboard API
+      fallbackCopyToClipboard(fullUrl);
+    }
+  };
+
+  const fallbackCopyToClipboard = (text: string) => {
+    // Create a temporary textarea element
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
+        enqueueSnackbar('Endpoint URL copied to clipboard!', { variant: 'success' });
+      } else {
+        enqueueSnackbar('Failed to copy URL. Please copy manually: ' + text, { variant: 'error' });
+      }
+    } catch (err) {
+      enqueueSnackbar('Failed to copy URL. Please copy manually: ' + text, { variant: 'error' });
+    }
+    
+    document.body.removeChild(textArea);
   };
 
   const formatDate = (dateString?: string) => {
@@ -403,9 +464,78 @@ const DeploymentsPage: React.FC = () => {
                         {deployment.design_name}
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                          {deployment.endpoint_path}
-                        </Typography>
+                        <Tooltip 
+                          title={
+                            <Box sx={{ p: 1 }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                                Usage Instructions:
+                              </Typography>
+                              <Typography variant="body2" sx={{ mb: 1 }}>
+                                <strong>Option 1: GET Request (No Input)</strong>
+                              </Typography>
+                              <Typography 
+                                variant="caption" 
+                                component="pre" 
+                                sx={{ 
+                                  fontFamily: 'monospace', 
+                                  whiteSpace: 'pre-wrap',
+                                  backgroundColor: 'rgba(0,0,0,0.2)',
+                                  padding: 1,
+                                  borderRadius: 1,
+                                  mb: 1.5,
+                                  display: 'block'
+                                }}
+                              >
+                                {`curl ${getApiUrl()}/api/deployed${deployment.endpoint_path}`}
+                              </Typography>
+                              <Typography variant="body2" sx={{ mb: 1 }}>
+                                <strong>Option 2: POST Request (With Input)</strong>
+                              </Typography>
+                              <Typography 
+                                variant="caption" 
+                                component="pre" 
+                                sx={{ 
+                                  fontFamily: 'monospace', 
+                                  whiteSpace: 'pre-wrap',
+                                  backgroundColor: 'rgba(0,0,0,0.2)',
+                                  padding: 1,
+                                  borderRadius: 1,
+                                  display: 'block'
+                                }}
+                              >
+                                {`curl -X POST ${getApiUrl()}/api/deployed${deployment.endpoint_path} \\
+  -H "Content-Type: application/json" \\
+  -d '{"key": "value"}'`}
+                              </Typography>
+                            </Box>
+                          }
+                          arrow
+                          placement="right"
+                          componentsProps={{
+                            tooltip: {
+                              sx: {
+                                maxWidth: 600,
+                                backgroundColor: 'rgba(33, 33, 33, 0.98)',
+                                fontSize: '0.875rem',
+                              },
+                            },
+                          }}
+                        >
+                          <Typography 
+                            variant="body2" 
+                            color="text.secondary" 
+                            sx={{ 
+                              fontFamily: 'monospace',
+                              cursor: 'help',
+                              textDecoration: 'underline dotted',
+                              '&:hover': {
+                                color: 'primary.main',
+                              }
+                            }}
+                          >
+                            {deployment.endpoint_path}
+                          </Typography>
+                        </Tooltip>
                         <IconButton
                           size="small"
                           onClick={() => handleCopyEndpoint(deployment.endpoint_path)}

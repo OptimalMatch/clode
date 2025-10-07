@@ -61,3 +61,4 @@ Both return exit code 0 on success, exit code 1 on failure.
 ## Summary
 **Only terminal containers need netcat** - that's where the MCP client runs. The MCP server container can use Python for healthchecks, resulting in faster builds and smaller images.
 
+
