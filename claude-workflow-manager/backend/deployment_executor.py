@@ -10,6 +10,9 @@ from models import OrchestrationDesign, ExecutionLog
 from database import Database
 import asyncio
 import json
+import tempfile
+import os
+import shutil
 
 
 class DeploymentExecutor:
@@ -20,6 +23,7 @@ class DeploymentExecutor:
         self.model = model
         self.cwd = cwd
         self.orchestrator = None
+        self.temp_dirs = []  # Track temp directories for cleanup
     
     async def execute_design(
         self,
@@ -149,6 +153,9 @@ class DeploymentExecutor:
             })
             
             raise
+        finally:
+            # Clean up any temporary directories
+            await self._cleanup_temp_dirs()
     
     def _topological_sort(self, blocks: List[Dict], connections: List[Dict]) -> List[str]:
         """
@@ -236,13 +243,22 @@ class DeploymentExecutor:
         agents = block["data"]["agents"]
         task = block["data"]["task"]
         
+        # Prepare working directory (clone git repo if assigned)
+        block_cwd = await self._prepare_block_working_dir(block)
+        
+        # Create orchestrator with block-specific working directory
+        if block_cwd:
+            orchestrator = MultiAgentOrchestrator(model=self.model, cwd=block_cwd)
+        else:
+            orchestrator = self.orchestrator
+        
         # Build task with input
         full_task = f"{task}\n\nInput: {block_input}" if block_input else task
         
         # Add agents to orchestrator
         agent_names = []
         for agent in agents:
-            self.orchestrator.add_agent(
+            orchestrator.add_agent(
                 name=agent["name"],
                 system_prompt=agent["system_prompt"],
                 role=self._map_role(agent["role"])
@@ -250,13 +266,22 @@ class DeploymentExecutor:
             agent_names.append(agent["name"])
         
         # Execute
-        result = await self.orchestrator.sequential_pipeline(full_task, agent_names)
+        result = await orchestrator.sequential_pipeline(full_task, agent_names)
         return result
     
     async def _execute_parallel(self, block: Dict, block_input: Any, log_id: str) -> Dict[str, Any]:
         """Execute parallel pattern"""
         agents = block["data"]["agents"]
         task = block["data"]["task"]
+        
+        # Prepare working directory (clone git repo if assigned)
+        block_cwd = await self._prepare_block_working_dir(block)
+        
+        # Create orchestrator with block-specific working directory
+        if block_cwd:
+            orchestrator = MultiAgentOrchestrator(model=self.model, cwd=block_cwd)
+        else:
+            orchestrator = self.orchestrator
         
         full_task = f"{task}\n\nInput: {block_input}" if block_input else task
         
@@ -266,7 +291,7 @@ class DeploymentExecutor:
             if not isinstance(agent, dict):
                 raise ValueError(f"Agent {i} is not a dictionary")
             
-            self.orchestrator.add_agent(
+            orchestrator.add_agent(
                 name=agent["name"],
                 system_prompt=agent["system_prompt"],
                 role=self._map_role(agent["role"])
@@ -274,7 +299,7 @@ class DeploymentExecutor:
             agent_names.append(agent["name"])
         
         # Execute
-        result = await self.orchestrator.parallel_aggregate(full_task, agent_names)
+        result = await orchestrator.parallel_aggregate(full_task, agent_names)
         return result
     
     async def _execute_hierarchical(self, block: Dict, block_input: Any, log_id: str) -> Dict[str, Any]:
@@ -282,13 +307,22 @@ class DeploymentExecutor:
         agents = block["data"]["agents"]
         task = block["data"]["task"]
         
+        # Prepare working directory (clone git repo if assigned)
+        block_cwd = await self._prepare_block_working_dir(block)
+        
+        # Create orchestrator with block-specific working directory
+        if block_cwd:
+            orchestrator = MultiAgentOrchestrator(model=self.model, cwd=block_cwd)
+        else:
+            orchestrator = self.orchestrator
+        
         full_task = f"{task}\n\nInput: {block_input}" if block_input else task
         
         # First agent is manager, rest are workers
         manager = agents[0]
         workers = agents[1:]
         
-        self.orchestrator.add_agent(
+        orchestrator.add_agent(
             name=manager["name"],
             system_prompt=manager["system_prompt"],
             role=AgentRole.MANAGER
@@ -296,7 +330,7 @@ class DeploymentExecutor:
         
         worker_names = []
         for worker in workers:
-            self.orchestrator.add_agent(
+            orchestrator.add_agent(
                 name=worker["name"],
                 system_prompt=worker["system_prompt"],
                 role=AgentRole.WORKER
@@ -304,7 +338,7 @@ class DeploymentExecutor:
             worker_names.append(worker["name"])
         
         # Execute
-        result = await self.orchestrator.hierarchical_execution(
+        result = await orchestrator.hierarchical_execution(
             full_task,
             manager["name"],
             worker_names
@@ -317,12 +351,21 @@ class DeploymentExecutor:
         task = block["data"]["task"]
         rounds = block["data"].get("rounds", 3)
         
+        # Prepare working directory (clone git repo if assigned)
+        block_cwd = await self._prepare_block_working_dir(block)
+        
+        # Create orchestrator with block-specific working directory
+        if block_cwd:
+            orchestrator = MultiAgentOrchestrator(model=self.model, cwd=block_cwd)
+        else:
+            orchestrator = self.orchestrator
+        
         full_task = f"{task}\n\nInput: {block_input}" if block_input else task
         
         # Add agents
         debater_names = []
         for agent in agents:
-            self.orchestrator.add_agent(
+            orchestrator.add_agent(
                 name=agent["name"],
                 system_prompt=agent["system_prompt"],
                 role=self._map_role(agent["role"])
@@ -330,7 +373,7 @@ class DeploymentExecutor:
             debater_names.append(agent["name"])
         
         # Execute
-        result = await self.orchestrator.debate(
+        result = await orchestrator.debate(
             full_task,
             debater_names,
             rounds=rounds
@@ -342,13 +385,22 @@ class DeploymentExecutor:
         agents = block["data"]["agents"]
         task = block["data"]["task"]
         
+        # Prepare working directory (clone git repo if assigned)
+        block_cwd = await self._prepare_block_working_dir(block)
+        
+        # Create orchestrator with block-specific working directory
+        if block_cwd:
+            orchestrator = MultiAgentOrchestrator(model=self.model, cwd=block_cwd)
+        else:
+            orchestrator = self.orchestrator
+        
         full_task = f"{task}\n\nInput: {block_input}" if block_input else task
         
         # First agent is router, rest are specialists
         router = agents[0]
         specialists = agents[1:]
         
-        self.orchestrator.add_agent(
+        orchestrator.add_agent(
             name=router["name"],
             system_prompt=router["system_prompt"],
             role=AgentRole.MODERATOR
@@ -356,7 +408,7 @@ class DeploymentExecutor:
         
         specialist_names = []
         for specialist in specialists:
-            self.orchestrator.add_agent(
+            orchestrator.add_agent(
                 name=specialist["name"],
                 system_prompt=specialist["system_prompt"],
                 role=AgentRole.SPECIALIST
@@ -364,7 +416,7 @@ class DeploymentExecutor:
             specialist_names.append(specialist["name"])
         
         # Execute
-        result = await self.orchestrator.dynamic_routing(
+        result = await orchestrator.dynamic_routing(
             full_task,
             router["name"],
             specialist_names
@@ -376,13 +428,22 @@ class DeploymentExecutor:
         agents = block["data"]["agents"]
         task = block["data"]["task"]
         
+        # Prepare working directory (clone git repo if assigned)
+        block_cwd = await self._prepare_block_working_dir(block)
+        
+        # Create orchestrator with block-specific working directory
+        if block_cwd:
+            orchestrator = MultiAgentOrchestrator(model=self.model, cwd=block_cwd)
+        else:
+            orchestrator = self.orchestrator
+        
         # Build context for reflection
         design_context = json.dumps(context.get("results", {}), indent=2)
         full_task = f"{task}\n\nDesign Context:\n{design_context}\n\nInput: {block_input}" if block_input else f"{task}\n\nDesign Context:\n{design_context}"
         
         # Add reflection agent
         for agent in agents:
-            self.orchestrator.add_agent(
+            orchestrator.add_agent(
                 name=agent["name"],
                 system_prompt=agent["system_prompt"],
                 role=AgentRole.SPECIALIST
@@ -390,7 +451,7 @@ class DeploymentExecutor:
         
         # Execute as sequential (reflection agents analyze and provide feedback)
         agent_names = [a["name"] for a in agents]
-        result = await self.orchestrator.sequential_pipeline(full_task, agent_names)
+        result = await orchestrator.sequential_pipeline(full_task, agent_names)
         return result
     
     def _map_role(self, role: str) -> AgentRole:
@@ -403,4 +464,84 @@ class DeploymentExecutor:
             "reflector": AgentRole.SPECIALIST  # Reflectors are specialists
         }
         return role_map.get(role, AgentRole.SPECIALIST)
+    
+    async def _clone_git_repo(self, git_repo: str) -> str:
+        """
+        Clone a git repository to a temporary directory
+        
+        Args:
+            git_repo: Git repository URL to clone
+            
+        Returns:
+            Path to the cloned repository
+        """
+        temp_dir = tempfile.mkdtemp(prefix="orchestration_block_")
+        self.temp_dirs.append(temp_dir)
+        
+        print(f"📁 Cloning git repo for block: {git_repo}")
+        print(f"   Temporary directory: {temp_dir}")
+        
+        try:
+            # Get git environment with SSH support
+            from main import get_git_env
+            env = get_git_env()
+            
+            # Clone repository asynchronously
+            process = await asyncio.create_subprocess_exec(
+                "git", "clone", "--depth", "1", git_repo, temp_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env
+            )
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                error_msg = stderr.decode() if stderr else "Unknown error"
+                raise Exception(f"Failed to clone repository: {error_msg}")
+            
+            print(f"✅ Git repo cloned successfully to {temp_dir}")
+            return temp_dir
+            
+        except Exception as e:
+            print(f"❌ Error cloning git repo: {e}")
+            # Remove the temp dir from tracking if clone failed
+            if temp_dir in self.temp_dirs:
+                self.temp_dirs.remove(temp_dir)
+            # Try to clean up the failed clone
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            raise
+    
+    async def _prepare_block_working_dir(self, block: Dict) -> Optional[str]:
+        """
+        Prepare working directory for a block
+        
+        If block has git_repo assigned, clone it to a temp directory
+        Otherwise, return None to use default cwd
+        
+        Args:
+            block: Block configuration
+            
+        Returns:
+            Path to working directory or None
+        """
+        git_repo = block.get("data", {}).get("git_repo")
+        
+        if git_repo:
+            print(f"📦 Block '{block['data']['label']}' has git repo assigned: {git_repo}")
+            return await self._clone_git_repo(git_repo)
+        
+        return None
+    
+    async def _cleanup_temp_dirs(self):
+        """Clean up all temporary directories created during execution"""
+        for temp_dir in self.temp_dirs:
+            try:
+                if os.path.exists(temp_dir):
+                    print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception as e:
+                print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
+        
+        self.temp_dirs.clear()
 
