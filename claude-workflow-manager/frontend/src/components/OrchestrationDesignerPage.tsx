@@ -139,6 +139,10 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [connectionSourceAgent, setConnectionSourceAgent] = useState<string | null>(null);
   const [connectionMode, setConnectionMode] = useState<'simple' | 'advanced'>('simple'); // Toggle between modes
   
+  // Canvas panning state
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  
   // Design metadata
   const [designName, setDesignName] = useState('Untitled Orchestration');
   const [designDescription, setDesignDescription] = useState('');
@@ -326,12 +330,19 @@ const OrchestrationDesignerPage: React.FC = () => {
   // Add a new orchestration block to the canvas
   const addBlock = (patternType: OrchestrationPattern) => {
     const pattern = patterns.find(p => p.id === patternType);
+    
+    // Better layout: 3 columns, with wrapping
+    const col = blocks.length % 3;
+    const row = Math.floor(blocks.length / 3);
+    const blockWidth = 350;
+    const blockHeight = 400;
+    
     const newBlock: OrchestrationBlock = {
       id: `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       type: patternType,
       position: { 
-        x: 300 + blocks.length * 50, 
-        y: 200 + blocks.length * 30 
+        x: 100 + col * blockWidth, 
+        y: 100 + row * blockHeight 
       },
       data: {
         label: pattern?.name || patternType,
@@ -385,6 +396,19 @@ const OrchestrationDesignerPage: React.FC = () => {
   };
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
+    // Handle canvas panning
+    if (isPanning && canvasRef.current) {
+      const dx = e.clientX - panStart.x;
+      const dy = e.clientY - panStart.y;
+      setPanOffset(prev => ({
+        x: prev.x + dx,
+        y: prev.y + dy
+      }));
+      setPanStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+    
+    // Handle block dragging
     if (!isDragging || !draggedBlock || !canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
@@ -399,18 +423,19 @@ const OrchestrationDesignerPage: React.FC = () => {
         ? { ...block, position: { x: newBlockX, y: newBlockY } }
         : block
     ));
-  }, [isDragging, draggedBlock, dragOffset, panOffset, zoom]);
+  }, [isDragging, draggedBlock, dragOffset, panOffset, zoom, isPanning, panStart]);
 
   const handleMouseUp = useCallback(() => {
     setTimeout(() => {
       setIsDragging(false);
       setDraggedBlock(null);
       setDragOffset({ x: 0, y: 0 });
+      setIsPanning(false);
     }, 10);
   }, []);
 
   useEffect(() => {
-    if (isDragging) {
+    if (isDragging || isPanning) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       
@@ -419,7 +444,7 @@ const OrchestrationDesignerPage: React.FC = () => {
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging, handleMouseMove, handleMouseUp]);
+  }, [isDragging, isPanning, handleMouseMove, handleMouseUp]);
 
   // Handle block click
   const handleBlockClick = (block: OrchestrationBlock) => {
@@ -547,6 +572,40 @@ const OrchestrationDesignerPage: React.FC = () => {
   const handleResetView = () => {
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
+  };
+  
+  // Fit all blocks in view
+  const handleFitAll = () => {
+    if (blocks.length === 0) {
+      handleResetView();
+      return;
+    }
+    
+    // Calculate bounding box of all blocks
+    const positions = blocks.map(b => b.position);
+    const minX = Math.min(...positions.map(p => p.x));
+    const maxX = Math.max(...positions.map(p => p.x)) + 300; // block width
+    const minY = Math.min(...positions.map(p => p.y));
+    const maxY = Math.max(...positions.map(p => p.y)) + 400; // approximate block height
+    
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+    
+    // Get canvas dimensions
+    const canvasWidth = canvasRef.current?.clientWidth || 1200;
+    const canvasHeight = canvasRef.current?.clientHeight || 800;
+    
+    // Calculate zoom to fit (with 10% padding)
+    const zoomX = (canvasWidth * 0.9) / contentWidth;
+    const zoomY = (canvasHeight * 0.9) / contentHeight;
+    const newZoom = Math.min(Math.max(Math.min(zoomX, zoomY), 0.3), 1.5);
+    
+    // Center the content
+    const panX = (canvasWidth - contentWidth * newZoom) / 2 - minX * newZoom;
+    const panY = (canvasHeight - contentHeight * newZoom) / 2 - minY * newZoom;
+    
+    setZoom(newZoom);
+    setPanOffset({ x: panX, y: panY });
   };
 
   // Save design
@@ -2234,11 +2293,14 @@ Format your response as JSON:
                 <ZoomIn />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Reset View">
-              <IconButton onClick={handleResetView}>
+            <Tooltip title="Fit All Blocks">
+              <IconButton onClick={handleFitAll} color="primary">
                 <CenterFocusStrong />
               </IconButton>
             </Tooltip>
+            <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+              Drag canvas to pan
+            </Typography>
             <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
             <Button
               variant="contained"
@@ -2428,6 +2490,15 @@ Format your response as JSON:
         {/* Canvas */}
         <Box
           ref={canvasRef}
+          onMouseDown={(e) => {
+            // Start panning if clicking on canvas background (not on a block or button)
+            const target = e.target as HTMLElement;
+            if (target === canvasRef.current || target.closest('svg')) {
+              setIsPanning(true);
+              setPanStart({ x: e.clientX, y: e.clientY });
+              e.preventDefault();
+            }
+          }}
           sx={{
             flex: 1,
             position: 'relative',
@@ -2437,6 +2508,7 @@ Format your response as JSON:
               : 'radial-gradient(circle, #ccc 1px, transparent 1px)',
             backgroundSize: '20px 20px',
             overflow: 'hidden',
+            cursor: isPanning ? 'grabbing' : 'grab',
           }}
         >
           {renderConnections()}
