@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 import os
 import asyncio
 import subprocess
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 import json
 import uuid
 import time
@@ -107,16 +107,59 @@ async def clone_git_repo_for_orchestration(git_repo: str) -> str:
         if process.returncode != 0:
             error_msg = stderr.decode() if stderr else "Unknown error"
             raise Exception(f"Failed to clone repository: {error_msg}")
+
+async def clone_git_repo_per_agent(git_repo: str, agent_names: List[str]) -> Tuple[str, Dict[str, str]]:
+    """
+    Clone a git repository multiple times - one for each agent in separate subdirectories
+    
+    Args:
+        git_repo: Git repository URL to clone
+        agent_names: List of agent names
         
-        print(f"✅ Git repo cloned successfully to {temp_dir}")
-        return temp_dir
+    Returns:
+        Tuple of (parent_temp_dir, agent_dir_mapping)
+        where agent_dir_mapping is {agent_name: relative_subdir_path}
+    """
+    parent_temp_dir = tempfile.mkdtemp(prefix="orchestration_isolated_")
+    agent_dir_mapping = {}
+    
+    print(f"📁 Cloning git repo for {len(agent_names)} agents (isolated workspaces)")
+    print(f"   Parent directory: {parent_temp_dir}")
+    
+    env = get_git_env()
+    
+    for agent_name in agent_names:
+        # Create a safe directory name from agent name
+        safe_name = agent_name.replace(" ", "_").replace("/", "_")
+        agent_subdir = os.path.join(parent_temp_dir, safe_name)
         
-    except Exception as e:
-        print(f"❌ Error cloning git repo: {e}")
-        # Try to clean up the failed clone
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        raise
+        print(f"   Cloning for agent '{agent_name}' into {safe_name}/")
+        
+        try:
+            # Clone repository asynchronously into agent-specific subdirectory
+            process = await asyncio.create_subprocess_exec(
+                "git", "clone", "--depth", "1", git_repo, agent_subdir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env
+            )
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                error_msg = stderr.decode() if stderr else "Unknown error"
+                raise Exception(f"Failed to clone repository for agent '{agent_name}': {error_msg}")
+            
+            # Store relative path for agent
+            agent_dir_mapping[agent_name] = safe_name
+            
+        except Exception as e:
+            # Clean up on error
+            if os.path.exists(parent_temp_dir):
+                shutil.rmtree(parent_temp_dir, ignore_errors=True)
+            raise Exception(f"Failed to clone for agent '{agent_name}': {str(e)}")
+    
+    print(f"✅ Cloned {len(agent_names)} isolated workspace(s)")
+    return parent_temp_dir, agent_dir_mapping
 
 def get_ssh_key_directory():
     """Get or create SSH key directory"""
@@ -2604,6 +2647,7 @@ async def set_default_model_setting(request: ModelSettingsRequest):
 async def execute_sequential_pipeline(request: SequentialPipelineRequest):
     """Execute sequential pipeline orchestration pattern."""
     temp_dir = None
+    agent_dir_mapping = None
     try:
         # Get model - uses Claude Agent SDK (works with Max Plan!)
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
@@ -2613,8 +2657,17 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
         
         # Clone git repo if specified
         if request.git_repo:
-            temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
-            cwd = temp_dir
+            if request.isolate_agent_workspaces:
+                # Clone repo separately for each agent
+                temp_dir, agent_dir_mapping = await clone_git_repo_per_agent(
+                    request.git_repo,
+                    [agent.name for agent in request.agents]
+                )
+                cwd = temp_dir
+            else:
+                # Single shared clone
+                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                cwd = temp_dir
         else:
             cwd = os.getenv("PROJECT_ROOT_DIR")
         
@@ -2623,9 +2676,20 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
         
         # Add agents
         for agent in request.agents:
+            system_prompt = agent.system_prompt
+            
+            # If using isolated workspaces, prepend workspace instructions
+            if agent_dir_mapping and agent.name in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent.name]}/'.\n"
+                    f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                    f"Example: To list files, use 'ls ./{agent_dir_mapping[agent.name]}/' or cd into it first.\n\n"
+                )
+                system_prompt = workspace_instruction + system_prompt
+            
             orchestrator.add_agent(
                 name=agent.name,
-                system_prompt=agent.system_prompt,
+                system_prompt=system_prompt,
                 role=OrchestratorAgentRole(agent.role.value)
             )
         
@@ -3417,6 +3481,7 @@ async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest)
     
     async def event_generator():
         temp_dir = None
+        agent_dir_mapping = None
         try:
             # Send initial status
             yield f"data: {json.dumps({'type': 'start', 'pattern': 'sequential', 'agents': request.agent_sequence})}\n\n"
@@ -3426,8 +3491,17 @@ async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest)
             
             # Clone git repo if specified
             if request.git_repo:
-                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
-                cwd = temp_dir
+                if request.isolate_agent_workspaces:
+                    # Clone repo separately for each agent
+                    temp_dir, agent_dir_mapping = await clone_git_repo_per_agent(
+                        request.git_repo,
+                        [agent.name for agent in request.agents]
+                    )
+                    cwd = temp_dir
+                else:
+                    # Single shared clone
+                    temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                    cwd = temp_dir
             else:
                 cwd = os.getenv("PROJECT_ROOT_DIR")
             
@@ -3435,9 +3509,20 @@ async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest)
             
             # Add agents
             for agent in request.agents:
+                system_prompt = agent.system_prompt
+                
+                # If using isolated workspaces, prepend workspace instructions
+                if agent_dir_mapping and agent.name in agent_dir_mapping:
+                    workspace_instruction = (
+                        f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent.name]}/'.\n"
+                        f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                        f"Example: To list files, use 'ls ./{agent_dir_mapping[agent.name]}/' or cd into it first.\n\n"
+                    )
+                    system_prompt = workspace_instruction + system_prompt
+                
                 orchestrator.add_agent(
                     name=agent.name,
-                    system_prompt=agent.system_prompt,
+                    system_prompt=system_prompt,
                     role=OrchestratorAgentRole(agent.role.value)
                 )
             

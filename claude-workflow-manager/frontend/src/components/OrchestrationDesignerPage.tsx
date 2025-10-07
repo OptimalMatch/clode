@@ -105,6 +105,7 @@ interface OrchestrationBlock {
     task?: string;
     rounds?: number;
     git_repo?: string;
+    isolate_agent_workspaces?: boolean;
     config?: any;
   };
 }
@@ -1295,7 +1296,8 @@ const OrchestrationDesignerPage: React.FC = () => {
             role: a.role
           })),
           agent_sequence: block.data.agents.map(a => a.name),
-          git_repo: block.data.git_repo || null
+          git_repo: block.data.git_repo || null,
+          isolate_agent_workspaces: block.data.isolate_agent_workspaces || false
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
@@ -1315,7 +1317,8 @@ const OrchestrationDesignerPage: React.FC = () => {
         })),
         task,
         agent_sequence: block.data.agents.map(a => a.name),
-        git_repo: block.data.git_repo || null
+        git_repo: block.data.git_repo || null,
+        isolate_agent_workspaces: block.data.isolate_agent_workspaces || false
       });
       return response.data;
     }
@@ -1337,7 +1340,8 @@ const OrchestrationDesignerPage: React.FC = () => {
           })),
           agent_names: block.data.agents.map(a => a.name),
           aggregator: null,
-          git_repo: block.data.git_repo || null
+          git_repo: block.data.git_repo || null,
+          isolate_agent_workspaces: block.data.isolate_agent_workspaces || false
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
@@ -1358,7 +1362,8 @@ const OrchestrationDesignerPage: React.FC = () => {
         task,
         agent_names: block.data.agents.map(a => a.name),
         aggregator: null,
-        git_repo: block.data.git_repo || null
+        git_repo: block.data.git_repo || null,
+        isolate_agent_workspaces: block.data.isolate_agent_workspaces || false
       });
       return response.data;
     }
@@ -1389,7 +1394,8 @@ const OrchestrationDesignerPage: React.FC = () => {
             role: w.role
           })),
           worker_names: workers.map(w => w.name),
-          git_repo: block.data.git_repo || null
+          git_repo: block.data.git_repo || null,
+          isolate_agent_workspaces: block.data.isolate_agent_workspaces || false
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
@@ -1414,7 +1420,8 @@ const OrchestrationDesignerPage: React.FC = () => {
           role: w.role
         })),
         worker_names: workers.map(w => w.name),
-        git_repo: block.data.git_repo || null
+        git_repo: block.data.git_repo || null,
+        isolate_agent_workspaces: block.data.isolate_agent_workspaces || false
       });
       return response.data;
     }
@@ -1435,7 +1442,8 @@ const OrchestrationDesignerPage: React.FC = () => {
           agents: block.data.agents,
           participant_names: debaters.map(d => d.name),
           rounds: block.data.rounds || 3,
-          git_repo: block.data.git_repo || null
+          git_repo: block.data.git_repo || null,
+          isolate_agent_workspaces: block.data.isolate_agent_workspaces || false
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
@@ -1460,7 +1468,8 @@ const OrchestrationDesignerPage: React.FC = () => {
         } : undefined,
         topic: task,
         rounds: block.data.rounds || 3,
-        git_repo: block.data.git_repo || null
+        git_repo: block.data.git_repo || null,
+        isolate_agent_workspaces: block.data.isolate_agent_workspaces || false
       });
       return response.data;
     }
@@ -1491,7 +1500,8 @@ const OrchestrationDesignerPage: React.FC = () => {
             role: s.role
           })),
           specialist_names: specialists.map(s => s.name),
-          git_repo: block.data.git_repo || null
+          git_repo: block.data.git_repo || null,
+          isolate_agent_workspaces: block.data.isolate_agent_workspaces || false
         },
         (event: StreamEvent) => {
           if (event.type === 'status' && event.agent) {
@@ -1516,7 +1526,8 @@ const OrchestrationDesignerPage: React.FC = () => {
           role: s.role
         })),
         specialist_names: specialists.map(s => s.name),
-        git_repo: block.data.git_repo || null
+        git_repo: block.data.git_repo || null,
+        isolate_agent_workspaces: block.data.isolate_agent_workspaces || false
       });
       return response.data;
     }
@@ -2555,6 +2566,42 @@ Format your response as JSON:
                 ))}
               </Select>
             </FormControl>
+
+            {/* Isolate Agent Workspaces Option */}
+            {selectedBlock.data.git_repo && (
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={selectedBlock.data.isolate_agent_workspaces || false}
+                    onChange={(e) => updateBlock({ 
+                      data: { 
+                        ...selectedBlock.data, 
+                        isolate_agent_workspaces: e.target.checked 
+                      } 
+                    })}
+                    sx={{
+                      '& .MuiSwitch-switchBase.Mui-checked': {
+                        color: '#90caf9',
+                      },
+                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                        backgroundColor: '#90caf9',
+                      },
+                    }}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" sx={{ color: darkMode ? '#ffffff' : undefined }}>
+                      Isolate Agent Workspaces
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: darkMode ? '#b0b0b0' : 'text.secondary' }}>
+                      Clone git repository separately for each agent (enables parallel independent work)
+                    </Typography>
+                  </Box>
+                }
+                sx={{ mb: 2, alignItems: 'flex-start' }}
+              />
+            )}
 
             {selectedBlock.type === 'debate' && (
               <TextField
