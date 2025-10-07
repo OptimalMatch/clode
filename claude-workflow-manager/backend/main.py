@@ -108,6 +108,9 @@ async def clone_git_repo_for_orchestration(git_repo: str) -> str:
             error_msg = stderr.decode() if stderr else "Unknown error"
             raise Exception(f"Failed to clone repository: {error_msg}")
         
+        # Set up SSH keys in the cloned directory for git push operations
+        setup_ssh_keys_for_directory(temp_dir)
+        
         print(f"✅ Git repo cloned successfully to {temp_dir}")
         return temp_dir
         
@@ -117,6 +120,83 @@ async def clone_git_repo_for_orchestration(git_repo: str) -> str:
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
         raise
+
+def setup_ssh_keys_for_directory(working_dir: str):
+    """
+    Set up SSH keys in a directory for git operations
+    Similar to _setup_ssh_keys_for_instance in claude_manager.py
+    """
+    try:
+        from pathlib import Path
+        ssh_keys_dir = Path("/app/ssh_keys")
+        if not ssh_keys_dir.exists():
+            print("⚠️ SSH keys directory /app/ssh_keys not found")
+            return
+        
+        # Create .ssh directory in the working directory
+        instance_ssh_dir = Path(working_dir) / ".ssh"
+        instance_ssh_dir.mkdir(mode=0o700, exist_ok=True)
+        
+        # Copy SSH keys from /app/ssh_keys to working directory
+        ssh_keys_copied = 0
+        for key_file in ssh_keys_dir.glob("*"):
+            if key_file.is_file():
+                instance_dest_file = instance_ssh_dir / key_file.name
+                shutil.copy2(key_file, instance_dest_file)
+                
+                # Set proper permissions
+                if key_file.name.endswith('.pub'):
+                    instance_dest_file.chmod(0o644)  # Public key
+                else:
+                    instance_dest_file.chmod(0o600)  # Private key
+                
+                ssh_keys_copied += 1
+        
+        if ssh_keys_copied > 0:
+            # Create SSH config file to use the keys
+            ssh_config_content = """Host github.com
+    HostName github.com
+    User git
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+Host gitlab.com
+    HostName gitlab.com
+    User git
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null"""
+            
+            # Add identity files for all private keys found
+            for key_file in instance_ssh_dir.glob("*"):
+                if key_file.is_file() and not key_file.name.endswith('.pub'):
+                    ssh_config_content += f"\n    IdentityFile {instance_ssh_dir}/{key_file.name}"
+            
+            instance_ssh_config = instance_ssh_dir / "config"
+            instance_ssh_config.write_text(ssh_config_content)
+            instance_ssh_config.chmod(0o600)
+            
+            # Also set GIT_SSH_COMMAND for this directory
+            git_config_file = Path(working_dir) / ".git" / "config"
+            if git_config_file.exists():
+                import subprocess
+                ssh_command = f'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
+                for key_file in instance_ssh_dir.glob("*"):
+                    if key_file.is_file() and not key_file.name.endswith('.pub'):
+                        ssh_command += f' -i {instance_ssh_dir}/{key_file.name}'
+                
+                subprocess.run(
+                    ["git", "config", "core.sshCommand", ssh_command],
+                    cwd=working_dir,
+                    check=False
+                )
+            
+            print(f"✅ SSH configuration created in {working_dir} with {ssh_keys_copied} keys")
+        else:
+            print("⚠️ No SSH keys found in /app/ssh_keys")
+            
+    except Exception as e:
+        print(f"❌ Error setting up SSH keys for {working_dir}: {e}")
 
 async def clone_git_repo_per_agent(git_repo: str, agent_names: List[str]) -> Tuple[str, Dict[str, str]]:
     """
@@ -159,6 +239,9 @@ async def clone_git_repo_per_agent(git_repo: str, agent_names: List[str]) -> Tup
                 error_msg = stderr.decode() if stderr else "Unknown error"
                 raise Exception(f"Failed to clone repository for agent '{agent_name}': {error_msg}")
             
+            # Set up SSH keys in the cloned directory for git push operations
+            setup_ssh_keys_for_directory(agent_subdir)
+            
             # Store relative path for agent
             agent_dir_mapping[agent_name] = safe_name
             
@@ -168,7 +251,7 @@ async def clone_git_repo_per_agent(git_repo: str, agent_names: List[str]) -> Tup
                 shutil.rmtree(parent_temp_dir, ignore_errors=True)
             raise Exception(f"Failed to clone for agent '{agent_name}': {str(e)}")
     
-    print(f"✅ Cloned {len(agent_names)} isolated workspace(s)")
+    print(f"✅ Cloned {len(agent_names)} isolated workspace(s) with SSH keys configured")
     return parent_temp_dir, agent_dir_mapping
 
 def get_ssh_key_directory():
