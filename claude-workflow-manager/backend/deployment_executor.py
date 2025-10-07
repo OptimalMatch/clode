@@ -3,7 +3,7 @@ Deployment Executor - Server-side orchestration execution engine
 Executes deployed designs with full logging and error handling
 """
 
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional, Set, Tuple
 from datetime import datetime
 from agent_orchestrator import MultiAgentOrchestrator, AgentRole, ensure_orchestration_credentials
 from models import OrchestrationDesign, ExecutionLog
@@ -13,6 +13,7 @@ import json
 import tempfile
 import os
 import shutil
+from pathlib import Path
 
 
 class DeploymentExecutor:
@@ -244,7 +245,7 @@ class DeploymentExecutor:
         task = block["data"]["task"]
         
         # Prepare working directory (clone git repo if assigned)
-        block_cwd = await self._prepare_block_working_dir(block)
+        block_cwd, agent_dir_mapping = await self._prepare_block_working_dir(block)
         
         # Create orchestrator with block-specific working directory
         if block_cwd:
@@ -258,9 +259,20 @@ class DeploymentExecutor:
         # Add agents to orchestrator
         agent_names = []
         for agent in agents:
+            system_prompt = agent["system_prompt"]
+            
+            # If using isolated workspaces, prepend workspace instructions
+            if agent_dir_mapping and agent["name"] in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent['name']]}/'.\n"
+                    f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
+                    f"Example: To list files, use 'ls ./{agent_dir_mapping[agent['name']]}/' or cd into it first.\n\n"
+                )
+                system_prompt = workspace_instruction + system_prompt
+            
             orchestrator.add_agent(
                 name=agent["name"],
-                system_prompt=agent["system_prompt"],
+                system_prompt=system_prompt,
                 role=self._map_role(agent["role"])
             )
             agent_names.append(agent["name"])
@@ -275,7 +287,7 @@ class DeploymentExecutor:
         task = block["data"]["task"]
         
         # Prepare working directory (clone git repo if assigned)
-        block_cwd = await self._prepare_block_working_dir(block)
+        block_cwd, agent_dir_mapping = await self._prepare_block_working_dir(block)
         
         # Create orchestrator with block-specific working directory
         if block_cwd:
@@ -291,9 +303,20 @@ class DeploymentExecutor:
             if not isinstance(agent, dict):
                 raise ValueError(f"Agent {i} is not a dictionary")
             
+            system_prompt = agent["system_prompt"]
+            
+            # If using isolated workspaces, prepend workspace instructions
+            if agent_dir_mapping and agent["name"] in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent['name']]}/'.\\n"
+                    f"All file operations (reading, writing, listing) must be performed relative to this directory.\\n"
+                    f"Example: To list files, use 'ls ./{agent_dir_mapping[agent['name']]}/' or cd into it first.\\n\\n"
+                )
+                system_prompt = workspace_instruction + system_prompt
+            
             orchestrator.add_agent(
                 name=agent["name"],
-                system_prompt=agent["system_prompt"],
+                system_prompt=system_prompt,
                 role=self._map_role(agent["role"])
             )
             agent_names.append(agent["name"])
@@ -308,7 +331,7 @@ class DeploymentExecutor:
         task = block["data"]["task"]
         
         # Prepare working directory (clone git repo if assigned)
-        block_cwd = await self._prepare_block_working_dir(block)
+        block_cwd, agent_dir_mapping = await self._prepare_block_working_dir(block)
         
         # Create orchestrator with block-specific working directory
         if block_cwd:
@@ -322,17 +345,33 @@ class DeploymentExecutor:
         manager = agents[0]
         workers = agents[1:]
         
+        manager_prompt = manager["system_prompt"]
+        if agent_dir_mapping and manager["name"] in agent_dir_mapping:
+            workspace_instruction = (
+                f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[manager['name']]}/'.\\n"
+                f"All file operations must be performed relative to this directory.\\n\\n"
+            )
+            manager_prompt = workspace_instruction + manager_prompt
+        
         orchestrator.add_agent(
             name=manager["name"],
-            system_prompt=manager["system_prompt"],
+            system_prompt=manager_prompt,
             role=AgentRole.MANAGER
         )
         
         worker_names = []
         for worker in workers:
+            worker_prompt = worker["system_prompt"]
+            if agent_dir_mapping and worker["name"] in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[worker['name']]}/'.\\n"
+                    f"All file operations must be performed relative to this directory.\\n\\n"
+                )
+                worker_prompt = workspace_instruction + worker_prompt
+            
             orchestrator.add_agent(
                 name=worker["name"],
-                system_prompt=worker["system_prompt"],
+                system_prompt=worker_prompt,
                 role=AgentRole.WORKER
             )
             worker_names.append(worker["name"])
@@ -352,7 +391,7 @@ class DeploymentExecutor:
         rounds = block["data"].get("rounds", 3)
         
         # Prepare working directory (clone git repo if assigned)
-        block_cwd = await self._prepare_block_working_dir(block)
+        block_cwd, agent_dir_mapping = await self._prepare_block_working_dir(block)
         
         # Create orchestrator with block-specific working directory
         if block_cwd:
@@ -365,9 +404,19 @@ class DeploymentExecutor:
         # Add agents
         debater_names = []
         for agent in agents:
+            system_prompt = agent["system_prompt"]
+            
+            # If using isolated workspaces, prepend workspace instructions
+            if agent_dir_mapping and agent["name"] in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent['name']]}/'.\\n"
+                    f"All file operations must be performed relative to this directory.\\n\\n"
+                )
+                system_prompt = workspace_instruction + system_prompt
+            
             orchestrator.add_agent(
                 name=agent["name"],
-                system_prompt=agent["system_prompt"],
+                system_prompt=system_prompt,
                 role=self._map_role(agent["role"])
             )
             debater_names.append(agent["name"])
@@ -386,7 +435,7 @@ class DeploymentExecutor:
         task = block["data"]["task"]
         
         # Prepare working directory (clone git repo if assigned)
-        block_cwd = await self._prepare_block_working_dir(block)
+        block_cwd, agent_dir_mapping = await self._prepare_block_working_dir(block)
         
         # Create orchestrator with block-specific working directory
         if block_cwd:
@@ -400,17 +449,33 @@ class DeploymentExecutor:
         router = agents[0]
         specialists = agents[1:]
         
+        router_prompt = router["system_prompt"]
+        if agent_dir_mapping and router["name"] in agent_dir_mapping:
+            workspace_instruction = (
+                f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[router['name']]}/'.\\n"
+                f"All file operations must be performed relative to this directory.\\n\\n"
+            )
+            router_prompt = workspace_instruction + router_prompt
+        
         orchestrator.add_agent(
             name=router["name"],
-            system_prompt=router["system_prompt"],
+            system_prompt=router_prompt,
             role=AgentRole.MODERATOR
         )
         
         specialist_names = []
         for specialist in specialists:
+            specialist_prompt = specialist["system_prompt"]
+            if agent_dir_mapping and specialist["name"] in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[specialist['name']]}/'.\\n"
+                    f"All file operations must be performed relative to this directory.\\n\\n"
+                )
+                specialist_prompt = workspace_instruction + specialist_prompt
+            
             orchestrator.add_agent(
                 name=specialist["name"],
-                system_prompt=specialist["system_prompt"],
+                system_prompt=specialist_prompt,
                 role=AgentRole.SPECIALIST
             )
             specialist_names.append(specialist["name"])
@@ -429,7 +494,7 @@ class DeploymentExecutor:
         task = block["data"]["task"]
         
         # Prepare working directory (clone git repo if assigned)
-        block_cwd = await self._prepare_block_working_dir(block)
+        block_cwd, agent_dir_mapping = await self._prepare_block_working_dir(block)
         
         # Create orchestrator with block-specific working directory
         if block_cwd:
@@ -443,9 +508,19 @@ class DeploymentExecutor:
         
         # Add reflection agent
         for agent in agents:
+            system_prompt = agent["system_prompt"]
+            
+            # If using isolated workspaces, prepend workspace instructions
+            if agent_dir_mapping and agent["name"] in agent_dir_mapping:
+                workspace_instruction = (
+                    f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent['name']]}/'.\\n"
+                    f"All file operations must be performed relative to this directory.\\n\\n"
+                )
+                system_prompt = workspace_instruction + system_prompt
+            
             orchestrator.add_agent(
                 name=agent["name"],
-                system_prompt=agent["system_prompt"],
+                system_prompt=system_prompt,
                 role=AgentRole.SPECIALIST
             )
         
@@ -464,6 +539,79 @@ class DeploymentExecutor:
             "reflector": AgentRole.SPECIALIST  # Reflectors are specialists
         }
         return role_map.get(role, AgentRole.SPECIALIST)
+    
+    def _setup_ssh_keys_for_directory(self, working_dir: str):
+        """Set up SSH keys in a directory for git operations"""
+        try:
+            ssh_keys_dir = Path("/app/ssh_keys")
+            if not ssh_keys_dir.exists():
+                print("⚠️ SSH keys directory /app/ssh_keys not found")
+                return
+            
+            # Create .ssh directory in the working directory
+            instance_ssh_dir = Path(working_dir) / ".ssh"
+            instance_ssh_dir.mkdir(mode=0o700, exist_ok=True)
+            
+            # Copy SSH keys from /app/ssh_keys to working directory
+            ssh_keys_copied = 0
+            for key_file in ssh_keys_dir.glob("*"):
+                if key_file.is_file():
+                    instance_dest_file = instance_ssh_dir / key_file.name
+                    shutil.copy2(key_file, instance_dest_file)
+                    
+                    # Set proper permissions
+                    if key_file.name.endswith('.pub'):
+                        instance_dest_file.chmod(0o644)  # Public key
+                    else:
+                        instance_dest_file.chmod(0o600)  # Private key
+                    
+                    ssh_keys_copied += 1
+            
+            if ssh_keys_copied > 0:
+                # Create SSH config file
+                ssh_config_content = """Host github.com
+    HostName github.com
+    User git
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+Host gitlab.com
+    HostName gitlab.com
+    User git
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null"""
+                
+                # Add identity files for all private keys found
+                for key_file in instance_ssh_dir.glob("*"):
+                    if key_file.is_file() and not key_file.name.endswith('.pub'):
+                        ssh_config_content += f"\n    IdentityFile {instance_ssh_dir}/{key_file.name}"
+                
+                instance_ssh_config = instance_ssh_dir / "config"
+                instance_ssh_config.write_text(ssh_config_content)
+                instance_ssh_config.chmod(0o600)
+                
+                # Set GIT_SSH_COMMAND for this directory
+                git_config_file = Path(working_dir) / ".git" / "config"
+                if git_config_file.exists():
+                    import subprocess
+                    ssh_command = f'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
+                    for key_file in instance_ssh_dir.glob("*"):
+                        if key_file.is_file() and not key_file.name.endswith('.pub'):
+                            ssh_command += f' -i {instance_ssh_dir}/{key_file.name}'
+                    
+                    subprocess.run(
+                        ["git", "config", "core.sshCommand", ssh_command],
+                        cwd=working_dir,
+                        check=False
+                    )
+                
+                print(f"✅ SSH configuration created in {working_dir} with {ssh_keys_copied} keys")
+            else:
+                print("⚠️ No SSH keys found in /app/ssh_keys")
+                
+        except Exception as e:
+            print(f"❌ Error setting up SSH keys for {working_dir}: {e}")
     
     async def _clone_git_repo(self, git_repo: str) -> str:
         """
@@ -499,6 +647,9 @@ class DeploymentExecutor:
                 error_msg = stderr.decode() if stderr else "Unknown error"
                 raise Exception(f"Failed to clone repository: {error_msg}")
             
+            # Set up SSH keys in the cloned directory
+            self._setup_ssh_keys_for_directory(temp_dir)
+            
             print(f"✅ Git repo cloned successfully to {temp_dir}")
             return temp_dir
             
@@ -512,26 +663,98 @@ class DeploymentExecutor:
                 shutil.rmtree(temp_dir, ignore_errors=True)
             raise
     
-    async def _prepare_block_working_dir(self, block: Dict) -> Optional[str]:
+    async def _clone_git_repo_per_agent(self, git_repo: str, agent_names: List[str]) -> Tuple[str, Dict[str, str]]:
+        """
+        Clone a git repository multiple times - one for each agent in separate subdirectories
+        
+        Args:
+            git_repo: Git repository URL to clone
+            agent_names: List of agent names
+            
+        Returns:
+            Tuple of (parent_temp_dir, agent_dir_mapping)
+        """
+        parent_temp_dir = tempfile.mkdtemp(prefix="deployment_isolated_")
+        self.temp_dirs.append(parent_temp_dir)
+        agent_dir_mapping = {}
+        
+        print(f"📁 Cloning git repo for {len(agent_names)} agents (isolated workspaces)")
+        print(f"   Parent directory: {parent_temp_dir}")
+        
+        from main import get_git_env
+        env = get_git_env()
+        
+        for agent_name in agent_names:
+            # Create a safe directory name from agent name
+            safe_name = agent_name.replace(" ", "_").replace("/", "_")
+            agent_subdir = os.path.join(parent_temp_dir, safe_name)
+            
+            print(f"   Cloning for agent '{agent_name}' into {safe_name}/")
+            
+            try:
+                # Clone repository asynchronously into agent-specific subdirectory
+                process = await asyncio.create_subprocess_exec(
+                    "git", "clone", "--depth", "1", git_repo, agent_subdir,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env
+                )
+                stdout, stderr = await process.communicate()
+                
+                if process.returncode != 0:
+                    error_msg = stderr.decode() if stderr else "Unknown error"
+                    raise Exception(f"Failed to clone repository for agent '{agent_name}': {error_msg}")
+                
+                # Set up SSH keys in the cloned directory for git push operations
+                self._setup_ssh_keys_for_directory(agent_subdir)
+                
+                # Store relative path for agent
+                agent_dir_mapping[agent_name] = safe_name
+                
+            except Exception as e:
+                # Clean up on error
+                if os.path.exists(parent_temp_dir):
+                    shutil.rmtree(parent_temp_dir, ignore_errors=True)
+                if parent_temp_dir in self.temp_dirs:
+                    self.temp_dirs.remove(parent_temp_dir)
+                raise Exception(f"Failed to clone for agent '{agent_name}': {str(e)}")
+        
+        print(f"✅ Cloned {len(agent_names)} isolated workspace(s) with SSH keys configured")
+        return parent_temp_dir, agent_dir_mapping
+    
+    async def _prepare_block_working_dir(self, block: Dict) -> Tuple[Optional[str], Optional[Dict[str, str]]]:
         """
         Prepare working directory for a block
         
         If block has git_repo assigned, clone it to a temp directory
+        If isolate_agent_workspaces is True, clone separately for each agent
         Otherwise, return None to use default cwd
         
         Args:
             block: Block configuration
             
         Returns:
-            Path to working directory or None
+            Tuple of (working_dir_path, agent_dir_mapping)
+            agent_dir_mapping is None for shared workspace, or a dict for isolated workspaces
         """
         git_repo = block.get("data", {}).get("git_repo")
+        isolate = block.get("data", {}).get("isolate_agent_workspaces", False)
         
         if git_repo:
             print(f"📦 Block '{block['data']['label']}' has git repo assigned: {git_repo}")
-            return await self._clone_git_repo(git_repo)
+            
+            if isolate:
+                # Clone separately for each agent
+                agent_names = [agent["name"] for agent in block.get("data", {}).get("agents", [])]
+                if agent_names:
+                    parent_dir, agent_mapping = await self._clone_git_repo_per_agent(git_repo, agent_names)
+                    return parent_dir, agent_mapping
+            
+            # Single shared clone
+            cwd = await self._clone_git_repo(git_repo)
+            return cwd, None
         
-        return None
+        return None, None
     
     async def _cleanup_temp_dirs(self):
         """Clean up all temporary directories created during execution"""
