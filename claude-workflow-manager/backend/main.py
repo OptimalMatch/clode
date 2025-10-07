@@ -2665,13 +2665,21 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
 )
 async def execute_debate(request: DebateRequest):
     """Execute debate orchestration pattern."""
+    temp_dir = None
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
         # Restore fresh credentials for orchestration
         await ensure_orchestration_credentials()
         
-        orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+        # Clone git repo if specified
+        if request.git_repo:
+            temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+            cwd = temp_dir
+        else:
+            cwd = os.getenv("PROJECT_ROOT_DIR")
+        
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
         
         # Add agents
         for agent in request.agents:
@@ -2699,6 +2707,14 @@ async def execute_debate(request: DebateRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Debate execution failed: {str(e)}")
+    finally:
+        # Clean up temporary directory
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception as e:
+                print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
 
 @app.post(
     "/api/orchestration/debate/stream",
@@ -2710,6 +2726,7 @@ async def execute_debate_stream(request: DebateRequest):
     """Execute debate with Server-Sent Events streaming."""
     
     async def event_generator():
+        temp_dir = None
         try:
             # Send initial status
             yield f"data: {json.dumps({'type': 'start', 'pattern': 'debate', 'agents': request.participant_names, 'rounds': request.rounds})}\n\n"
@@ -2717,7 +2734,14 @@ async def execute_debate_stream(request: DebateRequest):
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
             await ensure_orchestration_credentials()
             
-            orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+            # Clone git repo if specified
+            if request.git_repo:
+                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                cwd = temp_dir
+            else:
+                cwd = os.getenv("PROJECT_ROOT_DIR")
+            
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
             
             # Add agents
             for agent in request.agents:
@@ -2799,6 +2823,14 @@ async def execute_debate_stream(request: DebateRequest):
             await task
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Clean up temporary directory
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -2812,6 +2844,7 @@ async def execute_hierarchical_stream(request: HierarchicalRequest):
     """Execute hierarchical orchestration with Server-Sent Events streaming."""
     
     async def event_generator():
+        temp_dir = None
         try:
             # Send initial status
             agent_names = [request.manager.name] + [w.name for w in request.workers]
@@ -2820,7 +2853,14 @@ async def execute_hierarchical_stream(request: HierarchicalRequest):
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
             await ensure_orchestration_credentials()
             
-            orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+            # Clone git repo if specified
+            if request.git_repo:
+                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                cwd = temp_dir
+            else:
+                cwd = os.getenv("PROJECT_ROOT_DIR")
+            
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
             
             # Add manager
             orchestrator.add_agent(
@@ -2904,6 +2944,14 @@ async def execute_hierarchical_stream(request: HierarchicalRequest):
         
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Clean up temporary directory
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -2916,13 +2964,21 @@ async def execute_hierarchical_stream(request: HierarchicalRequest):
 )
 async def execute_hierarchical(request: HierarchicalRequest):
     """Execute hierarchical orchestration pattern."""
+    temp_dir = None
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
         # Restore fresh credentials for orchestration
         await ensure_orchestration_credentials()
         
-        orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+        # Clone git repo if specified
+        if request.git_repo:
+            temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+            cwd = temp_dir
+        else:
+            cwd = os.getenv("PROJECT_ROOT_DIR")
+        
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
         
         # Add manager
         orchestrator.add_agent(
@@ -2957,6 +3013,14 @@ async def execute_hierarchical(request: HierarchicalRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Hierarchical execution failed: {str(e)}")
+    finally:
+        # Clean up temporary directory
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception as e:
+                print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
 
 @app.post(
     "/api/orchestration/parallel/stream",
@@ -2968,13 +3032,21 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
     """Execute parallel aggregation with Server-Sent Events streaming."""
     
     async def event_generator():
+        temp_dir = None
         try:
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
             
             # Restore fresh credentials for orchestration
             await ensure_orchestration_credentials()
             
-            orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+            # Clone git repo if specified
+            if request.git_repo:
+                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                cwd = temp_dir
+            else:
+                cwd = os.getenv("PROJECT_ROOT_DIR")
+            
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
             
             # Add agents
             for agent in request.agents:
@@ -3064,6 +3136,14 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
         
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Clean up temporary directory
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -3076,13 +3156,21 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
 )
 async def execute_parallel_aggregate(request: ParallelAggregateRequest):
     """Execute parallel aggregation orchestration pattern."""
+    temp_dir = None
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
         # Restore fresh credentials for orchestration
         await ensure_orchestration_credentials()
         
-        orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+        # Clone git repo if specified
+        if request.git_repo:
+            temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+            cwd = temp_dir
+        else:
+            cwd = os.getenv("PROJECT_ROOT_DIR")
+        
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
         
         # Add agents
         for agent in request.agents:
@@ -3118,6 +3206,14 @@ async def execute_parallel_aggregate(request: ParallelAggregateRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Parallel aggregation execution failed: {str(e)}")
+    finally:
+        # Clean up temporary directory
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception as e:
+                print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
 
 @app.post(
     "/api/orchestration/routing",
@@ -3128,13 +3224,21 @@ async def execute_parallel_aggregate(request: ParallelAggregateRequest):
 )
 async def execute_dynamic_routing(request: DynamicRoutingRequest):
     """Execute dynamic routing orchestration pattern."""
+    temp_dir = None
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
         # Restore fresh credentials for orchestration
         await ensure_orchestration_credentials()
         
-        orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+        # Clone git repo if specified
+        if request.git_repo:
+            temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+            cwd = temp_dir
+        else:
+            cwd = os.getenv("PROJECT_ROOT_DIR")
+        
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
         
         # Add router
         orchestrator.add_agent(
@@ -3169,6 +3273,14 @@ async def execute_dynamic_routing(request: DynamicRoutingRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Dynamic routing execution failed: {str(e)}")
+    finally:
+        # Clean up temporary directory
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception as e:
+                print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
 
 
 # STREAMING ORCHESTRATION ENDPOINTS (SSE)
@@ -3182,13 +3294,21 @@ async def execute_dynamic_routing_stream(request: DynamicRoutingRequest):
     """Execute dynamic routing with Server-Sent Events streaming."""
     
     async def event_generator():
+        temp_dir = None
         try:
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
             
             # Restore fresh credentials for orchestration
             await ensure_orchestration_credentials()
             
-            orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+            # Clone git repo if specified
+            if request.git_repo:
+                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                cwd = temp_dir
+            else:
+                cwd = os.getenv("PROJECT_ROOT_DIR")
+            
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
             
             # Add router
             orchestrator.add_agent(
@@ -3275,6 +3395,14 @@ async def execute_dynamic_routing_stream(request: DynamicRoutingRequest):
         
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Clean up temporary directory
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -3288,6 +3416,7 @@ async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest)
     """Execute sequential pipeline with Server-Sent Events streaming."""
     
     async def event_generator():
+        temp_dir = None
         try:
             # Send initial status
             yield f"data: {json.dumps({'type': 'start', 'pattern': 'sequential', 'agents': request.agent_sequence})}\n\n"
@@ -3295,7 +3424,14 @@ async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest)
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
             await ensure_orchestration_credentials()
             
-            orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+            # Clone git repo if specified
+            if request.git_repo:
+                temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+                cwd = temp_dir
+            else:
+                cwd = os.getenv("PROJECT_ROOT_DIR")
+            
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
             
             # Add agents
             for agent in request.agents:
@@ -3354,6 +3490,14 @@ async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest)
         except Exception as e:
             error_data = {'type': 'error', 'error': str(e)}
             yield f"data: {json.dumps(error_data)}\n\n"
+        finally:
+            # Clean up temporary directory
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
     
     return StreamingResponse(
         event_generator(),
