@@ -457,6 +457,7 @@ export interface SequentialPipelineRequest {
   agents: OrchestrationAgent[];
   agent_sequence: string[];
   model?: string;
+  git_repo?: string | null;
 }
 
 export interface DebateRequest {
@@ -465,6 +466,7 @@ export interface DebateRequest {
   participant_names: string[];
   rounds: number;
   model?: string;
+  git_repo?: string | null;
 }
 
 export interface HierarchicalRequest {
@@ -473,6 +475,7 @@ export interface HierarchicalRequest {
   workers: OrchestrationAgent[];
   worker_names: string[];
   model?: string;
+  git_repo?: string | null;
 }
 
 export interface ParallelAggregateRequest {
@@ -482,6 +485,7 @@ export interface ParallelAggregateRequest {
   aggregator?: OrchestrationAgent | null;
   aggregator_name?: string | null;
   model?: string;
+  git_repo?: string | null;
 }
 
 export interface DynamicRoutingRequest {
@@ -490,6 +494,7 @@ export interface DynamicRoutingRequest {
   specialists: OrchestrationAgent[];
   specialist_names: string[];
   model?: string;
+  git_repo?: string | null;
 }
 
 export interface OrchestrationResult {
