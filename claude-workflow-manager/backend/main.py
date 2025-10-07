@@ -77,6 +77,47 @@ def get_git_env():
     env['GIT_SSH_COMMAND'] = ' '.join(ssh_command_parts)
     return env
 
+async def clone_git_repo_for_orchestration(git_repo: str) -> str:
+    """
+    Clone a git repository to a temporary directory for orchestration execution
+    
+    Args:
+        git_repo: Git repository URL to clone
+        
+    Returns:
+        Path to the cloned repository
+    """
+    temp_dir = tempfile.mkdtemp(prefix="orchestration_exec_")
+    
+    print(f"📁 Cloning git repo for orchestration: {git_repo}")
+    print(f"   Temporary directory: {temp_dir}")
+    
+    try:
+        env = get_git_env()
+        
+        # Clone repository asynchronously
+        process = await asyncio.create_subprocess_exec(
+            "git", "clone", "--depth", "1", git_repo, temp_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env
+        )
+        stdout, stderr = await process.communicate()
+        
+        if process.returncode != 0:
+            error_msg = stderr.decode() if stderr else "Unknown error"
+            raise Exception(f"Failed to clone repository: {error_msg}")
+        
+        print(f"✅ Git repo cloned successfully to {temp_dir}")
+        return temp_dir
+        
+    except Exception as e:
+        print(f"❌ Error cloning git repo: {e}")
+        # Try to clean up the failed clone
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        raise
+
 def get_ssh_key_directory():
     """Get or create SSH key directory"""
     # Use a writable directory for generated SSH keys (not the read-only mounted one)
@@ -2562,6 +2603,7 @@ async def set_default_model_setting(request: ModelSettingsRequest):
 )
 async def execute_sequential_pipeline(request: SequentialPipelineRequest):
     """Execute sequential pipeline orchestration pattern."""
+    temp_dir = None
     try:
         # Get model - uses Claude Agent SDK (works with Max Plan!)
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
@@ -2569,8 +2611,15 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
         # Restore fresh credentials for orchestration
         await ensure_orchestration_credentials()
         
+        # Clone git repo if specified
+        if request.git_repo:
+            temp_dir = await clone_git_repo_for_orchestration(request.git_repo)
+            cwd = temp_dir
+        else:
+            cwd = os.getenv("PROJECT_ROOT_DIR")
+        
         # Create orchestrator (no API key needed - uses Claude CLI)
-        orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
         
         # Add agents
         for agent in request.agents:
@@ -2598,6 +2647,14 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sequential pipeline execution failed: {str(e)}")
+    finally:
+        # Clean up temporary directory
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                print(f"🧹 Cleaning up temporary directory: {temp_dir}")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception as e:
+                print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
 
 @app.post(
     "/api/orchestration/debate",

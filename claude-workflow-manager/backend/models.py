@@ -449,6 +449,7 @@ class SequentialPipelineRequest(BaseModel):
     agents: List[OrchestrationAgent]
     agent_sequence: List[str]  # Order of agent names
     model: Optional[str] = None
+    git_repo: Optional[str] = None  # Optional git repository to clone
 
 class DebateRequest(BaseModel):
     """Request for debate pattern execution"""
@@ -457,6 +458,7 @@ class DebateRequest(BaseModel):
     participant_names: List[str]
     rounds: int = 3
     model: Optional[str] = None
+    git_repo: Optional[str] = None  # Optional git repository to clone
 
 class HierarchicalRequest(BaseModel):
     """Request for hierarchical execution"""
@@ -465,6 +467,7 @@ class HierarchicalRequest(BaseModel):
     workers: List[OrchestrationAgent]
     worker_names: List[str]
     model: Optional[str] = None
+    git_repo: Optional[str] = None  # Optional git repository to clone
 
 class ParallelAggregateRequest(BaseModel):
     """Request for parallel aggregation"""
@@ -474,6 +477,7 @@ class ParallelAggregateRequest(BaseModel):
     aggregator: Optional[OrchestrationAgent] = None
     aggregator_name: Optional[str] = None
     model: Optional[str] = None
+    git_repo: Optional[str] = None  # Optional git repository to clone
 
 class DynamicRoutingRequest(BaseModel):
     """Request for dynamic routing"""
@@ -482,6 +486,7 @@ class DynamicRoutingRequest(BaseModel):
     specialists: List[OrchestrationAgent]
     specialist_names: List[str]
     model: Optional[str] = None
+    git_repo: Optional[str] = None  # Optional git repository to clone
 
 class OrchestrationResult(BaseModel):
     """Result from orchestration execution"""
