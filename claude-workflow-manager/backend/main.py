@@ -2606,6 +2606,12 @@ async def fetch_models_from_api():
     # Curated list of Claude models (for max plan users or API fallback)
     curated_models = [
         {
+            "id": "claude-sonnet-4-5-20250929",
+            "display_name": "Claude Sonnet 4.5",
+            "type": "model",
+            "created_at": "2025-09-29T00:00:00Z"
+        },
+        {
             "id": "claude-sonnet-4-20250514",
             "display_name": "Claude Sonnet 4",
             "type": "model",
