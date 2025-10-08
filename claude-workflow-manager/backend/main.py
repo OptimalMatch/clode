@@ -526,6 +526,48 @@ async def get_current_user_optional(credentials: Optional[HTTPAuthorizationCrede
     except HTTPException:
         return None
 
+async def get_current_user_or_internal(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))
+) -> Optional[User]:
+    """
+    Dependency that allows both authenticated users AND internal service calls (from MCP server).
+    
+    Priority:
+    1. If valid JWT token provided, use that user
+    2. If request from internal Docker service (MCP server), allow without auth
+    3. Otherwise, raise 401 Unauthorized
+    """
+    # Try JWT auth first
+    if credentials:
+        try:
+            return await get_current_user(credentials)
+        except HTTPException:
+            pass  # Fall through to check internal service
+    
+    # Check if request is from internal MCP server
+    # MCP server runs in Docker network and connects via service name
+    client_host = request.client.host if request.client else None
+    
+    # Allow requests from Docker internal network (172.x.x.x or claude-workflow-mcp hostname)
+    # or if X-Internal-Service header is present
+    internal_service_header = request.headers.get("X-Internal-Service")
+    is_internal = (
+        internal_service_header == "claude-workflow-mcp" or
+        (client_host and client_host.startswith("172."))  # Docker network
+    )
+    
+    if is_internal:
+        # Internal service call - return None to indicate no specific user
+        # (file editor operations will work without user association)
+        return None
+    
+    # Not authenticated and not internal service
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication required. Provide a valid JWT token in Authorization header."
+    )
+
 app = FastAPI(
     title="Claude Workflow Manager API",
     description="""
@@ -875,7 +917,7 @@ async def login_user(login_data: UserLogin):
         401: {"model": ErrorResponse, "description": "Not authenticated"}
     }
 )
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(current_user: Optional[User] = Depends(get_current_user_or_internal)):
     """
     Get current authenticated user information.
     
@@ -900,7 +942,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
     description="Logout the current user (client should discard token).",
     tags=["Authentication"]
 )
-async def logout_user(current_user: User = Depends(get_current_user)):
+async def logout_user(current_user: Optional[User] = Depends(get_current_user_or_internal)):
     """
     Logout user.
     
@@ -4734,7 +4776,7 @@ def get_file_editor_manager(git_repo: str, workflow_id: str) -> Any:
     description="Initialize file editor for a git repository",
     tags=["File Editor"]
 )
-async def init_file_editor(data: dict, user: User = Depends(get_current_user)):
+async def init_file_editor(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Initialize file editor session for a repository"""
     try:
         workflow_id = data.get("workflow_id")
@@ -4769,7 +4811,7 @@ async def init_file_editor(data: dict, user: User = Depends(get_current_user)):
     description="Browse files and directories in a repository",
     tags=["File Editor"]
 )
-async def browse_directory(data: dict, user: User = Depends(get_current_user)):
+async def browse_directory(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Browse a directory in the repository"""
     try:
         workflow_id = data.get("workflow_id")
@@ -4797,7 +4839,7 @@ async def browse_directory(data: dict, user: User = Depends(get_current_user)):
     description="Get hierarchical tree structure of a directory",
     tags=["File Editor"]
 )
-async def get_directory_tree(data: dict, user: User = Depends(get_current_user)):
+async def get_directory_tree(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Get directory tree structure"""
     try:
         workflow_id = data.get("workflow_id")
@@ -4825,7 +4867,7 @@ async def get_directory_tree(data: dict, user: User = Depends(get_current_user))
     description="Read the content of a file",
     tags=["File Editor"]
 )
-async def read_file_content(data: dict, user: User = Depends(get_current_user)):
+async def read_file_content(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Read a file's content"""
     try:
         workflow_id = data.get("workflow_id")
@@ -4855,7 +4897,7 @@ async def read_file_content(data: dict, user: User = Depends(get_current_user)):
     description="Create a pending file change for approval",
     tags=["File Editor"]
 )
-async def create_file_change(data: dict, user: User = Depends(get_current_user)):
+async def create_file_change(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Create a pending file change"""
     try:
         workflow_id = data.get("workflow_id")
@@ -4887,7 +4929,7 @@ async def create_file_change(data: dict, user: User = Depends(get_current_user))
     description="Get all pending changes",
     tags=["File Editor"]
 )
-async def get_file_changes(data: dict, user: User = Depends(get_current_user)):
+async def get_file_changes(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Get pending changes"""
     try:
         workflow_id = data.get("workflow_id")
@@ -4914,7 +4956,7 @@ async def get_file_changes(data: dict, user: User = Depends(get_current_user)):
     description="Approve and apply a pending change",
     tags=["File Editor"]
 )
-async def approve_file_change(data: dict, user: User = Depends(get_current_user)):
+async def approve_file_change(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Approve and apply a change"""
     try:
         workflow_id = data.get("workflow_id")
@@ -4944,7 +4986,7 @@ async def approve_file_change(data: dict, user: User = Depends(get_current_user)
     description="Reject a pending change",
     tags=["File Editor"]
 )
-async def reject_file_change(data: dict, user: User = Depends(get_current_user)):
+async def reject_file_change(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Reject a pending change"""
     try:
         workflow_id = data.get("workflow_id")
@@ -4974,7 +5016,7 @@ async def reject_file_change(data: dict, user: User = Depends(get_current_user))
     description="Rollback a previously applied change",
     tags=["File Editor"]
 )
-async def rollback_file_change(data: dict, user: User = Depends(get_current_user)):
+async def rollback_file_change(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Rollback an applied change"""
     try:
         workflow_id = data.get("workflow_id")
@@ -5004,7 +5046,7 @@ async def rollback_file_change(data: dict, user: User = Depends(get_current_user
     description="Create a new directory",
     tags=["File Editor"]
 )
-async def create_new_directory(data: dict, user: User = Depends(get_current_user)):
+async def create_new_directory(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Create a new directory"""
     try:
         workflow_id = data.get("workflow_id")
@@ -5034,7 +5076,7 @@ async def create_new_directory(data: dict, user: User = Depends(get_current_user
     description="Move or rename a file or directory",
     tags=["File Editor"]
 )
-async def move_file_or_directory(data: dict, user: User = Depends(get_current_user)):
+async def move_file_or_directory(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Move or rename a file/directory"""
     try:
         workflow_id = data.get("workflow_id")
@@ -5065,7 +5107,7 @@ async def move_file_or_directory(data: dict, user: User = Depends(get_current_us
     description="Search for files by name pattern",
     tags=["File Editor"]
 )
-async def search_files(data: dict, user: User = Depends(get_current_user)):
+async def search_files(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
     """Search for files"""
     try:
         workflow_id = data.get("workflow_id")
