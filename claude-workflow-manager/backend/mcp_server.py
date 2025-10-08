@@ -1347,11 +1347,42 @@ def create_http_app(workflow_server: 'ClaudeWorkflowMCPServer') -> Starlette:
             
             logger.info(f"📥 HTTP MCP Request: {method}")
             
-            if method == "tools/list":
-                tools = workflow_server.get_available_tools()
+            if method == "initialize":
+                # Respond with proper MCP initialize response
                 response = {
                     "jsonrpc": "2.0",
-                    "result": {"tools": [tool.model_dump() for tool in tools]},
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {},
+                            "prompts": {},
+                            "resources": {},
+                            "logging": {}
+                        },
+                        "serverInfo": {
+                            "name": "claude-workflow-manager",
+                            "version": "1.0.0"
+                        }
+                    },
+                    "id": msg_id
+                }
+            elif method == "notifications/initialized":
+                # This is a notification, no response needed
+                logger.info("🎯 HTTP MCP Client initialized successfully")
+                return JSONResponse({"jsonrpc": "2.0", "result": None})
+            elif method == "tools/list":
+                tools = workflow_server.get_available_tools()
+                # Convert Tool objects to proper MCP tool schema
+                tools_schema = []
+                for tool in tools:
+                    tools_schema.append({
+                        "name": tool.name,
+                        "description": tool.description,
+                        "inputSchema": tool.inputSchema
+                    })
+                response = {
+                    "jsonrpc": "2.0",
+                    "result": {"tools": tools_schema},
                     "id": msg_id
                 }
             elif method == "tools/call":
