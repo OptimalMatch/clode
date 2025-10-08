@@ -998,6 +998,9 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
     async def sequential_pipeline_stream(self, task: str, agent_sequence: List[str],
                                         stream_callback: Callable[[str, str, str], None]) -> Dict[str, Any]:
         """Sequential pipeline with streaming support"""
+        print(f"🚀 sequential_pipeline_stream CALLED with {len(agent_sequence)} agents")
+        print(f"   Agent sequence: {agent_sequence}")
+        print(f"   Task: {task[:100]}...")
         logger.info(f"Starting STREAMING SEQUENTIAL PIPELINE with {len(agent_sequence)} agents")
         
         results = {}

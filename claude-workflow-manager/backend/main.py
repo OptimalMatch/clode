@@ -3852,9 +3852,16 @@ async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest)
             # Execute in background task
             async def execute_orchestration():
                 try:
+                    print(f"🎬 execute_orchestration STARTING")
+                    print(f"   Task: {request.task[:100]}...")
+                    print(f"   Agent sequence: {request.agent_sequence}")
                     result = await orchestrator.sequential_pipeline_stream(request.task, request.agent_sequence, stream_callback)
+                    print(f"🏁 execute_orchestration COMPLETE")
                     await event_queue.put({'type': '__complete__', 'result': result})
                 except Exception as e:
+                    print(f"❌ execute_orchestration ERROR: {e}")
+                    import traceback
+                    traceback.print_exc()
                     await event_queue.put({'type': '__error__', 'error': str(e)})
             
             task = asyncio.create_task(execute_orchestration())
