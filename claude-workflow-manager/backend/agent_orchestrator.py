@@ -308,45 +308,49 @@ class MultiAgentOrchestrator:
                 prompt=generate_prompt(),
                 options=options
             ):
-                # Handle different message types
-                if msg.get("type") == "system" and msg.get("subtype") == "init":
-                    # Check MCP server status
-                    mcp_servers = msg.get("mcp_servers", [])
-                    for mcp in mcp_servers:
-                        status = mcp.get("status", "unknown")
-                        name = mcp.get("name", "unknown")
-                        print(f"   MCP Server '{name}': {status}")
-                        logger.info(f"   MCP Server '{name}': {status}")
-                        if status != "connected":
-                            logger.warning(f"⚠️ MCP Server '{name}' failed to connect: {status}")
+                # Handle different message types from SDK (typed objects, not dicts)
+                # Check message type using hasattr and getattr
+                msg_type = getattr(msg, 'type', None)
                 
-                elif msg.get("type") == "message":
+                if msg_type == "system":
+                    # System message (e.g., init, MCP status)
+                    subtype = getattr(msg, 'subtype', None)
+                    if subtype == "init":
+                        # Check MCP server status
+                        mcp_servers = getattr(msg, 'mcp_servers', [])
+                        for mcp in mcp_servers:
+                            status = getattr(mcp, 'status', 'unknown')
+                            name = getattr(mcp, 'name', 'unknown')
+                            print(f"   MCP Server '{name}': {status}")
+                            logger.info(f"   MCP Server '{name}': {status}")
+                            if status != "connected":
+                                logger.warning(f"⚠️ MCP Server '{name}' failed to connect: {status}")
+                
+                elif isinstance(msg, AssistantMessage):
                     # Extract text from assistant messages
-                    message_data = msg.get("message", {})
-                    if message_data.get("role") == "assistant":
-                        content = message_data.get("content", [])
-                        for block in content:
-                            if isinstance(block, dict) and block.get("type") == "text":
-                                text = block.get("text", "")
-                                reply_parts.append(text)
-                                if stream_callback:
-                                    await stream_callback(agent.name, text)
-                            elif isinstance(block, dict) and block.get("type") == "tool_use":
-                                tool_name = block.get("name", "unknown")
-                                tool_input = block.get("input", {})
-                                tool_calls_seen.append(tool_name)
-                                print(f"🔨 Agent {agent.name} called tool: {tool_name}")
-                                logger.info(f"🔨 Agent {agent.name} called tool: {tool_name}")
-                                logger.info(f"   Args: {tool_input}")
+                    for block in msg.content:
+                        if isinstance(block, TextBlock):
+                            text = block.text
+                            reply_parts.append(text)
+                            if stream_callback:
+                                await stream_callback(agent.name, text)
+                        elif hasattr(block, 'type') and block.type == 'tool_use':
+                            tool_name = getattr(block, 'name', 'unknown')
+                            tool_input = getattr(block, 'input', {})
+                            tool_calls_seen.append(tool_name)
+                            print(f"🔨 Agent {agent.name} called tool: {tool_name}")
+                            logger.info(f"🔨 Agent {agent.name} called tool: {tool_name}")
+                            logger.info(f"   Args: {tool_input}")
                 
-                elif msg.get("type") == "result":
+                elif msg_type == "result":
                     # Final result
-                    if msg.get("subtype") == "success":
-                        result_text = msg.get("result", "")
+                    subtype = getattr(msg, 'subtype', None)
+                    if subtype == "success":
+                        result_text = getattr(msg, 'result', "")
                         if result_text and result_text not in reply_parts:
                             reply_parts.append(result_text)
-                    elif msg.get("subtype") == "error_during_execution":
-                        error = msg.get("error", "Unknown error")
+                    elif subtype == "error_during_execution":
+                        error = getattr(msg, 'error', 'Unknown error')
                         logger.error(f"❌ Execution error: {error}")
             
             reply = "".join(reply_parts) if reply_parts else "No response"
