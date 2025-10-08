@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -31,6 +31,9 @@ import {
   Tooltip,
   Card,
   CardContent,
+  CircularProgress,
+  LinearProgress,
+  Avatar,
 } from '@mui/material';
 import {
   Folder as FolderIcon,
@@ -49,9 +52,14 @@ import {
   History,
   Edit,
   FolderOpen,
+  Chat,
+  Send,
+  SmartToy,
+  Person,
+  Stop,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
-import { workflowApi } from '../services/api';
+import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
 import api from '../services/api';
 
 interface FileItem {
@@ -79,6 +87,20 @@ interface Workflow {
   git_repo?: string;
 }
 
+interface ChatMessage {
+  id: string;
+  type: 'user' | 'agent' | 'system';
+  content: string;
+  agent?: string;
+  timestamp: Date;
+}
+
+interface ExecutionStatus {
+  executing: boolean;
+  currentAgent?: string;
+  progress?: string;
+}
+
 const CodeEditorPage: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
   
@@ -94,6 +116,16 @@ const CodeEditorPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [tabValue, setTabValue] = useState(0);
   
+  // Chat & Orchestration state
+  const [orchestrationDesigns, setOrchestrationDesigns] = useState<OrchestrationDesign[]>([]);
+  const [selectedDesign, setSelectedDesign] = useState<string>('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState<string>('');
+  const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>({ executing: false });
+  const [showChat, setShowChat] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
   // Dialogs
   const [newFolderDialog, setNewFolderDialog] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -103,10 +135,16 @@ const CodeEditorPage: React.FC = () => {
   const [changeDetailsDialog, setChangeDetailsDialog] = useState(false);
   const [selectedChange, setSelectedChange] = useState<FileChange | null>(null);
   
-  // Load workflows on mount
+  // Load workflows and designs on mount
   useEffect(() => {
     loadWorkflows();
+    loadOrchestrationDesigns();
   }, []);
+  
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
   
   // Load directory when workflow or path changes
   useEffect(() => {
@@ -122,6 +160,21 @@ const CodeEditorPage: React.FC = () => {
       setWorkflows(workflowList.filter((w: Workflow) => w.git_repo));
     } catch (error) {
       enqueueSnackbar('Failed to load workflows', { variant: 'error' });
+    }
+  };
+  
+  const loadOrchestrationDesigns = async () => {
+    try {
+      const designs = await orchestrationDesignApi.getAll();
+      setOrchestrationDesigns(designs);
+      
+      // Auto-select "Code Editor Assistant" if it exists
+      const codeEditorDesign = designs.find(d => d.name === 'Code Editor Assistant');
+      if (codeEditorDesign && codeEditorDesign.id) {
+        setSelectedDesign(codeEditorDesign.id);
+      }
+    } catch (error) {
+      console.error('Failed to load orchestration designs:', error);
     }
   };
   
@@ -313,6 +366,310 @@ const CodeEditorPage: React.FC = () => {
     return breadcrumbs;
   };
   
+  const handleSendMessage = async () => {
+    if (!chatInput.trim() || !selectedDesign || !selectedWorkflow) return;
+    
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      type: 'user',
+      content: chatInput,
+      timestamp: new Date(),
+    };
+    
+    setChatMessages(prev => [...prev, userMessage]);
+    setChatInput('');
+    setExecutionStatus({ executing: true });
+    
+    // Create abort controller for this execution
+    abortControllerRef.current = new AbortController();
+    
+    try {
+      const design = orchestrationDesigns.find(d => d.id === selectedDesign);
+      if (!design) {
+        throw new Error('Design not found');
+      }
+      
+      // Add system message
+      const systemMessage: ChatMessage = {
+        id: `msg-${Date.now()}-system`,
+        type: 'system',
+        content: `Executing orchestration: ${design.name}`,
+        timestamp: new Date(),
+      };
+      setChatMessages(prev => [...prev, systemMessage]);
+      
+      // Convert design to execution request based on first block type
+      const firstBlock = design.blocks[0];
+      let result;
+      
+      // For now, we'll execute as a sequential pipeline
+      // In a real implementation, you'd parse the design structure
+      const agents = design.blocks.flatMap(block => block.data.agents || []);
+      const agentNames = agents.map(a => a.name);
+      
+      // Execute with streaming to show real-time progress
+      await executeDesignWithStreaming(design, chatInput, abortControllerRef.current.signal);
+      
+      // Reload changes after execution
+      await loadChanges();
+      
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        const cancelMessage: ChatMessage = {
+          id: `msg-${Date.now()}-cancel`,
+          type: 'system',
+          content: 'Execution cancelled by user',
+          timestamp: new Date(),
+        };
+        setChatMessages(prev => [...prev, cancelMessage]);
+      } else {
+        enqueueSnackbar(error.message || 'Execution failed', { variant: 'error' });
+        const errorMessage: ChatMessage = {
+          id: `msg-${Date.now()}-error`,
+          type: 'system',
+          content: `Error: ${error.message || 'Execution failed'}`,
+          timestamp: new Date(),
+        };
+        setChatMessages(prev => [...prev, errorMessage]);
+      }
+    } finally {
+      setExecutionStatus({ executing: false });
+      abortControllerRef.current = null;
+    }
+  };
+  
+  const executeDesignWithStreaming = async (design: OrchestrationDesign, task: string, signal: AbortSignal) => {
+    // Parse design structure to determine execution type
+    const firstBlock = design.blocks[0];
+    const blockType = firstBlock?.type || 'sequential';
+    
+    // Collect all agents from all blocks
+    const agents = design.blocks.flatMap(block => block.data.agents || []);
+    const agentNames = agents.map(a => a.name);
+    
+    // Create execution request based on block type
+    let executionPromise;
+    
+    if (blockType === 'routing') {
+      // Dynamic routing execution
+      const router = agents.find(a => a.role === 'manager' || a.name.toLowerCase().includes('router'));
+      const specialists = agents.filter(a => a.role === 'specialist');
+      
+      if (router && specialists.length > 0) {
+        executionPromise = executeRoutingWithStreaming({
+          task,
+          router,
+          specialists,
+          specialist_names: specialists.map(s => s.name),
+          model: 'claude-sonnet-4-20250514'
+        }, signal);
+      } else {
+        // Fall back to sequential
+        executionPromise = executeSequentialWithStreaming({
+          task,
+          agents,
+          agent_sequence: agentNames,
+          model: 'claude-sonnet-4-20250514'
+        }, signal);
+      }
+    } else {
+      // Default to sequential execution
+      executionPromise = executeSequentialWithStreaming({
+        task,
+        agents,
+        agent_sequence: agentNames,
+        model: 'claude-sonnet-4-20250514'
+      }, signal);
+    }
+    
+    await executionPromise;
+  };
+  
+  const executeSequentialWithStreaming = async (request: any, signal: AbortSignal) => {
+    const API_URL = api.defaults.baseURL;
+    const token = localStorage.getItem('access_token');
+    
+    const response = await fetch(`${API_URL}/api/orchestration/sequential/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+      body: JSON.stringify(request),
+      signal,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    
+    if (!reader) {
+      throw new Error('No response body');
+    }
+    
+    let buffer = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.slice(6));
+            
+            if (event.type === 'status' && event.agent) {
+              setExecutionStatus({
+                executing: true,
+                currentAgent: event.agent,
+                progress: event.data,
+              });
+            } else if (event.type === 'chunk' && event.data) {
+              // Add agent message chunk
+              setChatMessages(prev => {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === executionStatus.currentAgent) {
+                  // Append to existing message
+                  return [
+                    ...prev.slice(0, -1),
+                    { ...lastMsg, content: lastMsg.content + event.data }
+                  ];
+                } else {
+                  // New agent message
+                  return [
+                    ...prev,
+                    {
+                      id: `msg-${Date.now()}`,
+                      type: 'agent',
+                      content: event.data,
+                      agent: executionStatus.currentAgent,
+                      timestamp: new Date(),
+                    }
+                  ];
+                }
+              });
+            } else if (event.type === 'complete') {
+              const completeMessage: ChatMessage = {
+                id: `msg-${Date.now()}-complete`,
+                type: 'system',
+                content: '✅ Execution completed successfully',
+                timestamp: new Date(),
+              };
+              setChatMessages(prev => [...prev, completeMessage]);
+            } else if (event.type === 'error') {
+              throw new Error(event.error || 'Execution failed');
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE event:', e);
+          }
+        }
+      }
+    }
+  };
+  
+  const executeRoutingWithStreaming = async (request: any, signal: AbortSignal) => {
+    const API_URL = api.defaults.baseURL;
+    const token = localStorage.getItem('access_token');
+    
+    const response = await fetch(`${API_URL}/api/orchestration/routing/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+      body: JSON.stringify(request),
+      signal,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    
+    if (!reader) {
+      throw new Error('No response body');
+    }
+    
+    let buffer = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.slice(6));
+            
+            if (event.type === 'status' && event.agent) {
+              setExecutionStatus({
+                executing: true,
+                currentAgent: event.agent,
+                progress: event.data,
+              });
+            } else if (event.type === 'chunk' && event.data) {
+              setChatMessages(prev => {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === executionStatus.currentAgent) {
+                  return [
+                    ...prev.slice(0, -1),
+                    { ...lastMsg, content: lastMsg.content + event.data }
+                  ];
+                } else {
+                  return [
+                    ...prev,
+                    {
+                      id: `msg-${Date.now()}`,
+                      type: 'agent',
+                      content: event.data,
+                      agent: executionStatus.currentAgent,
+                      timestamp: new Date(),
+                    }
+                  ];
+                }
+              });
+            } else if (event.type === 'complete') {
+              const completeMessage: ChatMessage = {
+                id: `msg-${Date.now()}-complete`,
+                type: 'system',
+                content: '✅ Execution completed successfully',
+                timestamp: new Date(),
+              };
+              setChatMessages(prev => [...prev, completeMessage]);
+            } else if (event.type === 'error') {
+              throw new Error(event.error || 'Execution failed');
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE event:', e);
+          }
+        }
+      }
+    }
+  };
+  
+  const handleStopExecution = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  };
+  
+  const handleClearChat = () => {
+    setChatMessages([]);
+  };
+  
   const pendingChanges = changes.filter(c => c.status === 'pending');
   const hasUnsavedChanges = fileContent !== originalContent;
   
@@ -372,6 +729,14 @@ const CodeEditorPage: React.FC = () => {
                   Changes
                 </Button>
               </Badge>
+              <Button
+                startIcon={<Chat />}
+                onClick={() => setShowChat(!showChat)}
+                disabled={!selectedWorkflow}
+                variant={showChat ? 'contained' : 'outlined'}
+              >
+                AI Assistant
+              </Button>
             </Box>
           </Grid>
         </Grid>
@@ -379,7 +744,116 @@ const CodeEditorPage: React.FC = () => {
       
       {selectedWorkflow && (
         <Grid container spacing={2}>
-          <Grid item xs={12} md={4}>
+          {showChat && (
+            <Grid item xs={12} md={3}>
+              <Paper sx={{ p: 2, height: 'calc(100vh - 280px)', display: 'flex', flexDirection: 'column' }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+                  <Typography variant="h6">AI Assistant</Typography>
+                  <Button size="small" onClick={handleClearChat}>Clear</Button>
+                </Box>
+                
+                <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                  <InputLabel>Orchestration Design</InputLabel>
+                  <Select
+                    value={selectedDesign}
+                    onChange={(e) => setSelectedDesign(e.target.value)}
+                    label="Orchestration Design"
+                  >
+                    {orchestrationDesigns.map((design) => (
+                      <MenuItem key={design.id} value={design.id}>
+                        {design.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                
+                <Box sx={{ flexGrow: 1, overflow: 'auto', mb: 2, bgcolor: 'background.default', borderRadius: 1, p: 1 }}>
+                  {chatMessages.map((msg) => (
+                    <Box
+                      key={msg.id}
+                      sx={{
+                        mb: 2,
+                        display: 'flex',
+                        flexDirection: msg.type === 'user' ? 'row-reverse' : 'row',
+                        gap: 1,
+                      }}
+                    >
+                      <Avatar
+                        sx={{
+                          bgcolor: msg.type === 'user' ? 'primary.main' : 
+                                   msg.type === 'agent' ? 'secondary.main' : 'grey.500',
+                          width: 32,
+                          height: 32,
+                        }}
+                      >
+                        {msg.type === 'user' ? <Person sx={{ fontSize: 20 }} /> : 
+                         msg.type === 'agent' ? <SmartToy sx={{ fontSize: 20 }} /> : 'S'}
+                      </Avatar>
+                      <Paper
+                        sx={{
+                          p: 1.5,
+                          maxWidth: '80%',
+                          bgcolor: msg.type === 'user' ? 'primary.dark' : 
+                                   msg.type === 'system' ? 'grey.800' : 'background.paper',
+                        }}
+                      >
+                        {msg.agent && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {msg.agent}
+                          </Typography>
+                        )}
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                          {msg.content}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+                          {msg.timestamp.toLocaleTimeString()}
+                        </Typography>
+                      </Paper>
+                    </Box>
+                  ))}
+                  <div ref={chatEndRef} />
+                </Box>
+                
+                {executionStatus.executing && (
+                  <Box mb={2}>
+                    <LinearProgress />
+                    <Typography variant="caption" color="text.secondary">
+                      {executionStatus.currentAgent && `${executionStatus.currentAgent}: ${executionStatus.progress || 'Processing...'}`}
+                    </Typography>
+                  </Box>
+                )}
+                
+                <Box display="flex" gap={1}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Type your request..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                    disabled={executionStatus.executing || !selectedDesign}
+                    multiline
+                    maxRows={3}
+                  />
+                  {executionStatus.executing ? (
+                    <IconButton onClick={handleStopExecution} color="error">
+                      <Stop />
+                    </IconButton>
+                  ) : (
+                    <IconButton 
+                      onClick={handleSendMessage} 
+                      color="primary"
+                      disabled={!chatInput.trim() || !selectedDesign}
+                    >
+                      <Send />
+                    </IconButton>
+                  )}
+                </Box>
+              </Paper>
+            </Grid>
+          )}
+          
+          <Grid item xs={12} md={showChat ? 3 : 4}>
             <Paper sx={{ p: 2, height: 'calc(100vh - 280px)', overflow: 'auto' }}>
               <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
                 <Typography variant="h6">File Explorer</Typography>
@@ -432,7 +906,7 @@ const CodeEditorPage: React.FC = () => {
             </Paper>
           </Grid>
           
-          <Grid item xs={12} md={8}>
+          <Grid item xs={12} md={showChat ? 6 : 8}>
             <Paper sx={{ height: 'calc(100vh - 280px)', display: 'flex', flexDirection: 'column' }}>
               <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
                 <Tab label="Editor" />
