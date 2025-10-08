@@ -64,6 +64,7 @@ import {
   AutoAwesome,
   SmartToy,
   ContentCopy,
+  Close,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent, OrchestrationDesign } from '../services/api';
@@ -178,6 +179,8 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [aiGenerationStartTime, setAiGenerationStartTime] = useState<number | null>(null);
   const [aiElapsedMs, setAiElapsedMs] = useState(0);
   const [aiGenerationStatus, setAiGenerationStatus] = useState('Connecting...');
+  const [quickChatExpanded, setQuickChatExpanded] = useState(false);
+  const [quickChatPrompt, setQuickChatPrompt] = useState('');
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('orchestrationDesignerDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -869,6 +872,87 @@ const OrchestrationDesignerPage: React.FC = () => {
         
         setAiAssistantOpen(false);
         setAiPrompt('');
+        setAiStreamOutput('');
+        setAiGenerationStartTime(null);
+        setAiElapsedMs(0);
+        setAiGenerationStatus('Connecting...');
+      }
+    } catch (error: any) {
+      console.error('Error generating design:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to generate design: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setAiGenerating(false);
+      setAiGenerationStartTime(null);
+      setAiGenerationStatus('Connecting...');
+    }
+  };
+
+  // Handle quick chat generation
+  const handleQuickChatGenerate = async () => {
+    if (!quickChatPrompt.trim()) {
+      return;
+    }
+
+    // Auto-detect mode based on whether board is empty
+    const mode = blocks.length === 0 ? 'create' : 'improve';
+
+    setAiGenerating(true);
+    setAiStreamOutput('');
+    setAiGenerationStartTime(Date.now());
+    setAiElapsedMs(0);
+    setAiGenerationStatus('Connecting to AI...');
+
+    try {
+      const currentDesignForAI = mode === 'improve' ? {
+        name: designName,
+        description: designDescription,
+        blocks,
+        connections,
+        git_repos: []
+      } : undefined;
+
+      const generatedDesign = await orchestrationDesignApi.generateWithAI(
+        quickChatPrompt,
+        currentDesignForAI,
+        mode,
+        (chunk) => {
+          setAiStreamOutput(prev => prev + chunk);
+        },
+        (agent, status) => {
+          // Update status based on agent activity
+          if (status === 'executing') {
+            setAiGenerationStatus(`🤖 ${agent} is analyzing your request...`);
+          } else if (status === 'waiting') {
+            setAiGenerationStatus(`⏳ ${agent} is preparing...`);
+          } else if (status === 'completed') {
+            setAiGenerationStatus(`✓ ${agent} completed - parsing design...`);
+          }
+        }
+      );
+
+      // Apply the generated design to the canvas
+      if (generatedDesign) {
+        setDesignName(generatedDesign.name);
+        setDesignDescription(generatedDesign.description);
+        setBlocks(generatedDesign.blocks);
+        setConnections(generatedDesign.connections);
+        
+        // Clear the current design ID if creating new
+        if (mode === 'create') {
+          setCurrentDesignId(null);
+        }
+
+        setSnackbar({
+          open: true,
+          message: `Design ${mode === 'create' ? 'created' : 'improved'} successfully!`,
+          severity: 'success'
+        });
+        
+        setQuickChatPrompt('');
         setAiStreamOutput('');
         setAiGenerationStartTime(null);
         setAiElapsedMs(0);
@@ -3642,6 +3726,256 @@ Format your response as JSON:
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Quick Chat Panel - Floating on the right side */}
+      <Paper
+        elevation={8}
+        sx={{
+          position: 'fixed',
+          bottom: 20,
+          right: 20,
+          width: quickChatExpanded ? 420 : 60,
+          height: quickChatExpanded ? 500 : 60,
+          transition: 'all 0.3s ease-in-out',
+          zIndex: 1100,
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+          border: quickChatExpanded ? `2px solid ${darkMode ? '#667eea' : '#764ba2'}` : 'none',
+          borderRadius: quickChatExpanded ? 2 : '50%',
+          overflow: 'hidden',
+        }}
+      >
+        {!quickChatExpanded ? (
+          // Collapsed state - floating button
+          <Tooltip title="Chat with Architect">
+            <IconButton
+              onClick={() => setQuickChatExpanded(true)}
+              sx={{
+                width: '100%',
+                height: '100%',
+                background: 'linear-gradient(45deg, #667eea 30%, #764ba2 90%)',
+                color: 'white',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #5568d3 30%, #653a8c 90%)',
+                },
+              }}
+            >
+              <SmartToy sx={{ fontSize: 32 }} />
+            </IconButton>
+          </Tooltip>
+        ) : (
+          // Expanded state - chat interface
+          <>
+            {/* Header */}
+            <Box
+              sx={{
+                p: 2,
+                background: 'linear-gradient(45deg, #667eea 30%, #764ba2 90%)',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <SmartToy />
+                <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem' }}>
+                  Architect
+                </Typography>
+              </Box>
+              <IconButton
+                size="small"
+                onClick={() => setQuickChatExpanded(false)}
+                sx={{ color: 'white' }}
+              >
+                <Close />
+              </IconButton>
+            </Box>
+
+            {/* Mode indicator */}
+            <Box sx={{ px: 2, pt: 1.5, pb: 0 }}>
+              <Chip
+                icon={blocks.length === 0 ? <Add /> : <AutoAwesome />}
+                label={blocks.length === 0 ? 'Create New Design' : 'Improve Design'}
+                size="small"
+                sx={{
+                  backgroundColor: blocks.length === 0 
+                    ? (darkMode ? '#1a472a' : '#e8f5e9')
+                    : (darkMode ? '#2d3748' : '#e3f2fd'),
+                  color: blocks.length === 0 
+                    ? (darkMode ? '#4ade80' : '#2e7d32')
+                    : (darkMode ? '#60a5fa' : '#1976d2'),
+                  fontWeight: 500,
+                }}
+              />
+            </Box>
+
+            {/* Streaming output area */}
+            {aiGenerating && (
+              <Box
+                sx={{
+                  flex: 1,
+                  overflow: 'auto',
+                  p: 2,
+                  backgroundColor: darkMode ? '#0a0a0a' : '#f5f5f5',
+                  fontFamily: 'monospace',
+                  fontSize: '0.75rem',
+                  color: darkMode ? '#00ff00' : '#006600',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CircularProgress size={16} sx={{ color: darkMode ? '#00ff00' : '#006600' }} />
+                  <Typography variant="caption" sx={{ color: darkMode ? '#ffffff' : 'text.primary' }}>
+                    {aiGenerationStatus}
+                  </Typography>
+                </Box>
+                {aiStreamOutput || 'Waiting for response...'}
+              </Box>
+            )}
+
+            {/* Prompt suggestions when not generating */}
+            {!aiGenerating && (
+              <Box
+                sx={{
+                  flex: 1,
+                  overflow: 'auto',
+                  p: 2,
+                  backgroundColor: darkMode ? '#0a0a0a' : '#f5f5f5',
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: darkMode ? '#b0b0b0' : 'text.secondary',
+                    display: 'block',
+                    mb: 1.5,
+                    fontWeight: 500,
+                  }}
+                >
+                  {blocks.length === 0 
+                    ? '💡 Describe the orchestration you want to create:'
+                    : '💡 Describe how to improve the current design:'}
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {blocks.length === 0 ? (
+                    <>
+                      <Chip
+                        label="Create a sequential workflow for data processing"
+                        size="small"
+                        clickable
+                        onClick={() => setQuickChatPrompt('Create a sequential workflow for data processing')}
+                        sx={{ justifyContent: 'flex-start', fontSize: '0.75rem' }}
+                      />
+                      <Chip
+                        label="Build a parallel task executor with 3 workers"
+                        size="small"
+                        clickable
+                        onClick={() => setQuickChatPrompt('Build a parallel task executor with 3 workers')}
+                        sx={{ justifyContent: 'flex-start', fontSize: '0.75rem' }}
+                      />
+                      <Chip
+                        label="Design a debate system with moderator"
+                        size="small"
+                        clickable
+                        onClick={() => setQuickChatPrompt('Design a debate system with moderator')}
+                        sx={{ justifyContent: 'flex-start', fontSize: '0.75rem' }}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Chip
+                        label="Add error handling to all agents"
+                        size="small"
+                        clickable
+                        onClick={() => setQuickChatPrompt('Add error handling to all agents')}
+                        sx={{ justifyContent: 'flex-start', fontSize: '0.75rem' }}
+                      />
+                      <Chip
+                        label="Add a reflection agent to review outputs"
+                        size="small"
+                        clickable
+                        onClick={() => setQuickChatPrompt('Add a reflection agent to review outputs')}
+                        sx={{ justifyContent: 'flex-start', fontSize: '0.75rem' }}
+                      />
+                      <Chip
+                        label="Optimize agent prompts for better performance"
+                        size="small"
+                        clickable
+                        onClick={() => setQuickChatPrompt('Optimize agent prompts for better performance')}
+                        sx={{ justifyContent: 'flex-start', fontSize: '0.75rem' }}
+                      />
+                    </>
+                  )}
+                </Box>
+              </Box>
+            )}
+
+            {/* Input area */}
+            <Box
+              sx={{
+                p: 2,
+                borderTop: `1px solid ${darkMode ? '#333' : '#e0e0e0'}`,
+                backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+              }}
+            >
+              <TextField
+                fullWidth
+                multiline
+                maxRows={3}
+                size="small"
+                placeholder={blocks.length === 0 ? 'Describe your orchestration...' : 'How should I improve it?'}
+                value={quickChatPrompt}
+                onChange={(e) => setQuickChatPrompt(e.target.value)}
+                disabled={aiGenerating}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleQuickChatGenerate();
+                  }
+                }}
+                sx={{
+                  mb: 1,
+                  '& .MuiInputBase-root': {
+                    backgroundColor: darkMode ? '#0a0a0a' : '#f5f5f5',
+                    color: darkMode ? '#ffffff' : undefined,
+                  },
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+                  },
+                }}
+                InputProps={{
+                  endAdornment: (
+                    <IconButton
+                      size="small"
+                      onClick={handleQuickChatGenerate}
+                      disabled={aiGenerating || !quickChatPrompt.trim()}
+                      sx={{
+                        color: quickChatPrompt.trim() ? '#667eea' : undefined,
+                      }}
+                    >
+                      <PlayArrow />
+                    </IconButton>
+                  ),
+                }}
+              />
+              <Typography
+                variant="caption"
+                sx={{
+                  color: darkMode ? '#666' : 'text.secondary',
+                  fontSize: '0.7rem',
+                  display: 'block',
+                }}
+              >
+                Press Enter to send • Shift+Enter for new line
+                {aiGenerating && ` • ${aiElapsedMs}ms`}
+              </Typography>
+            </Box>
+          </>
+        )}
+      </Paper>
 
       {/* Snackbar */}
       <Snackbar
