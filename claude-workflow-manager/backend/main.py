@@ -4048,7 +4048,7 @@ async def seed_orchestration_designs(force: bool = False):
         
         # Get the new count
         updated_designs = await db.get_orchestration_designs()
-        seeded_count = 8  # We know we seed 8 designs
+        seeded_count = len(SAMPLE_DESIGN_NAMES)  # Number of sample designs we seed
         
         return {
             "success": True,

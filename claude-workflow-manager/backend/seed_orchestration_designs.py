@@ -14,7 +14,8 @@ SAMPLE_DESIGN_NAMES = [
     "Customer Support Routing System",
     "Research Paper Analysis Pipeline",
     "Full-Stack Development Workflow",
-    "Self-Improving Prompt Optimization"
+    "Self-Improving Prompt Optimization",
+    "Simple Code Editor"
 ]
 
 async def seed_sample_designs(force=False, silent=False, db=None, only_missing=False):
