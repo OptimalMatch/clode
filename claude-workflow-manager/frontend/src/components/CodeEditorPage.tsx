@@ -447,6 +447,10 @@ const CodeEditorPage: React.FC = () => {
     const agents = design.blocks.flatMap(block => block.data.agents || []);
     const agentNames = agents.map(a => a.name);
     
+    // Get the git_repo for the selected workflow
+    const currentWorkflow = workflows.find(w => w.id === selectedWorkflow);
+    const gitRepo = currentWorkflow?.git_repo || '';
+    
     // Inject workflow context into task
     const contextualTask = `Working with workflow ID: ${selectedWorkflow}\n\nIMPORTANT: You MUST use the editor_* MCP tools (editor_read_file, editor_create_change, editor_browse_directory, etc.) with workflow_id="${selectedWorkflow}" for all file operations. These tools access the repository shown in the file explorer.\n\n${task}`;
     
@@ -470,7 +474,8 @@ const CodeEditorPage: React.FC = () => {
           router,
           specialists,
           specialist_names: specialists.map(s => s.name),
-          model: 'claude-sonnet-4-20250514'
+          model: 'claude-sonnet-4-20250514',
+          git_repo: gitRepo
         }, signal);
       } else {
         // Fall back to sequential
@@ -478,7 +483,8 @@ const CodeEditorPage: React.FC = () => {
           task: contextualTask,
           agents: contextualAgents,
           agent_sequence: agentNames,
-          model: 'claude-sonnet-4-20250514'
+          model: 'claude-sonnet-4-20250514',
+          git_repo: gitRepo
         }, signal);
       }
     } else {
@@ -487,7 +493,8 @@ const CodeEditorPage: React.FC = () => {
         task: contextualTask,
         agents: contextualAgents,
         agent_sequence: agentNames,
-        model: 'claude-sonnet-4-20250514'
+        model: 'claude-sonnet-4-20250514',
+        git_repo: gitRepo
       }, signal);
     }
     
