@@ -759,7 +759,8 @@ Args: {"workflow_id": "<provided_in_task>", "path": ""}
 
 Your job: Analyze what files exist, what needs to be changed, and provide a clear plan.
 Output: A brief plan of what will be done (2-3 sentences).""",
-                            "role": "specialist"
+                            "role": "specialist",
+                            "use_tools": True
                         },
                         {
                             "id": "agent-2", 
@@ -794,7 +795,8 @@ Operations: 'create', 'update', or 'delete'
 
 Your job: Create pending changes (NOT direct file writes).
 Output: Confirm the change_id from the tool response.""",
-                            "role": "specialist"
+                            "role": "specialist",
+                            "use_tools": True
                         }
                     ],
                     "task": "Analyze code requirements and implement changes using editor tools"
