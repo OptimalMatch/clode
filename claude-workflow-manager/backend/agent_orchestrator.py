@@ -171,10 +171,13 @@ class MultiAgentOrchestrator:
             role: Agent role (COORDINATOR, WORKER, SPECIALIST)
             use_tools: Explicitly enable/disable tools (None = auto-detect from system prompt)
         """
-        self.agents[name] = Agent(name, system_prompt, role, use_tools)
+        agent = Agent(name, system_prompt, role, use_tools)
+        self.agents[name] = agent
         tool_status = "auto-detected" if use_tools is None else ("enabled" if use_tools else "disabled")
-        logger.info(f"Added agent: {name} with role {role}, tools: {tool_status}")
-        return self.agents[name]
+        logger.info(f"✅ Added agent '{name}' with role {role.value}")
+        logger.info(f"   Tools: {tool_status} → use_tools={agent.use_tools}")
+        logger.info(f"   System prompt snippet: {system_prompt[:150]}...")
+        return agent
     
     def _get_api_key(self) -> Optional[str]:
         """

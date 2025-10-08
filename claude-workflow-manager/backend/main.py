@@ -2950,10 +2950,14 @@ async def execute_debate_stream(request: DebateRequest):
                     )
                     system_prompt = workspace_instruction + system_prompt
                 
+                # Get use_tools from agent data if available
+                use_tools = getattr(agent, 'use_tools', None)
+                
                 orchestrator.add_agent(
                     name=agent.name,
                     system_prompt=system_prompt,
-                    role=OrchestratorAgentRole(agent.role.value)
+                    role=OrchestratorAgentRole(agent.role.value),
+                    use_tools=use_tools
                 )
             
             # Create queue for streaming events
@@ -3334,10 +3338,14 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
                     )
                     system_prompt = workspace_instruction + system_prompt
                 
+                # Get use_tools from agent data if available
+                use_tools = getattr(agent, 'use_tools', None)
+                
                 orchestrator.add_agent(
                     name=agent.name,
                     system_prompt=system_prompt,
-                    role=OrchestratorAgentRole(agent.role.value)
+                    role=OrchestratorAgentRole(agent.role.value),
+                    use_tools=use_tools
                 )
             
             # Add aggregator if provided
@@ -3819,10 +3827,14 @@ async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest)
                     )
                     system_prompt = workspace_instruction + system_prompt
                 
+                # Get use_tools from agent data if available
+                use_tools = getattr(agent, 'use_tools', None)
+                
                 orchestrator.add_agent(
                     name=agent.name,
                     system_prompt=system_prompt,
-                    role=OrchestratorAgentRole(agent.role.value)
+                    role=OrchestratorAgentRole(agent.role.value),
+                    use_tools=use_tools
                 )
             
             # Create queue for streaming events
