@@ -1538,30 +1538,26 @@ async def main():
         async with tcp_server:
             await tcp_server.serve_forever()
             
-    elif not sys.stdin.isatty():
-        # Running in Docker - stdio mode but keep alive
-        logger.info("🚀 MCP Server initialized and ready for stdio connections")
-        logger.info(f"📊 Available tools: {len(workflow_server.get_available_tools())}")
-        logger.info("💡 Connect via MCP client using stdio transport")
-        
-        # Keep the server alive for stdio connections
-        try:
-            while True:
-                await asyncio.sleep(60)  # Sleep for 1 minute intervals
-                logger.info("💓 MCP Server heartbeat - ready for connections")
-        except KeyboardInterrupt:
-            logger.info("🛑 MCP Server shutting down...")
     else:
-        # Running interactively - use stdio server
+        # Running in stdio mode (spawned as subprocess or interactive)
+        logger.info("🚀 MCP Server starting in stdio mode")
+        logger.info(f"📊 Available tools: {len(workflow_server.get_available_tools())}")
+        
         try:
             async with stdio_server() as (read_stream, write_stream):
                 init_options = {
                     "serverName": "claude-workflow-manager",
                     "serverVersion": "1.0.0"
                 }
+                logger.info("✅ stdio_server initialized, running MCP protocol")
                 await server.run(read_stream, write_stream, init_options)
+        except Exception as e:
+            logger.error(f"❌ Error in stdio_server: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             # Cleanup
+            logger.info("🧹 Cleaning up MCP server")
             await workflow_server.close()
 
 
