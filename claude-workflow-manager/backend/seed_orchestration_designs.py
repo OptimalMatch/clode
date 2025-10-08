@@ -744,17 +744,20 @@ async def seed_sample_designs(force=False, silent=False, db=None, only_missing=F
                             "name": "Code Analyzer",
                             "system_prompt": """Analyze the user's request and understand what needs to be done.
 
-You MUST use these editor tools (workflow_id will be provided in the task):
-- editor_browse_directory(workflow_id, path) - Browse files to understand structure
-- editor_search_files(workflow_id, query) - Search for relevant files
-- editor_read_file(workflow_id, file_path) - Read files to understand current state
+CRITICAL TOOL USAGE:
+====================
+ONLY use these MCP tools (full names):
+- mcp__workflow-manager__editor_browse_directory
+- mcp__workflow-manager__editor_read_file  
+- mcp__workflow-manager__editor_search_files
 
-Your job:
-1. Browse the repository to understand the structure
-2. Search for and read relevant files
-3. Understand what needs to be created/updated/fixed
-4. Provide a clear, concise plan
+NEVER use: read_file, glob, or any generic file tools.
 
+EXAMPLE:
+Tool: mcp__workflow-manager__editor_browse_directory
+Args: {"workflow_id": "<provided_in_task>", "path": ""}
+
+Your job: Analyze what files exist, what needs to be changed, and provide a clear plan.
 Output: A brief plan of what will be done (2-3 sentences).""",
                             "role": "specialist"
                         },
@@ -763,22 +766,34 @@ Output: A brief plan of what will be done (2-3 sentences).""",
                             "name": "Code Editor",
                             "system_prompt": """Execute the code changes based on the analysis.
 
-You MUST use these editor tools (workflow_id will be provided in the task):
-- editor_read_file(workflow_id, file_path) - Read current file content
-- editor_create_change(workflow_id, file_path, operation, new_content) - Create changes
+CRITICAL TOOL USAGE:
+====================
+ONLY use these MCP tools (full names):
+- mcp__workflow-manager__editor_read_file
+- mcp__workflow-manager__editor_create_change
+- mcp__workflow-manager__editor_get_changes
 
-Operations:
-- operation='create' for new files
-- operation='update' for modifying existing files (provide FULL new content)
-- operation='delete' for removing files
+NEVER use: write_file, read_file, or any generic file tools.
 
-Your job:
-1. For updates: Read the current file first with editor_read_file
-2. Make the necessary changes (minimal and targeted)
-3. Use editor_create_change to create the pending change
-4. For updates, provide the FULL new file content, not just changes
+EXAMPLE WORKFLOW:
+1. Read: mcp__workflow-manager__editor_read_file
+   Args: {"workflow_id": "<from_task>", "file_path": "README.md"}
 
-Output: Brief summary of what changes were created (1-2 sentences).""",
+2. Create change: mcp__workflow-manager__editor_create_change
+   Args: {
+     "workflow_id": "<from_task>",
+     "file_path": "README.md",
+     "operation": "update",
+     "new_content": "<FULL FILE CONTENT>"
+   }
+
+3. Verify: mcp__workflow-manager__editor_get_changes
+   Args: {"workflow_id": "<from_task>"}
+
+Operations: 'create', 'update', or 'delete'
+
+Your job: Create pending changes (NOT direct file writes).
+Output: Confirm the change_id from the tool response.""",
                             "role": "specialist"
                         }
                     ],

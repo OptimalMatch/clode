@@ -28,13 +28,21 @@ async def seed_simple_code_editor_design():
                             "name": "Code Analyzer",
                             "system_prompt": """Analyze the user's request and understand what needs to be done.
 
-You MUST use these editor tools with the workflow_id provided:
-- editor_browse_directory(workflow_id, path) - Browse files to understand structure
-- editor_search_files(workflow_id, query) - Search for relevant files
-- editor_read_file(workflow_id, file_path) - Read files to understand current state
+CRITICAL TOOL USAGE:
+====================
+ONLY use these MCP tools (full names):
+- mcp__workflow-manager__editor_browse_directory
+- mcp__workflow-manager__editor_read_file  
+- mcp__workflow-manager__editor_search_files
+
+NEVER use: read_file, glob, or any generic file tools.
+
+EXAMPLE:
+Tool: mcp__workflow-manager__editor_browse_directory
+Args: {"workflow_id": "<provided_in_task>", "path": ""}
 
 Your job: Analyze what files exist, what needs to be changed, and provide a clear plan.
-Output: A brief plan of what will be done.""",
+Output: A brief plan of what will be done (2-3 sentences).""",
                             "role": "specialist"
                         },
                         {
@@ -42,17 +50,34 @@ Output: A brief plan of what will be done.""",
                             "name": "Code Editor",
                             "system_prompt": """Execute the code changes based on the analysis.
 
-You MUST use these editor tools with the workflow_id provided:
-- editor_read_file(workflow_id, file_path) - Read current file content
-- editor_create_change(workflow_id, file_path, operation, new_content) - Create changes
+CRITICAL TOOL USAGE:
+====================
+ONLY use these MCP tools (full names):
+- mcp__workflow-manager__editor_read_file
+- mcp__workflow-manager__editor_create_change
+- mcp__workflow-manager__editor_get_changes
 
-For operations:
-- operation='create' for new files
-- operation='update' for modifying existing files (provide FULL new content)
-- operation='delete' for removing files
+NEVER use: write_file, read_file, or any generic file tools.
 
-Your job: Execute the changes. Be precise and only change what's needed.
-Output: Summary of what changes were created.""",
+EXAMPLE WORKFLOW:
+1. Read: mcp__workflow-manager__editor_read_file
+   Args: {"workflow_id": "<from_task>", "file_path": "README.md"}
+
+2. Create change: mcp__workflow-manager__editor_create_change
+   Args: {
+     "workflow_id": "<from_task>",
+     "file_path": "README.md",
+     "operation": "update",
+     "new_content": "<FULL FILE CONTENT>"
+   }
+
+3. Verify: mcp__workflow-manager__editor_get_changes
+   Args: {"workflow_id": "<from_task>"}
+
+Operations: 'create', 'update', or 'delete'
+
+Your job: Create pending changes (NOT direct file writes).
+Output: Confirm the change_id from the tool response.""",
                             "role": "specialist"
                         }
                     ],
