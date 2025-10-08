@@ -832,6 +832,8 @@ class ClaudeWorkflowMCPServer:
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> List[TextContent | ImageContent | EmbeddedResource]:
         """Execute a tool call"""
+        logger.info(f"🔧 MCP Server: Tool called: {name}")
+        logger.info(f"   Arguments: {arguments}")
         try:
             if name == "health_check":
                 result = await self._make_request("GET", "/health")

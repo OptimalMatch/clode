@@ -283,12 +283,17 @@ class MultiAgentOrchestrator:
             # Use ClaudeSDKClient for tool capabilities
             # It will automatically read .mcp.json from the cwd
             reply_parts = []
+            logger.info(f"🔧 Initializing ClaudeSDKClient for agent {agent.name} with cwd={self.cwd}")
             async with ClaudeSDKClient(options=options) as client:
                 # Send the query
                 await client.query(full_message)
                 
                 # Stream responses as they arrive (message-level)
                 async for msg in client.receive_response():
+                    # Log tool usage if present
+                    if hasattr(msg, 'tool_use'):
+                        logger.info(f"🔨 Agent {agent.name} using tool: {msg.tool_use}")
+                    
                     # Extract text content from AssistantMessage
                     if isinstance(msg, AssistantMessage):
                         for block in msg.content:
@@ -298,6 +303,11 @@ class MultiAgentOrchestrator:
                                 # Stream callback for updates
                                 if stream_callback:
                                     await stream_callback(agent.name, chunk)
+                            # Log if there are tool use blocks
+                            elif hasattr(block, 'type') and block.type == 'tool_use':
+                                logger.info(f"🔨 Agent {agent.name} called tool: {block.name if hasattr(block, 'name') else 'unknown'}")
+                                if hasattr(block, 'input'):
+                                    logger.info(f"   Args: {block.input}")
             
             reply = "".join(reply_parts) if reply_parts else "No response"
             
