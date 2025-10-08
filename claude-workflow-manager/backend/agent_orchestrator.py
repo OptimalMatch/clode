@@ -311,6 +311,10 @@ class MultiAgentOrchestrator:
                 # Handle different message types from SDK (typed objects, not dicts)
                 # Check message type using hasattr and getattr
                 msg_type = getattr(msg, 'type', None)
+                msg_class = msg.__class__.__name__
+                
+                # Debug: Log ALL message types to understand SDK behavior
+                logger.debug(f"📨 SDK Message: type={msg_type}, class={msg_class}")
                 
                 if msg_type == "system":
                     # System message (e.g., init, MCP status)
@@ -329,18 +333,37 @@ class MultiAgentOrchestrator:
                 elif isinstance(msg, AssistantMessage):
                     # Extract text from assistant messages
                     for block in msg.content:
+                        block_type = getattr(block, 'type', None)
+                        block_class = block.__class__.__name__
+                        
+                        # Debug: Log all block types
+                        logger.debug(f"  📦 Block: type={block_type}, class={block_class}")
+                        
                         if isinstance(block, TextBlock):
                             text = block.text
                             reply_parts.append(text)
                             if stream_callback:
                                 await stream_callback(agent.name, text)
-                        elif hasattr(block, 'type') and block.type == 'tool_use':
+                        elif block_type == 'tool_use' or block_class == 'ToolUseBlock':
+                            # Handle tool use blocks (check both type and class)
                             tool_name = getattr(block, 'name', 'unknown')
                             tool_input = getattr(block, 'input', {})
                             tool_calls_seen.append(tool_name)
                             print(f"🔨 Agent {agent.name} called tool: {tool_name}")
                             logger.info(f"🔨 Agent {agent.name} called tool: {tool_name}")
                             logger.info(f"   Args: {tool_input}")
+                        else:
+                            # Log unknown block types for investigation
+                            logger.debug(f"  ❓ Unknown block type: {block_type} ({block_class})")
+                
+                elif msg_type == "tool_use" or msg_class == "ToolUseMessage":
+                    # Some SDKs send tool use as separate messages
+                    tool_name = getattr(msg, 'name', getattr(msg, 'tool_name', 'unknown'))
+                    tool_input = getattr(msg, 'input', getattr(msg, 'arguments', {}))
+                    tool_calls_seen.append(tool_name)
+                    print(f"🔨 Agent {agent.name} called tool: {tool_name}")
+                    logger.info(f"🔨 Agent {agent.name} called tool: {tool_name}")
+                    logger.info(f"   Args: {tool_input}")
                 
                 elif msg_type == "result":
                     # Final result
@@ -352,6 +375,10 @@ class MultiAgentOrchestrator:
                     elif subtype == "error_during_execution":
                         error = getattr(msg, 'error', 'Unknown error')
                         logger.error(f"❌ Execution error: {error}")
+                
+                else:
+                    # Log any unhandled message types
+                    logger.debug(f"  ❓ Unhandled message type: {msg_type} ({msg_class})")
             
             reply = "".join(reply_parts) if reply_parts else "No response"
             
@@ -359,8 +386,13 @@ class MultiAgentOrchestrator:
                 print(f"✅ Agent {agent.name} used {len(tool_calls_seen)} tool(s): {', '.join(set(tool_calls_seen))}")
                 logger.info(f"✅ Agent {agent.name} used {len(tool_calls_seen)} tool(s): {', '.join(set(tool_calls_seen))}")
             else:
-                print(f"⚠️ Agent {agent.name} did not use any MCP tools")
-                logger.warning(f"⚠️ Agent {agent.name} did not use any MCP tools")
+                # Note: The SDK might not report tool use in message stream even if tools are used
+                # MCP server logs will show actual tool calls if they occurred
+                if agent.use_tools:
+                    print(f"ℹ️ Agent {agent.name}: No tool use detected in message stream")
+                    logger.info(f"ℹ️ Agent {agent.name}: No tool use detected in message stream (check MCP server logs for actual tool calls)")
+                else:
+                    logger.debug(f"Agent {agent.name}: Tools not enabled for this agent")
             
             # Update history
             agent.add_to_history("user", full_message)
