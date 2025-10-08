@@ -832,8 +832,8 @@ class ClaudeWorkflowMCPServer:
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> List[TextContent | ImageContent | EmbeddedResource]:
         """Execute a tool call"""
-        logger.info(f"🔧 MCP Server: Tool called: {name}")
-        logger.info(f"   Arguments: {arguments}")
+        print(f"🔧 MCP Server: Tool called: {name}")
+        print(f"   Arguments: {arguments}")
         try:
             if name == "health_check":
                 result = await self._make_request("GET", "/health")
@@ -1171,6 +1171,7 @@ class ClaudeWorkflowMCPServer:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
                 
         except Exception as e:
+            print(f"Error executing tool {name}: {e}")
             logger.error(f"Error executing tool {name}: {e}")
             return [TextContent(type="text", text=f"Error: {str(e)}")]
     
