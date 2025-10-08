@@ -447,17 +447,26 @@ const CodeEditorPage: React.FC = () => {
     const agents = design.blocks.flatMap(block => block.data.agents || []);
     const agentNames = agents.map(a => a.name);
     
+    // Inject workflow context into task
+    const contextualTask = `Working with workflow ID: ${selectedWorkflow}\n\nIMPORTANT: You MUST use the editor_* MCP tools (editor_read_file, editor_create_change, editor_browse_directory, etc.) with workflow_id="${selectedWorkflow}" for all file operations. These tools access the repository shown in the file explorer.\n\n${task}`;
+    
+    // Update agent system prompts to include editor tool instructions
+    const contextualAgents = agents.map(agent => ({
+      ...agent,
+      system_prompt: `${agent.system_prompt}\n\nCRITICAL: Always use editor_* tools with workflow_id="${selectedWorkflow}":\n- editor_browse_directory(workflow_id, path) - Browse directory\n- editor_read_file(workflow_id, file_path) - Read file\n- editor_create_change(workflow_id, file_path, operation, new_content) - Create/update/delete file\n- editor_get_changes(workflow_id) - List pending changes\n- editor_search_files(workflow_id, query) - Search files\n\nNEVER use generic file tools. ALWAYS use editor_* tools.`
+    }));
+    
     // Create execution request based on block type
     let executionPromise;
     
     if (blockType === 'routing') {
       // Dynamic routing execution
-      const router = agents.find(a => a.role === 'manager' || a.name.toLowerCase().includes('router'));
-      const specialists = agents.filter(a => a.role === 'specialist');
+      const router = contextualAgents.find(a => a.role === 'manager' || a.name.toLowerCase().includes('router'));
+      const specialists = contextualAgents.filter(a => a.role === 'specialist');
       
       if (router && specialists.length > 0) {
         executionPromise = executeRoutingWithStreaming({
-          task,
+          task: contextualTask,
           router,
           specialists,
           specialist_names: specialists.map(s => s.name),
@@ -466,8 +475,8 @@ const CodeEditorPage: React.FC = () => {
       } else {
         // Fall back to sequential
         executionPromise = executeSequentialWithStreaming({
-          task,
-          agents,
+          task: contextualTask,
+          agents: contextualAgents,
           agent_sequence: agentNames,
           model: 'claude-sonnet-4-20250514'
         }, signal);
@@ -475,8 +484,8 @@ const CodeEditorPage: React.FC = () => {
     } else {
       // Default to sequential execution
       executionPromise = executeSequentialWithStreaming({
-        task,
-        agents,
+        task: contextualTask,
+        agents: contextualAgents,
         agent_sequence: agentNames,
         model: 'claude-sonnet-4-20250514'
       }, signal);
