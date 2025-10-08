@@ -30,6 +30,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iptables \
     supervisor \
     fuse-overlayfs \
+    # Network tools (netcat for MCP connections)
+    netcat-traditional \
     # Common development tools often needed by projects
     # Install multiple Java versions for compatibility
     openjdk-8-jdk \
