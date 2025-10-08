@@ -679,6 +679,147 @@ class ClaudeWorkflowMCPServer:
                     "required": ["task", "router", "specialists", "specialist_names"]
                 }
             ),
+            
+            # File Editor Tools
+            Tool(
+                name="editor_browse_directory",
+                description="Browse files and folders in a repository directory. Returns a list of items with their metadata.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "path": {"type": "string", "description": "Relative path to browse (empty string for root)", "default": ""},
+                        "include_hidden": {"type": "boolean", "description": "Include hidden files/directories", "default": False}
+                    },
+                    "required": ["workflow_id"]
+                }
+            ),
+            Tool(
+                name="editor_read_file",
+                description="Read the content of a file from the repository. Returns file content and metadata.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "file_path": {"type": "string", "description": "Relative path to the file"}
+                    },
+                    "required": ["workflow_id", "file_path"]
+                }
+            ),
+            Tool(
+                name="editor_create_change",
+                description="Create a pending file change (create, update, or delete) for approval. Changes are not applied immediately.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "file_path": {"type": "string", "description": "Path to the file"},
+                        "operation": {"type": "string", "enum": ["create", "update", "delete"], "description": "Operation type"},
+                        "new_content": {"type": "string", "description": "New content for create/update operations"}
+                    },
+                    "required": ["workflow_id", "file_path", "operation"]
+                }
+            ),
+            Tool(
+                name="editor_get_changes",
+                description="Get all pending file changes, optionally filtered by status (pending, approved, rejected).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "status": {"type": "string", "enum": ["pending", "approved", "rejected"], "description": "Filter by status"}
+                    },
+                    "required": ["workflow_id"]
+                }
+            ),
+            Tool(
+                name="editor_approve_change",
+                description="Approve and apply a pending file change. This will actually modify the file in the repository.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "change_id": {"type": "string", "description": "ID of the change to approve"}
+                    },
+                    "required": ["workflow_id", "change_id"]
+                }
+            ),
+            Tool(
+                name="editor_reject_change",
+                description="Reject a pending file change. The change will be marked as rejected and not applied.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "change_id": {"type": "string", "description": "ID of the change to reject"}
+                    },
+                    "required": ["workflow_id", "change_id"]
+                }
+            ),
+            Tool(
+                name="editor_rollback_change",
+                description="Rollback a previously applied change, restoring the file to its previous state.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "change_id": {"type": "string", "description": "ID of the applied change to rollback"}
+                    },
+                    "required": ["workflow_id", "change_id"]
+                }
+            ),
+            Tool(
+                name="editor_create_directory",
+                description="Create a new directory in the repository.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "dir_path": {"type": "string", "description": "Path for the new directory"}
+                    },
+                    "required": ["workflow_id", "dir_path"]
+                }
+            ),
+            Tool(
+                name="editor_move_file",
+                description="Move or rename a file or directory within the repository.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "old_path": {"type": "string", "description": "Current path"},
+                        "new_path": {"type": "string", "description": "New path"}
+                    },
+                    "required": ["workflow_id", "old_path", "new_path"]
+                }
+            ),
+            Tool(
+                name="editor_search_files",
+                description="Search for files by name pattern in the repository.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "query": {"type": "string", "description": "Search query (supports wildcards)"},
+                        "path": {"type": "string", "description": "Directory to search in", "default": ""},
+                        "case_sensitive": {"type": "boolean", "description": "Case-sensitive search", "default": False}
+                    },
+                    "required": ["workflow_id", "query"]
+                }
+            ),
+            Tool(
+                name="editor_get_tree",
+                description="Get hierarchical tree structure of a directory for visualization.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "path": {"type": "string", "description": "Starting path", "default": ""},
+                        "max_depth": {"type": "integer", "description": "Maximum depth to traverse", "default": 3}
+                    },
+                    "required": ["workflow_id"]
+                }
+            ),
         ]
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> List[TextContent | ImageContent | EmbeddedResource]:
@@ -918,6 +1059,102 @@ class ClaudeWorkflowMCPServer:
                     "model": arguments.get("model", "claude-sonnet-4-20250514")
                 }
                 result = await self._make_request("POST", "/api/orchestration/routing", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            # File Editor Tools
+            elif name == "editor_browse_directory":
+                data = {
+                    "workflow_id": arguments["workflow_id"],
+                    "path": arguments.get("path", ""),
+                    "include_hidden": arguments.get("include_hidden", False)
+                }
+                result = await self._make_request("POST", "/api/file-editor/browse", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "editor_read_file":
+                data = {
+                    "workflow_id": arguments["workflow_id"],
+                    "file_path": arguments["file_path"]
+                }
+                result = await self._make_request("POST", "/api/file-editor/read", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "editor_create_change":
+                data = {
+                    "workflow_id": arguments["workflow_id"],
+                    "file_path": arguments["file_path"],
+                    "operation": arguments["operation"]
+                }
+                if "new_content" in arguments:
+                    data["new_content"] = arguments["new_content"]
+                result = await self._make_request("POST", "/api/file-editor/create-change", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "editor_get_changes":
+                data = {"workflow_id": arguments["workflow_id"]}
+                if "status" in arguments:
+                    data["status"] = arguments["status"]
+                result = await self._make_request("POST", "/api/file-editor/changes", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "editor_approve_change":
+                data = {
+                    "workflow_id": arguments["workflow_id"],
+                    "change_id": arguments["change_id"]
+                }
+                result = await self._make_request("POST", "/api/file-editor/approve", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "editor_reject_change":
+                data = {
+                    "workflow_id": arguments["workflow_id"],
+                    "change_id": arguments["change_id"]
+                }
+                result = await self._make_request("POST", "/api/file-editor/reject", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "editor_rollback_change":
+                data = {
+                    "workflow_id": arguments["workflow_id"],
+                    "change_id": arguments["change_id"]
+                }
+                result = await self._make_request("POST", "/api/file-editor/rollback", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "editor_create_directory":
+                data = {
+                    "workflow_id": arguments["workflow_id"],
+                    "dir_path": arguments["dir_path"]
+                }
+                result = await self._make_request("POST", "/api/file-editor/create-directory", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "editor_move_file":
+                data = {
+                    "workflow_id": arguments["workflow_id"],
+                    "old_path": arguments["old_path"],
+                    "new_path": arguments["new_path"]
+                }
+                result = await self._make_request("POST", "/api/file-editor/move", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "editor_search_files":
+                data = {
+                    "workflow_id": arguments["workflow_id"],
+                    "query": arguments["query"],
+                    "path": arguments.get("path", ""),
+                    "case_sensitive": arguments.get("case_sensitive", False)
+                }
+                result = await self._make_request("POST", "/api/file-editor/search", json=data)
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            
+            elif name == "editor_get_tree":
+                data = {
+                    "workflow_id": arguments["workflow_id"],
+                    "path": arguments.get("path", ""),
+                    "max_depth": arguments.get("max_depth", 3)
+                }
+                result = await self._make_request("POST", "/api/file-editor/tree", json=data)
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
             
             else:

@@ -4675,6 +4675,403 @@ async def execute_via_endpoint(endpoint_path: str, request: Request):
         print(f"Error executing via endpoint: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to execute: {str(e)}")
 
+# File Editor endpoints
+file_editor_managers: Dict[str, Any] = {}  # Cache of FileEditorManager instances by repo path
+
+def get_file_editor_manager(git_repo: str, workflow_id: str) -> Any:
+    """Get or create a FileEditorManager for a repository"""
+    from file_editor import FileEditorManager
+    import tempfile
+    
+    cache_key = f"{workflow_id}:{git_repo}"
+    
+    if cache_key not in file_editor_managers:
+        # Clone repository to temp directory
+        temp_dir = tempfile.mkdtemp(prefix=f"editor_{workflow_id}_")
+        
+        try:
+            subprocess.run(
+                ["git", "clone", "--depth", "1", git_repo, temp_dir],
+                check=True,
+                capture_output=True,
+                env=get_git_env()
+            )
+            
+            file_editor_managers[cache_key] = {
+                "manager": FileEditorManager(temp_dir),
+                "temp_dir": temp_dir,
+                "git_repo": git_repo
+            }
+        except Exception as e:
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            raise HTTPException(status_code=500, detail=f"Failed to clone repository: {str(e)}")
+    
+    return file_editor_managers[cache_key]
+
+@app.post(
+    "/api/file-editor/init",
+    summary="Initialize File Editor",
+    description="Initialize file editor for a git repository",
+    tags=["File Editor"]
+)
+async def init_file_editor(data: dict, user: User = Depends(get_current_user)):
+    """Initialize file editor session for a repository"""
+    try:
+        workflow_id = data.get("workflow_id")
+        if not workflow_id:
+            raise HTTPException(status_code=400, detail="workflow_id is required")
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        git_repo = workflow.get("git_repo")
+        if not git_repo:
+            raise HTTPException(status_code=400, detail="Workflow does not have a git repository")
+        
+        editor_data = get_file_editor_manager(git_repo, workflow_id)
+        
+        return {
+            "success": True,
+            "workflow_id": workflow_id,
+            "git_repo": git_repo,
+            "session_id": f"{workflow_id}:{git_repo}"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error initializing file editor: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/browse",
+    summary="Browse Directory",
+    description="Browse files and directories in a repository",
+    tags=["File Editor"]
+)
+async def browse_directory(data: dict, user: User = Depends(get_current_user)):
+    """Browse a directory in the repository"""
+    try:
+        workflow_id = data.get("workflow_id")
+        path = data.get("path", "")
+        include_hidden = data.get("include_hidden", False)
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        result = manager.browse_directory(path, include_hidden)
+        return {"success": True, **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error browsing directory: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/tree",
+    summary="Get Directory Tree",
+    description="Get hierarchical tree structure of a directory",
+    tags=["File Editor"]
+)
+async def get_directory_tree(data: dict, user: User = Depends(get_current_user)):
+    """Get directory tree structure"""
+    try:
+        workflow_id = data.get("workflow_id")
+        path = data.get("path", "")
+        max_depth = data.get("max_depth", 3)
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        result = manager.get_tree_structure(path, max_depth)
+        return {"success": True, **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting directory tree: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/read",
+    summary="Read File",
+    description="Read the content of a file",
+    tags=["File Editor"]
+)
+async def read_file_content(data: dict, user: User = Depends(get_current_user)):
+    """Read a file's content"""
+    try:
+        workflow_id = data.get("workflow_id")
+        file_path = data.get("file_path")
+        
+        if not file_path:
+            raise HTTPException(status_code=400, detail="file_path is required")
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        result = manager.read_file(file_path)
+        return {"success": True, **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/create-change",
+    summary="Create File Change",
+    description="Create a pending file change for approval",
+    tags=["File Editor"]
+)
+async def create_file_change(data: dict, user: User = Depends(get_current_user)):
+    """Create a pending file change"""
+    try:
+        workflow_id = data.get("workflow_id")
+        file_path = data.get("file_path")
+        operation = data.get("operation")  # create, update, delete
+        new_content = data.get("new_content")
+        
+        if not file_path or not operation:
+            raise HTTPException(status_code=400, detail="file_path and operation are required")
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        change = manager.create_change(file_path, operation, new_content)
+        return {"success": True, "change": change.to_dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating file change: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/changes",
+    summary="Get Changes",
+    description="Get all pending changes",
+    tags=["File Editor"]
+)
+async def get_file_changes(data: dict, user: User = Depends(get_current_user)):
+    """Get pending changes"""
+    try:
+        workflow_id = data.get("workflow_id")
+        status = data.get("status")
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        changes = manager.get_changes(status)
+        return {"success": True, "changes": changes}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting changes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/approve",
+    summary="Approve Change",
+    description="Approve and apply a pending change",
+    tags=["File Editor"]
+)
+async def approve_file_change(data: dict, user: User = Depends(get_current_user)):
+    """Approve and apply a change"""
+    try:
+        workflow_id = data.get("workflow_id")
+        change_id = data.get("change_id")
+        
+        if not change_id:
+            raise HTTPException(status_code=400, detail="change_id is required")
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        result = manager.approve_change(change_id)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error approving change: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/reject",
+    summary="Reject Change",
+    description="Reject a pending change",
+    tags=["File Editor"]
+)
+async def reject_file_change(data: dict, user: User = Depends(get_current_user)):
+    """Reject a pending change"""
+    try:
+        workflow_id = data.get("workflow_id")
+        change_id = data.get("change_id")
+        
+        if not change_id:
+            raise HTTPException(status_code=400, detail="change_id is required")
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        result = manager.reject_change(change_id)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error rejecting change: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/rollback",
+    summary="Rollback Change",
+    description="Rollback a previously applied change",
+    tags=["File Editor"]
+)
+async def rollback_file_change(data: dict, user: User = Depends(get_current_user)):
+    """Rollback an applied change"""
+    try:
+        workflow_id = data.get("workflow_id")
+        change_id = data.get("change_id")
+        
+        if not change_id:
+            raise HTTPException(status_code=400, detail="change_id is required")
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        result = manager.rollback_change(change_id)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error rolling back change: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/create-directory",
+    summary="Create Directory",
+    description="Create a new directory",
+    tags=["File Editor"]
+)
+async def create_new_directory(data: dict, user: User = Depends(get_current_user)):
+    """Create a new directory"""
+    try:
+        workflow_id = data.get("workflow_id")
+        dir_path = data.get("dir_path")
+        
+        if not dir_path:
+            raise HTTPException(status_code=400, detail="dir_path is required")
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        result = manager.create_directory(dir_path)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating directory: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/move",
+    summary="Move File/Directory",
+    description="Move or rename a file or directory",
+    tags=["File Editor"]
+)
+async def move_file_or_directory(data: dict, user: User = Depends(get_current_user)):
+    """Move or rename a file/directory"""
+    try:
+        workflow_id = data.get("workflow_id")
+        old_path = data.get("old_path")
+        new_path = data.get("new_path")
+        
+        if not old_path or not new_path:
+            raise HTTPException(status_code=400, detail="old_path and new_path are required")
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        result = manager.move_file(old_path, new_path)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error moving file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/file-editor/search",
+    summary="Search Files",
+    description="Search for files by name pattern",
+    tags=["File Editor"]
+)
+async def search_files(data: dict, user: User = Depends(get_current_user)):
+    """Search for files"""
+    try:
+        workflow_id = data.get("workflow_id")
+        query = data.get("query")
+        path = data.get("path", "")
+        case_sensitive = data.get("case_sensitive", False)
+        
+        if not query:
+            raise HTTPException(status_code=400, detail="query is required")
+        
+        workflow = await db.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+        manager = editor_data["manager"]
+        
+        matches = manager.search_files(query, path, case_sensitive)
+        return {"success": True, "matches": matches, "count": len(matches)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error searching files: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

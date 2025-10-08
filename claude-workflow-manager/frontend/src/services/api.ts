@@ -1083,5 +1083,84 @@ export const deploymentApi = {
     api.get(`/api/deployments/${deploymentId}/logs/${logId}`),
 };
 
+// File Editor API
+export const fileEditorApi = {
+  initEditor: (workflowId: string) =>
+    api.post('/api/file-editor/init', { workflow_id: workflowId }),
+
+  browseDirectory: (workflowId: string, path: string = '', includeHidden: boolean = false) =>
+    api.post('/api/file-editor/browse', {
+      workflow_id: workflowId,
+      path,
+      include_hidden: includeHidden,
+    }),
+
+  getTree: (workflowId: string, path: string = '', maxDepth: number = 3) =>
+    api.post('/api/file-editor/tree', {
+      workflow_id: workflowId,
+      path,
+      max_depth: maxDepth,
+    }),
+
+  readFile: (workflowId: string, filePath: string) =>
+    api.post('/api/file-editor/read', {
+      workflow_id: workflowId,
+      file_path: filePath,
+    }),
+
+  createChange: (workflowId: string, filePath: string, operation: 'create' | 'update' | 'delete', newContent?: string) =>
+    api.post('/api/file-editor/create-change', {
+      workflow_id: workflowId,
+      file_path: filePath,
+      operation,
+      new_content: newContent,
+    }),
+
+  getChanges: (workflowId: string, status?: string) =>
+    api.post('/api/file-editor/changes', {
+      workflow_id: workflowId,
+      status,
+    }),
+
+  approveChange: (workflowId: string, changeId: string) =>
+    api.post('/api/file-editor/approve', {
+      workflow_id: workflowId,
+      change_id: changeId,
+    }),
+
+  rejectChange: (workflowId: string, changeId: string) =>
+    api.post('/api/file-editor/reject', {
+      workflow_id: workflowId,
+      change_id: changeId,
+    }),
+
+  rollbackChange: (workflowId: string, changeId: string) =>
+    api.post('/api/file-editor/rollback', {
+      workflow_id: workflowId,
+      change_id: changeId,
+    }),
+
+  createDirectory: (workflowId: string, dirPath: string) =>
+    api.post('/api/file-editor/create-directory', {
+      workflow_id: workflowId,
+      dir_path: dirPath,
+    }),
+
+  moveFile: (workflowId: string, oldPath: string, newPath: string) =>
+    api.post('/api/file-editor/move', {
+      workflow_id: workflowId,
+      old_path: oldPath,
+      new_path: newPath,
+    }),
+
+  searchFiles: (workflowId: string, query: string, path: string = '', caseSensitive: boolean = false) =>
+    api.post('/api/file-editor/search', {
+      workflow_id: workflowId,
+      query,
+      path,
+      case_sensitive: caseSensitive,
+    }),
+};
+
 // Export the base axios instance as default for direct API calls
 export default api;
