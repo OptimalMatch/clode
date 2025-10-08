@@ -174,6 +174,13 @@ class MultiAgentOrchestrator:
         agent = Agent(name, system_prompt, role, use_tools)
         self.agents[name] = agent
         tool_status = "auto-detected" if use_tools is None else ("enabled" if use_tools else "disabled")
+        
+        # Use print() to ensure output appears in Docker logs
+        print(f"✅ Added agent '{name}' with role {role.value}")
+        print(f"   Tools: {tool_status} → use_tools={agent.use_tools}")
+        print(f"   System prompt snippet: {system_prompt[:150]}...")
+        
+        # Also log via logger
         logger.info(f"✅ Added agent '{name}' with role {role.value}")
         logger.info(f"   Tools: {tool_status} → use_tools={agent.use_tools}")
         logger.info(f"   System prompt snippet: {system_prompt[:150]}...")
