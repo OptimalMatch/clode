@@ -271,7 +271,20 @@ class MultiAgentOrchestrator:
                 # Write .mcp.json file
                 with open(mcp_config_path, 'w') as f:
                     json.dump(mcp_config, f, indent=2)
-                logger.info(f"Created .mcp.json for agent {agent.name} at {mcp_config_path}")
+                
+                logger.info(f"📝 Created .mcp.json for agent {agent.name} at {mcp_config_path}")
+                logger.info(f"   Python: {sys.executable}")
+                logger.info(f"   MCP Server: {mcp_server_path}")
+                logger.info(f"   Backend URL: {backend_url}")
+                logger.info(f"   CWD exists: {os.path.exists(self.cwd)}")
+                logger.info(f"   .mcp.json exists: {os.path.exists(mcp_config_path)}")
+                
+                # Read back and verify
+                with open(mcp_config_path, 'r') as f:
+                    verified_config = json.load(f)
+                    logger.info(f"   .mcp.json contents: {json.dumps(verified_config, indent=2)}")
+            else:
+                logger.warning(f"⚠️ No cwd set for agent {agent.name}, MCP tools will not be available")
             
             # Configure options for this agent
             options = ClaudeAgentOptions(
@@ -284,7 +297,10 @@ class MultiAgentOrchestrator:
             # It will automatically read .mcp.json from the cwd
             reply_parts = []
             logger.info(f"🔧 Initializing ClaudeSDKClient for agent {agent.name} with cwd={self.cwd}")
+            logger.info(f"   System prompt length: {len(agent.system_prompt)} chars")
+            logger.info(f"   Permission mode: bypassPermissions")
             async with ClaudeSDKClient(options=options) as client:
+                logger.info(f"✅ ClaudeSDKClient initialized successfully for agent {agent.name}")
                 # Send the query
                 await client.query(full_message)
                 
