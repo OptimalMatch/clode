@@ -281,28 +281,32 @@ class MultiAgentOrchestrator:
             reply_parts = []
             tool_calls_seen = []
             
+            # Create ClaudeAgentOptions with MCP server configuration
+            options = ClaudeAgentOptions(
+                system_prompt=agent.system_prompt,
+                cwd=self.cwd or "/tmp",
+                permission_mode='bypassPermissions',
+                mcp_servers={
+                    "workflow-manager": {
+                        "type": "http",
+                        "url": "http://claude-workflow-mcp:8003/mcp",
+                        "headers": {}
+                    }
+                },
+                allowed_tools=[
+                    "mcp__workflow-manager__editor_browse_directory",
+                    "mcp__workflow-manager__editor_read_file",
+                    "mcp__workflow-manager__editor_create_change",
+                    "mcp__workflow-manager__editor_get_changes",
+                    "mcp__workflow-manager__editor_search_files"
+                ],
+                max_turns=10
+            )
+            
             # Use query() with HTTP MCP server configuration
             async for msg in query(
                 prompt=generate_prompt(),
-                options={
-                    "systemPrompt": agent.system_prompt,
-                    "cwd": self.cwd or "/tmp",
-                    "mcpServers": {
-                        "workflow-manager": {
-                            "type": "http",
-                            "url": "http://claude-workflow-mcp:8003/mcp",
-                            "headers": {}
-                        }
-                    },
-                    "allowedTools": [
-                        "mcp__workflow-manager__editor_browse_directory",
-                        "mcp__workflow-manager__editor_read_file",
-                        "mcp__workflow-manager__editor_create_change",
-                        "mcp__workflow-manager__editor_get_changes",
-                        "mcp__workflow-manager__editor_search_files"
-                    ],
-                    "maxTurns": 10
-                }
+                options=options
             ):
                 # Handle different message types
                 if msg.get("type") == "system" and msg.get("subtype") == "init":
