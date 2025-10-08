@@ -250,30 +250,38 @@ class MultiAgentOrchestrator:
             full_message = f"Context:\n{context}\n\nTask:\n{message}"
         
         try:
-            # Get the path to mcp_server.py (same directory as this file)
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            mcp_server_path = os.path.join(current_dir, "mcp_server.py")
-            
-            # Get backend URL for MCP server to connect to
-            backend_url = os.getenv("BACKEND_URL", "http://localhost:8005")
-            
-            # Configure options for this agent with MCP server access
-            options = ClaudeAgentOptions(
-                system_prompt=agent.system_prompt,
-                permission_mode='bypassPermissions',  # Auto-accept for orchestration
-                cwd=self.cwd,
-                mcpServers={
-                    "workflow-manager": {
-                        "command": sys.executable,  # Use current Python interpreter
-                        "args": [mcp_server_path],
-                        "env": {
-                            "BACKEND_URL": backend_url
+            # Create .mcp.json file in the working directory to configure MCP servers
+            if self.cwd:
+                mcp_config_path = os.path.join(self.cwd, ".mcp.json")
+                mcp_server_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_server.py")
+                backend_url = os.getenv("BACKEND_URL", "http://localhost:8005")
+                
+                mcp_config = {
+                    "mcpServers": {
+                        "workflow-manager": {
+                            "command": sys.executable,
+                            "args": [mcp_server_path],
+                            "env": {
+                                "BACKEND_URL": backend_url
+                            }
                         }
                     }
                 }
+                
+                # Write .mcp.json file
+                with open(mcp_config_path, 'w') as f:
+                    json.dump(mcp_config, f, indent=2)
+                logger.info(f"Created .mcp.json for agent {agent.name} at {mcp_config_path}")
+            
+            # Configure options for this agent
+            options = ClaudeAgentOptions(
+                system_prompt=agent.system_prompt,
+                permission_mode='bypassPermissions',  # Auto-accept for orchestration
+                cwd=self.cwd
             )
             
             # Use ClaudeSDKClient for tool capabilities
+            # It will automatically read .mcp.json from the cwd
             reply_parts = []
             async with ClaudeSDKClient(options=options) as client:
                 # Send the query

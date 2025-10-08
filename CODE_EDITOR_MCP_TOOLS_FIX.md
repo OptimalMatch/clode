@@ -36,39 +36,49 @@ options = ClaudeAgentOptions(
 
 ## Solution
 
-Updated `agent_orchestrator.py` to configure the MCP server in the agent options:
+Updated `agent_orchestrator.py` to configure the MCP server via `.mcp.json` file:
+
+Since `ClaudeAgentOptions` doesn't support the `mcpServers` parameter in Python SDK, we create a `.mcp.json` file in the agent's working directory. The SDK automatically reads this file and configures the MCP servers.
 
 ```python
-# Get the path to mcp_server.py (same directory as this file)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-mcp_server_path = os.path.join(current_dir, "mcp_server.py")
-
-# Get backend URL for MCP server to connect to
-backend_url = os.getenv("BACKEND_URL", "http://localhost:8005")
-
-# Configure options for this agent with MCP server access
-options = ClaudeAgentOptions(
-    system_prompt=agent.system_prompt,
-    permission_mode='bypassPermissions',
-    cwd=self.cwd,
-    mcpServers={
-        "workflow-manager": {
-            "command": sys.executable,  # Use current Python interpreter
-            "args": [mcp_server_path],
-            "env": {
-                "BACKEND_URL": backend_url
+# Create .mcp.json file in the working directory to configure MCP servers
+if self.cwd:
+    mcp_config_path = os.path.join(self.cwd, ".mcp.json")
+    mcp_server_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_server.py")
+    backend_url = os.getenv("BACKEND_URL", "http://localhost:8005")
+    
+    mcp_config = {
+        "mcpServers": {
+            "workflow-manager": {
+                "command": sys.executable,
+                "args": [mcp_server_path],
+                "env": {
+                    "BACKEND_URL": backend_url
+                }
             }
         }
     }
+    
+    # Write .mcp.json file
+    with open(mcp_config_path, 'w') as f:
+        json.dump(mcp_config, f, indent=2)
+
+# Configure options - ClaudeSDKClient will read .mcp.json from cwd
+options = ClaudeAgentOptions(
+    system_prompt=agent.system_prompt,
+    permission_mode='bypassPermissions',
+    cwd=self.cwd
 )
 ```
 
 ## How It Works
 
-1. **SDK spawns MCP server**: When an agent is created, the SDK launches `mcp_server.py` as a subprocess
-2. **MCP server connects to backend**: The MCP server uses `BACKEND_URL` to connect to the FastAPI backend
-3. **Tools exposed to agent**: The MCP server's tools (editor_browse_directory, editor_read_file, editor_create_change, etc.) become available to the agent
-4. **Agent uses tools**: The agent can now call `editor_create_change` to create pending changes for approval
+1. **Create .mcp.json**: Before creating the agent, we write a `.mcp.json` file in the working directory (cloned repo)
+2. **SDK reads configuration**: When `ClaudeSDKClient` initializes with `cwd`, it automatically reads `.mcp.json` from that directory
+3. **SDK spawns MCP server**: The SDK launches `mcp_server.py` as a subprocess based on the configuration
+4. **MCP server connects to backend**: The MCP server uses `BACKEND_URL` to connect to the FastAPI backend
+5. **Tools exposed to agent**: The MCP server's tools (editor_browse_directory, editor_read_file, editor_create_change, etc.) become available to the agent
+6. **Agent uses tools**: The agent can now call `mcp__workflow-manager__editor_create_change` to create pending changes for approval
 
 ## Benefits
 
@@ -132,8 +142,9 @@ Still needed:
 **After fix:**
 ```
 "I'll use the editor_create_change tool to create a pending change..."
-[Agent calls mcp__workflow-manager__editor_create_change]
+[Agent calls mcp__workflow-manager__editor_create_change with workflow_id and file details]
 [Pending change created in the approval queue]
+[Change appears in the "Changes" tab for review/approval]
 ```
 
 ## Related Files
