@@ -61,6 +61,7 @@ import {
 import { useSnackbar } from 'notistack';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
 import api from '../services/api';
+import InlineDiffViewer from './InlineDiffViewer';
 
 interface FileItem {
   name: string;
@@ -308,6 +309,22 @@ const CodeEditorPage: React.FC = () => {
       loadChanges();
     } catch (error: any) {
       enqueueSnackbar(error.response?.data?.detail || 'Failed to reject change', { variant: 'error' });
+    }
+  };
+  
+  const handleRollbackChange = async (changeId: string) => {
+    try {
+      await api.post('/api/file-editor/rollback', {
+        workflow_id: selectedWorkflow,
+        change_id: changeId,
+      });
+      enqueueSnackbar('Change rolled back', { variant: 'success' });
+      loadChanges();
+      if (selectedFile) {
+        await loadFileContent(selectedFile.path);
+      }
+    } catch (error: any) {
+      enqueueSnackbar(error.response?.data?.detail || 'Failed to rollback change', { variant: 'error' });
     }
   };
   
@@ -897,19 +914,47 @@ const CodeEditorPage: React.FC = () => {
               </Breadcrumbs>
               
               <List dense>
-                {items.map((item) => (
-                  <ListItem key={item.path} disablePadding>
-                    <ListItemButton onClick={() => handleItemClick(item)}>
-                      <ListItemIcon>
-                        {item.type === 'directory' ? <FolderIcon color="primary" /> : <FileIcon />}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={item.name}
-                        secondary={item.type === 'file' ? `${(item.size || 0)} bytes` : ''}
-                      />
-                    </ListItemButton>
-                  </ListItem>
-                ))}
+                {items.map((item) => {
+                  // Check if this file has pending changes
+                  const fileHasChanges = pendingChanges.some(
+                    change => change.file_path === item.path || change.file_path.endsWith(item.name)
+                  );
+                  const changeCount = pendingChanges.filter(
+                    change => change.file_path === item.path || change.file_path.endsWith(item.name)
+                  ).length;
+                  
+                  return (
+                    <ListItem key={item.path} disablePadding>
+                      <ListItemButton onClick={() => handleItemClick(item)}>
+                        <ListItemIcon>
+                          <Badge 
+                            badgeContent={fileHasChanges ? changeCount : 0}
+                            color="warning"
+                            overlap="circular"
+                          >
+                            {item.type === 'directory' ? <FolderIcon color="primary" /> : <FileIcon />}
+                          </Badge>
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={
+                            <Box display="flex" alignItems="center" gap={1}>
+                              <span>{item.name}</span>
+                              {fileHasChanges && (
+                                <Chip 
+                                  label="Modified" 
+                                  size="small" 
+                                  color="warning" 
+                                  sx={{ height: 20, fontSize: '0.7rem' }}
+                                />
+                              )}
+                            </Box>
+                          }
+                          secondary={item.type === 'file' ? `${(item.size || 0)} bytes` : ''}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                })}
               </List>
               
               {items.length === 0 && !loading && (
@@ -1009,65 +1054,79 @@ const CodeEditorPage: React.FC = () => {
                   <Box sx={{ p: 2, height: '100%', overflow: 'auto' }}>
                     {pendingChanges.length === 0 ? (
                       <Box textAlign="center" py={4}>
-                        <Typography color="text.secondary">
+                        <Typography variant="h5" color="text.secondary" gutterBottom>
                           No pending changes
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Changes created by AI agents will appear here for review
                         </Typography>
                       </Box>
                     ) : (
-                      <List>
+                      <Box>
+                        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="h6">
+                            Pending Changes ({pendingChanges.length})
+                          </Typography>
+                          <Box display="flex" gap={1}>
+                            <Button
+                              variant="contained"
+                              color="success"
+                              size="small"
+                              startIcon={<CheckCircle />}
+                              onClick={() => {
+                                // Approve all pending changes
+                                pendingChanges.forEach(change => handleApproveChange(change.change_id));
+                              }}
+                              disabled={pendingChanges.length === 0}
+                            >
+                              Approve All
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              size="small"
+                              startIcon={<Cancel />}
+                              onClick={() => {
+                                // Reject all pending changes
+                                pendingChanges.forEach(change => handleRejectChange(change.change_id));
+                              }}
+                              disabled={pendingChanges.length === 0}
+                            >
+                              Reject All
+                            </Button>
+                          </Box>
+                        </Box>
+                        
                         {pendingChanges.map((change) => (
-                          <Card key={change.change_id} sx={{ mb: 2 }}>
-                            <CardContent>
-                              <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                                <Typography variant="h6">{change.file_path}</Typography>
-                                <Chip
-                                  label={change.operation}
-                                  color={
-                                    change.operation === 'create' ? 'success' :
-                                    change.operation === 'delete' ? 'error' : 'primary'
-                                  }
-                                  size="small"
-                                />
-                              </Box>
-                              
-                              <Typography variant="body2" color="text.secondary" gutterBottom>
-                                {new Date(change.timestamp).toLocaleString()}
-                              </Typography>
-                              
-                              <Box display="flex" gap={1} mt={2}>
-                                <Button
-                                  startIcon={<CheckCircle />}
-                                  onClick={() => handleApproveChange(change.change_id)}
-                                  variant="contained"
-                                  color="success"
-                                  size="small"
-                                >
-                                  Approve
-                                </Button>
-                                <Button
-                                  startIcon={<Cancel />}
-                                  onClick={() => handleRejectChange(change.change_id)}
-                                  variant="outlined"
-                                  color="error"
-                                  size="small"
-                                >
-                                  Reject
-                                </Button>
-                                <Button
-                                  startIcon={<Edit />}
-                                  onClick={() => {
-                                    setSelectedChange(change);
-                                    setChangeDetailsDialog(true);
-                                  }}
-                                  size="small"
-                                >
-                                  View Details
-                                </Button>
-                              </Box>
-                            </CardContent>
-                          </Card>
+                          <InlineDiffViewer
+                            key={change.change_id}
+                            change={{
+                              id: change.change_id,
+                              file_path: change.file_path,
+                              operation: change.operation as 'create' | 'update' | 'delete',
+                              old_content: change.old_content || '',
+                              new_content: change.new_content || '',
+                              status: change.status as 'pending' | 'approved' | 'rejected',
+                              timestamp: change.timestamp,
+                            }}
+                            onApprove={handleApproveChange}
+                            onReject={handleRejectChange}
+                            onRollback={handleRollbackChange}
+                            onViewFile={(filePath) => {
+                              // Navigate to the file
+                              const pathParts = filePath.split('/');
+                              const fileName = pathParts[pathParts.length - 1];
+                              const fileItem: FileItem = {
+                                name: fileName,
+                                path: filePath,
+                                type: 'file',
+                              };
+                              handleItemClick(fileItem);
+                              setTabValue(0); // Switch to editor tab
+                            }}
+                          />
                         ))}
-                      </List>
+                      </Box>
                     )}
                   </Box>
                 )}

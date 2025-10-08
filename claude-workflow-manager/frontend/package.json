@@ -31,7 +31,10 @@
     "@types/react": "^18.2.47",
     "@types/react-dom": "^18.2.18",
     "@types/node": "^20.10.8",
-    "web-vitals": "^3.5.1"
+    "web-vitals": "^3.5.1",
+    "@monaco-editor/react": "^4.6.0",
+    "monaco-editor": "^0.45.0",
+    "react-diff-viewer-continued": "^3.4.0"
   },
   "scripts": {
     "start": "DANGEROUSLY_DISABLE_HOST_CHECK=true react-scripts start",
