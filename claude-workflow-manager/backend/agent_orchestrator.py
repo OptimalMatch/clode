@@ -276,26 +276,32 @@ class MultiAgentOrchestrator:
                     }
                 }
                 
-                # Write .mcp.json file
+                # Write .mcp.json file in cwd
                 with open(mcp_config_path, 'w') as f:
                     json.dump(mcp_config, f, indent=2)
                 
-                print(f"📝 Created .mcp.json for agent {agent.name} at {mcp_config_path}")
+                # ALSO write to standard Claude location (where terminal has it)
+                claude_home_path = "/home/claude/.claude/.mcp.json"
+                Path("/home/claude/.claude").mkdir(parents=True, exist_ok=True)
+                with open(claude_home_path, 'w') as f:
+                    json.dump(mcp_config, f, indent=2)
+                
+                print(f"📝 Created .mcp.json for agent {agent.name}")
+                print(f"   Location 1 (cwd): {mcp_config_path}")
+                print(f"   Location 2 (home): {claude_home_path}")
                 print(f"   MCP Server: claude-workflow-mcp:8002 (TCP)")
                 print(f"   Transport: netcat (nc)")
-                print(f"   CWD: {self.cwd}")
-                print(f"   .mcp.json exists: {os.path.exists(mcp_config_path)}")
+                print(f"   Both files exist: {os.path.exists(mcp_config_path) and os.path.exists(claude_home_path)}")
                 
                 # Read back and verify
                 with open(mcp_config_path, 'r') as f:
                     verified_config = json.load(f)
                     print(f"   .mcp.json contents: {json.dumps(verified_config, indent=2)}")
                 
-                logger.info(f"📝 Created .mcp.json for agent {agent.name} at {mcp_config_path}")
+                logger.info(f"📝 Created .mcp.json for agent {agent.name} at {mcp_config_path} and {claude_home_path}")
                 logger.info(f"   MCP Server: claude-workflow-mcp:8002 (TCP)")
                 logger.info(f"   Transport: netcat (nc)")
                 logger.info(f"   CWD: {self.cwd}")
-                logger.info(f"   .mcp.json exists: {os.path.exists(mcp_config_path)}")
             else:
                 print(f"⚠️ No cwd set for agent {agent.name}, MCP tools will not be available")
                 logger.warning(f"⚠️ No cwd set for agent {agent.name}, MCP tools will not be available")
@@ -320,6 +326,23 @@ class MultiAgentOrchestrator:
             logger.info(f"   Permission mode: bypassPermissions")
             async with ClaudeSDKClient(options=options) as client:
                 print(f"✅ ClaudeSDKClient initialized successfully for agent {agent.name}")
+                
+                # Check what MCP servers/tools were discovered
+                try:
+                    # Try to access client internals to see what was discovered
+                    if hasattr(client, '_mcp_servers'):
+                        print(f"   MCP servers discovered: {list(client._mcp_servers.keys()) if client._mcp_servers else 'None'}")
+                    if hasattr(client, 'tools'):
+                        tool_count = len(client.tools) if client.tools else 0
+                        print(f"   Tools available: {tool_count}")
+                        if client.tools:
+                            tool_names = [t.get('name', 'unknown') for t in client.tools[:5]]  # First 5
+                            print(f"   Sample tools: {tool_names}")
+                    else:
+                        print(f"   ⚠️ Client has no 'tools' attribute")
+                except Exception as e:
+                    print(f"   ⚠️ Could not inspect client: {e}")
+                
                 logger.info(f"✅ ClaudeSDKClient initialized successfully for agent {agent.name}")
                 # Send the query
                 await client.query(full_message)
