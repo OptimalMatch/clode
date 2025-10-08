@@ -62,6 +62,7 @@ import { useSnackbar } from 'notistack';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
 import api from '../services/api';
 import InlineDiffViewer from './InlineDiffViewer';
+import Editor from '@monaco-editor/react';
 
 interface FileItem {
   name: string;
@@ -101,6 +102,49 @@ interface ExecutionStatus {
   currentAgent?: string;
   progress?: string;
 }
+
+// Helper function to detect language from file extension
+const getLanguageFromFilename = (filename: string): string => {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  const languageMap: { [key: string]: string } = {
+    'js': 'javascript',
+    'jsx': 'javascript',
+    'ts': 'typescript',
+    'tsx': 'typescript',
+    'json': 'json',
+    'py': 'python',
+    'java': 'java',
+    'cpp': 'cpp',
+    'c': 'c',
+    'cs': 'csharp',
+    'go': 'go',
+    'rs': 'rust',
+    'php': 'php',
+    'rb': 'ruby',
+    'swift': 'swift',
+    'kt': 'kotlin',
+    'scala': 'scala',
+    'r': 'r',
+    'sql': 'sql',
+    'html': 'html',
+    'htm': 'html',
+    'xml': 'xml',
+    'css': 'css',
+    'scss': 'scss',
+    'sass': 'sass',
+    'less': 'less',
+    'md': 'markdown',
+    'yaml': 'yaml',
+    'yml': 'yaml',
+    'sh': 'shell',
+    'bash': 'bash',
+    'dockerfile': 'dockerfile',
+    'graphql': 'graphql',
+    'vue': 'vue',
+    'svelte': 'svelte',
+  };
+  return languageMap[ext] || 'plaintext';
+};
 
 const CodeEditorPage: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
@@ -1003,26 +1047,57 @@ const CodeEditorPage: React.FC = () => {
                       )}
                     </Box>
                     
-                    <TextField
-                      multiline
-                      fullWidth
-                      value={fileContent}
-                      onChange={(e) => setFileContent(e.target.value)}
-                      disabled={!selectedFile || fileContent === '[Binary file]'}
-                      sx={{
-                        flexGrow: 1,
-                        '& .MuiInputBase-root': {
-                          height: '100%',
-                          alignItems: 'flex-start',
-                          fontFamily: 'monospace',
-                          fontSize: '14px',
-                        },
-                        '& textarea': {
-                          height: '100% !important',
-                          overflow: 'auto !important',
-                        },
-                      }}
-                    />
+                    <Box sx={{ flexGrow: 1, height: '100%' }}>
+                      <Editor
+                        height="100%"
+                        language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
+                        value={fileContent}
+                        onChange={(value) => setFileContent(value || '')}
+                        theme="vs-dark"
+                        options={{
+                          readOnly: !selectedFile || fileContent === '[Binary file]',
+                          minimap: { enabled: true },
+                          fontSize: 14,
+                          lineNumbers: 'on',
+                          renderWhitespace: 'selection',
+                          scrollBeyondLastLine: false,
+                          automaticLayout: true,
+                          tabSize: 2,
+                          wordWrap: 'on',
+                          formatOnPaste: true,
+                          formatOnType: true,
+                          folding: true,
+                          lineDecorationsWidth: 10,
+                          lineNumbersMinChars: 3,
+                          glyphMargin: true,
+                          scrollbar: {
+                            vertical: 'auto',
+                            horizontal: 'auto',
+                            useShadows: true,
+                            verticalScrollbarSize: 10,
+                            horizontalScrollbarSize: 10,
+                          },
+                          suggest: {
+                            enabled: true,
+                            showKeywords: true,
+                            showSnippets: true,
+                          },
+                          quickSuggestions: true,
+                          parameterHints: { enabled: true },
+                          cursorBlinking: 'smooth',
+                          cursorSmoothCaretAnimation: 'on',
+                          smoothScrolling: true,
+                          contextmenu: true,
+                          mouseWheelZoom: true,
+                          bracketPairColorization: { enabled: true },
+                        }}
+                        loading={
+                          <Box display="flex" alignItems="center" justifyContent="center" height="100%">
+                            <CircularProgress />
+                          </Box>
+                        }
+                      />
+                    </Box>
                   </Box>
                 )}
                 
