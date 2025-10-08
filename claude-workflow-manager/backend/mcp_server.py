@@ -37,11 +37,19 @@ logger = logging.getLogger("claude-workflow-mcp")
 class ClaudeWorkflowMCPServer:
     """MCP Server for Claude Workflow Manager backend API"""
     
-    def __init__(self, base_url: str = None):
+    def __init__(self, base_url: str = None, access_token: str = None):
         if base_url is None:
             base_url = os.getenv("BACKEND_URL", "http://localhost:8005")
+        if access_token is None:
+            access_token = os.getenv("ACCESS_TOKEN", "")
         self.base_url = base_url.rstrip('/')
-        self.client = httpx.AsyncClient(timeout=30.0)
+        self.access_token = access_token
+        
+        # Create client with auth header if token is provided
+        headers = {}
+        if self.access_token:
+            headers["Authorization"] = f"Bearer {self.access_token}"
+        self.client = httpx.AsyncClient(timeout=30.0, headers=headers)
         
     async def close(self):
         """Close the HTTP client"""

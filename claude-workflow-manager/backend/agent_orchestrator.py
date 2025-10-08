@@ -13,6 +13,7 @@ from enum import Enum
 import asyncio
 import logging
 import os
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -249,11 +250,27 @@ class MultiAgentOrchestrator:
             full_message = f"Context:\n{context}\n\nTask:\n{message}"
         
         try:
-            # Configure options for this agent
+            # Get the path to mcp_server.py (same directory as this file)
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            mcp_server_path = os.path.join(current_dir, "mcp_server.py")
+            
+            # Get backend URL for MCP server to connect to
+            backend_url = os.getenv("BACKEND_URL", "http://localhost:8005")
+            
+            # Configure options for this agent with MCP server access
             options = ClaudeAgentOptions(
                 system_prompt=agent.system_prompt,
                 permission_mode='bypassPermissions',  # Auto-accept for orchestration
-                cwd=self.cwd
+                cwd=self.cwd,
+                mcpServers={
+                    "workflow-manager": {
+                        "command": sys.executable,  # Use current Python interpreter
+                        "args": [mcp_server_path],
+                        "env": {
+                            "BACKEND_URL": backend_url
+                        }
+                    }
+                }
             )
             
             # Use ClaudeSDKClient for tool capabilities
