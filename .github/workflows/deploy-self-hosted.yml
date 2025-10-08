@@ -22,6 +22,11 @@ on:
         options:
           - 'max-plan'
           - 'api-key'
+      force_rebuild:
+        description: 'Force rebuild without cache (ignore Docker layer cache)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   DOCKER_BUILDKIT: 1
@@ -44,6 +49,7 @@ jobs:
         echo "DEPLOYMENT_TIME=$(date -u +%Y%m%d_%H%M%S)" >> $GITHUB_ENV
         echo "GIT_SHA=${GITHUB_SHA:0:8}" >> $GITHUB_ENV
         echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+        echo "🔨 Force rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}"
 
     - name: Verify system requirements
       run: |
@@ -274,7 +280,15 @@ jobs:
           docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-terminal-base:$BASE_IMAGE_TAG" || true
           docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-frontend-base:$BASE_IMAGE_TAG" || true
           
-          docker compose -f docker-compose.yml -f docker-compose.fast.yml build --parallel
+          # Check if force rebuild is requested
+          if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
+            echo "🔨 Force rebuild requested - building without cache..."
+            docker compose -f docker-compose.yml -f docker-compose.fast.yml build --no-cache --parallel
+          else
+            echo "🔨 Building with cache..."
+            docker compose -f docker-compose.yml -f docker-compose.fast.yml build --parallel
+          fi
+          
           docker compose -f docker-compose.yml -f docker-compose.fast.yml up -d
         else
           echo "🏗️ Base images not available, using full build..."
