@@ -30,6 +30,13 @@ from mcp.types import (
     EmbeddedResource,
 )
 
+# Import for SSE/HTTP server
+from starlette.applications import Starlette
+from starlette.responses import StreamingResponse, JSONResponse
+from starlette.routing import Route
+from starlette.middleware.cors import CORSMiddleware
+import uvicorn
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("claude-workflow-mcp")
@@ -1327,6 +1334,104 @@ class ClaudeWorkflowMCPServer:
             return [TextContent(type="text", text=f"Failed to monitor terminal session: {str(e)}")]
 
 
+def create_http_app(workflow_server: 'ClaudeWorkflowMCPServer') -> Starlette:
+    """Create HTTP/SSE application for MCP protocol"""
+    
+    async def handle_mcp_request(request):
+        """Handle HTTP POST MCP requests (JSON-RPC)"""
+        try:
+            body = await request.json()
+            method = body.get("method")
+            params = body.get("params", {})
+            msg_id = body.get("id")
+            
+            logger.info(f"📥 HTTP MCP Request: {method}")
+            
+            if method == "tools/list":
+                tools = workflow_server.get_available_tools()
+                response = {
+                    "jsonrpc": "2.0",
+                    "result": {"tools": [tool.model_dump() for tool in tools]},
+                    "id": msg_id
+                }
+            elif method == "tools/call":
+                tool_name = params.get("name")
+                arguments = params.get("arguments", {})
+                result = await workflow_server.call_tool(tool_name, arguments)
+                response = {
+                    "jsonrpc": "2.0",
+                    "result": {"content": [c.model_dump() for c in result]},
+                    "id": msg_id
+                }
+            else:
+                response = {
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32601, "message": f"Method not found: {method}"},
+                    "id": msg_id
+                }
+            
+            return JSONResponse(response)
+            
+        except Exception as e:
+            logger.error(f"❌ Error handling HTTP MCP request: {e}")
+            return JSONResponse({
+                "jsonrpc": "2.0",
+                "error": {"code": -32603, "message": f"Internal error: {str(e)}"},
+                "id": body.get("id") if hasattr(body, 'get') else None
+            }, status_code=500)
+    
+    async def handle_sse(request):
+        """Handle SSE connection for MCP protocol"""
+        async def event_generator():
+            try:
+                logger.info("🔌 SSE client connected")
+                
+                # Send initial connection event
+                yield f"data: {json.dumps({'type': 'connected', 'server': 'claude-workflow-manager'})}\n\n"
+                
+                # Keep connection alive and handle requests
+                # In a real implementation, this would handle bidirectional communication
+                # For now, clients should use HTTP POST for requests
+                while True:
+                    await asyncio.sleep(30)  # Keep-alive ping
+                    yield f"data: {json.dumps({'type': 'ping'})}\n\n"
+                    
+            except asyncio.CancelledError:
+                logger.info("🔌 SSE client disconnected")
+            except Exception as e:
+                logger.error(f"❌ SSE error: {e}")
+        
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+    
+    # Create routes
+    routes = [
+        Route("/mcp", handle_mcp_request, methods=["POST"]),
+        Route("/sse", handle_sse, methods=["GET"]),
+        Route("/health", lambda request: JSONResponse({"status": "healthy"}), methods=["GET"]),
+    ]
+    
+    app = Starlette(debug=True, routes=routes)
+    
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    return app
+
+
 async def main():
     """Main entry point for the MCP server"""
     # Initialize the workflow MCP server
@@ -1361,12 +1466,29 @@ async def main():
     # Check for TCP mode via environment variable
     use_tcp = os.getenv('MCP_TCP_MODE', 'false').lower() == 'true'
     tcp_port = int(os.getenv('MCP_TCP_PORT', '8001'))
+    http_port = int(os.getenv('MCP_HTTP_PORT', '8003'))
     
     if use_tcp:
-        # TCP Server mode - Simple line-based protocol
-        logger.info(f"🚀 Starting MCP TCP Server on port {tcp_port}")
+        # Run BOTH TCP (for terminal) and HTTP (for agent SDK) servers
+        logger.info(f"🚀 Starting MCP Servers:")
+        logger.info(f"   - TCP Server on port {tcp_port} (for terminal)")
+        logger.info(f"   - HTTP Server on port {http_port} (for agent SDK)")
         logger.info(f"📊 Available tools: {len(workflow_server.get_available_tools())}")
         
+        # Create HTTP app
+        http_app = create_http_app(workflow_server)
+        
+        # Start HTTP server in background
+        config = uvicorn.Config(http_app, host="0.0.0.0", port=http_port, log_level="info")
+        http_server = uvicorn.Server(config)
+        
+        async def run_http_server():
+            await http_server.serve()
+        
+        # Start HTTP server task
+        http_task = asyncio.create_task(run_http_server())
+        
+        # Define TCP server handler
         async def handle_client(reader, writer):
             logger.info(f"🔌 New TCP client connected from {writer.get_extra_info('peername')}")
             
@@ -1535,9 +1657,15 @@ async def main():
         # Start TCP server
         tcp_server = await asyncio.start_server(handle_client, '0.0.0.0', tcp_port)
         logger.info(f"🌐 MCP TCP Server listening on 0.0.0.0:{tcp_port}")
+        logger.info(f"✅ Both servers started successfully!")
         
-        async with tcp_server:
-            await tcp_server.serve_forever()
+        # Run both servers concurrently
+        async def run_tcp_server():
+            async with tcp_server:
+                await tcp_server.serve_forever()
+        
+        # Run both servers until cancelled
+        await asyncio.gather(http_task, run_tcp_server())
             
     else:
         # Running in stdio mode (spawned as subprocess or interactive)

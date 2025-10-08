@@ -130,12 +130,14 @@ services:
       BACKEND_URL: http://backend:8000
       MCP_TCP_MODE: "true"
       MCP_TCP_PORT: "8002"
+      MCP_HTTP_PORT: "8003"
     depends_on:
       - backend
     volumes:
       - ./backend:/app/src  # Development volume mount
     ports:
-      - "8002:8002"  # Expose MCP server on host port 8002
+      - "8002:8002"  # Expose MCP TCP server (for terminal)
+      - "8003:8003"  # Expose MCP HTTP server (for agent SDK)
     networks:
       - claude-network
     command: ["python", "/app/src/mcp_server.py"]

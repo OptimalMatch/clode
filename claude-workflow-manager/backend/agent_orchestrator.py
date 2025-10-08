@@ -254,121 +254,105 @@ class MultiAgentOrchestrator:
     
     async def _call_claude_with_tools(self, agent: Agent, message: str, context: Optional[str] = None,
                                       stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
-        """Call Claude via Agent SDK for tool use capabilities (message-level streaming)"""
+        """Call Claude via Agent SDK query() with HTTP MCP server"""
         full_message = message
         if context:
             full_message = f"Context:\n{context}\n\nTask:\n{message}"
         
         try:
-            # Create .mcp.json file in the working directory to configure MCP servers
-            if self.cwd:
-                mcp_config_path = os.path.join(self.cwd, ".mcp.json")
-                
-                # Connect to existing TCP MCP server (same approach as terminal container)
-                # Use netcat to connect to the already-running TCP server at claude-workflow-mcp:8002
-                mcp_config = {
-                    "mcpServers": {
-                        "workflow-manager": {
-                            "command": "nc",
-                            "args": ["claude-workflow-mcp", "8002"],
-                            "description": "Claude Workflow Manager - Access editor_* tools, workflows, and orchestration"
-                        }
+            print(f"🔧 Initializing Claude query for agent {agent.name}")
+            print(f"   System prompt length: {len(agent.system_prompt)} chars")
+            print(f"   MCP Server: http://claude-workflow-mcp:8003/mcp (HTTP)")
+            
+            logger.info(f"🔧 Initializing Claude query for agent {agent.name}")
+            logger.info(f"   System prompt length: {len(agent.system_prompt)} chars")
+            logger.info(f"   MCP Server: http://claude-workflow-mcp:8003/mcp (HTTP)")
+            
+            # Create async generator for streaming input (required for MCP tools)
+            async def generate_prompt():
+                yield {
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": full_message
                     }
                 }
-                
-                # Write .mcp.json file in cwd
-                with open(mcp_config_path, 'w') as f:
-                    json.dump(mcp_config, f, indent=2)
-                
-                # ALSO write to standard Claude location (where terminal has it)
-                claude_home_path = "/home/claude/.claude/.mcp.json"
-                Path("/home/claude/.claude").mkdir(parents=True, exist_ok=True)
-                with open(claude_home_path, 'w') as f:
-                    json.dump(mcp_config, f, indent=2)
-                
-                print(f"📝 Created .mcp.json for agent {agent.name}")
-                print(f"   Location 1 (cwd): {mcp_config_path}")
-                print(f"   Location 2 (home): {claude_home_path}")
-                print(f"   MCP Server: claude-workflow-mcp:8002 (TCP)")
-                print(f"   Transport: netcat (nc)")
-                print(f"   Both files exist: {os.path.exists(mcp_config_path) and os.path.exists(claude_home_path)}")
-                
-                # Read back and verify
-                with open(mcp_config_path, 'r') as f:
-                    verified_config = json.load(f)
-                    print(f"   .mcp.json contents: {json.dumps(verified_config, indent=2)}")
-                
-                logger.info(f"📝 Created .mcp.json for agent {agent.name} at {mcp_config_path} and {claude_home_path}")
-                logger.info(f"   MCP Server: claude-workflow-mcp:8002 (TCP)")
-                logger.info(f"   Transport: netcat (nc)")
-                logger.info(f"   CWD: {self.cwd}")
-            else:
-                print(f"⚠️ No cwd set for agent {agent.name}, MCP tools will not be available")
-                logger.warning(f"⚠️ No cwd set for agent {agent.name}, MCP tools will not be available")
             
-            # Configure options for this agent
-            options = ClaudeAgentOptions(
-                system_prompt=agent.system_prompt,
-                permission_mode='bypassPermissions',  # Auto-accept for orchestration
-                cwd=self.cwd
-            )
-            
-            print(f"🔧 Initializing ClaudeSDKClient for agent {agent.name}")
-            print(f"   cwd={self.cwd}")
-            print(f"   System prompt length: {len(agent.system_prompt)} chars")
-            print(f"   Permission mode: bypassPermissions")
-            
-            # Use ClaudeSDKClient for tool capabilities
-            # It will automatically read .mcp.json from the cwd
             reply_parts = []
-            logger.info(f"🔧 Initializing ClaudeSDKClient for agent {agent.name} with cwd={self.cwd}")
-            logger.info(f"   System prompt length: {len(agent.system_prompt)} chars")
-            logger.info(f"   Permission mode: bypassPermissions")
-            async with ClaudeSDKClient(options=options) as client:
-                print(f"✅ ClaudeSDKClient initialized successfully for agent {agent.name}")
+            tool_calls_seen = []
+            
+            # Use query() with HTTP MCP server configuration
+            async for msg in query(
+                prompt=generate_prompt(),
+                options={
+                    "systemPrompt": agent.system_prompt,
+                    "cwd": self.cwd or "/tmp",
+                    "mcpServers": {
+                        "workflow-manager": {
+                            "type": "http",
+                            "url": "http://claude-workflow-mcp:8003/mcp",
+                            "headers": {}
+                        }
+                    },
+                    "allowedTools": [
+                        "mcp__workflow-manager__editor_browse_directory",
+                        "mcp__workflow-manager__editor_read_file",
+                        "mcp__workflow-manager__editor_create_change",
+                        "mcp__workflow-manager__editor_get_changes",
+                        "mcp__workflow-manager__editor_search_files"
+                    ],
+                    "maxTurns": 10
+                }
+            ):
+                # Handle different message types
+                if msg.get("type") == "system" and msg.get("subtype") == "init":
+                    # Check MCP server status
+                    mcp_servers = msg.get("mcp_servers", [])
+                    for mcp in mcp_servers:
+                        status = mcp.get("status", "unknown")
+                        name = mcp.get("name", "unknown")
+                        print(f"   MCP Server '{name}': {status}")
+                        logger.info(f"   MCP Server '{name}': {status}")
+                        if status != "connected":
+                            logger.warning(f"⚠️ MCP Server '{name}' failed to connect: {status}")
                 
-                # Check what MCP servers/tools were discovered
-                try:
-                    # Try to access client internals to see what was discovered
-                    if hasattr(client, '_mcp_servers'):
-                        print(f"   MCP servers discovered: {list(client._mcp_servers.keys()) if client._mcp_servers else 'None'}")
-                    if hasattr(client, 'tools'):
-                        tool_count = len(client.tools) if client.tools else 0
-                        print(f"   Tools available: {tool_count}")
-                        if client.tools:
-                            tool_names = [t.get('name', 'unknown') for t in client.tools[:5]]  # First 5
-                            print(f"   Sample tools: {tool_names}")
-                    else:
-                        print(f"   ⚠️ Client has no 'tools' attribute")
-                except Exception as e:
-                    print(f"   ⚠️ Could not inspect client: {e}")
-                
-                logger.info(f"✅ ClaudeSDKClient initialized successfully for agent {agent.name}")
-                # Send the query
-                await client.query(full_message)
-                
-                # Stream responses as they arrive (message-level)
-                async for msg in client.receive_response():
-                    # Log tool usage if present
-                    if hasattr(msg, 'tool_use'):
-                        logger.info(f"🔨 Agent {agent.name} using tool: {msg.tool_use}")
-                    
-                    # Extract text content from AssistantMessage
-                    if isinstance(msg, AssistantMessage):
-                        for block in msg.content:
-                            if isinstance(block, TextBlock):
-                                chunk = block.text
-                                reply_parts.append(chunk)
-                                # Stream callback for updates
+                elif msg.get("type") == "message":
+                    # Extract text from assistant messages
+                    message_data = msg.get("message", {})
+                    if message_data.get("role") == "assistant":
+                        content = message_data.get("content", [])
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                text = block.get("text", "")
+                                reply_parts.append(text)
                                 if stream_callback:
-                                    await stream_callback(agent.name, chunk)
-                            # Log if there are tool use blocks
-                            elif hasattr(block, 'type') and block.type == 'tool_use':
-                                logger.info(f"🔨 Agent {agent.name} called tool: {block.name if hasattr(block, 'name') else 'unknown'}")
-                                if hasattr(block, 'input'):
-                                    logger.info(f"   Args: {block.input}")
+                                    await stream_callback(agent.name, text)
+                            elif isinstance(block, dict) and block.get("type") == "tool_use":
+                                tool_name = block.get("name", "unknown")
+                                tool_input = block.get("input", {})
+                                tool_calls_seen.append(tool_name)
+                                print(f"🔨 Agent {agent.name} called tool: {tool_name}")
+                                logger.info(f"🔨 Agent {agent.name} called tool: {tool_name}")
+                                logger.info(f"   Args: {tool_input}")
+                
+                elif msg.get("type") == "result":
+                    # Final result
+                    if msg.get("subtype") == "success":
+                        result_text = msg.get("result", "")
+                        if result_text and result_text not in reply_parts:
+                            reply_parts.append(result_text)
+                    elif msg.get("subtype") == "error_during_execution":
+                        error = msg.get("error", "Unknown error")
+                        logger.error(f"❌ Execution error: {error}")
             
             reply = "".join(reply_parts) if reply_parts else "No response"
+            
+            if tool_calls_seen:
+                print(f"✅ Agent {agent.name} used {len(tool_calls_seen)} tool(s): {', '.join(set(tool_calls_seen))}")
+                logger.info(f"✅ Agent {agent.name} used {len(tool_calls_seen)} tool(s): {', '.join(set(tool_calls_seen))}")
+            else:
+                print(f"⚠️ Agent {agent.name} did not use any MCP tools")
+                logger.warning(f"⚠️ Agent {agent.name} did not use any MCP tools")
             
             # Update history
             agent.add_to_history("user", full_message)
