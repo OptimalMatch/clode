@@ -253,17 +253,15 @@ class MultiAgentOrchestrator:
             # Create .mcp.json file in the working directory to configure MCP servers
             if self.cwd:
                 mcp_config_path = os.path.join(self.cwd, ".mcp.json")
-                mcp_server_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_server.py")
-                backend_url = os.getenv("BACKEND_URL", "http://localhost:8005")
                 
+                # Connect to existing TCP MCP server (same approach as terminal container)
+                # Use netcat to connect to the already-running TCP server at claude-workflow-mcp:8002
                 mcp_config = {
                     "mcpServers": {
                         "workflow-manager": {
-                            "command": sys.executable,
-                            "args": [mcp_server_path],
-                            "env": {
-                                "BACKEND_URL": backend_url
-                            }
+                            "command": "nc",
+                            "args": ["claude-workflow-mcp", "8002"],
+                            "description": "Claude Workflow Manager - Access editor_* tools, workflows, and orchestration"
                         }
                     }
                 }
@@ -273,10 +271,9 @@ class MultiAgentOrchestrator:
                     json.dump(mcp_config, f, indent=2)
                 
                 logger.info(f"📝 Created .mcp.json for agent {agent.name} at {mcp_config_path}")
-                logger.info(f"   Python: {sys.executable}")
-                logger.info(f"   MCP Server: {mcp_server_path}")
-                logger.info(f"   Backend URL: {backend_url}")
-                logger.info(f"   CWD exists: {os.path.exists(self.cwd)}")
+                logger.info(f"   MCP Server: claude-workflow-mcp:8002 (TCP)")
+                logger.info(f"   Transport: netcat (nc)")
+                logger.info(f"   CWD: {self.cwd}")
                 logger.info(f"   .mcp.json exists: {os.path.exists(mcp_config_path)}")
                 
                 # Read back and verify
