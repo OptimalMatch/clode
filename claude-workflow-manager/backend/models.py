@@ -442,6 +442,7 @@ class OrchestrationAgent(BaseModel):
     name: str
     system_prompt: str
     role: AgentRole = AgentRole.WORKER
+    use_tools: Optional[bool] = None  # None = auto-detect from system prompt
 
 class SequentialPipelineRequest(BaseModel):
     """Request for sequential pipeline execution"""
