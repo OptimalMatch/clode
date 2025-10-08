@@ -1078,7 +1078,6 @@ const CodeEditorPage: React.FC = () => {
                             horizontalScrollbarSize: 10,
                           },
                           suggest: {
-                            enabled: true,
                             showKeywords: true,
                             showSnippets: true,
                           },
