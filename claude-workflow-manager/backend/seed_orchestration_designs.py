@@ -726,8 +726,71 @@ async def seed_sample_designs(force=False, silent=False, db=None, only_missing=F
         git_repos=[]
     )
     
+    # Design 9: Simple Code Editor (for Code Editor Page)
+    design9 = OrchestrationDesign(
+        name="Simple Code Editor",
+        description="Simple 2-agent design for code editing tasks. Works with Code Editor page's editor_* tools. Handles creating, updating, and fixing code efficiently.",
+        blocks=[
+            {
+                "id": "block-1",
+                "type": "sequential",
+                "position": {"x": 50, "y": 50},
+                "data": {
+                    "label": "Code Analysis and Editing",
+                    "agents": [
+                        {
+                            "id": "agent-1",
+                            "name": "Code Analyzer",
+                            "system_prompt": """Analyze the user's request and understand what needs to be done.
+
+You MUST use these editor tools (workflow_id will be provided in the task):
+- editor_browse_directory(workflow_id, path) - Browse files to understand structure
+- editor_search_files(workflow_id, query) - Search for relevant files
+- editor_read_file(workflow_id, file_path) - Read files to understand current state
+
+Your job:
+1. Browse the repository to understand the structure
+2. Search for and read relevant files
+3. Understand what needs to be created/updated/fixed
+4. Provide a clear, concise plan
+
+Output: A brief plan of what will be done (2-3 sentences).""",
+                            "role": "specialist"
+                        },
+                        {
+                            "id": "agent-2", 
+                            "name": "Code Editor",
+                            "system_prompt": """Execute the code changes based on the analysis.
+
+You MUST use these editor tools (workflow_id will be provided in the task):
+- editor_read_file(workflow_id, file_path) - Read current file content
+- editor_create_change(workflow_id, file_path, operation, new_content) - Create changes
+
+Operations:
+- operation='create' for new files
+- operation='update' for modifying existing files (provide FULL new content)
+- operation='delete' for removing files
+
+Your job:
+1. For updates: Read the current file first with editor_read_file
+2. Make the necessary changes (minimal and targeted)
+3. Use editor_create_change to create the pending change
+4. For updates, provide the FULL new file content, not just changes
+
+Output: Brief summary of what changes were created (1-2 sentences).""",
+                            "role": "specialist"
+                        }
+                    ],
+                    "task": "Analyze code requirements and implement changes using editor tools"
+                }
+            }
+        ],
+        connections=[],
+        git_repos=[]
+    )
+    
     # Insert all designs
-    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8]
+    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8, design9]
     
     # Filter to only missing designs if requested
     if only_missing:
@@ -769,6 +832,7 @@ async def seed_sample_designs(force=False, silent=False, db=None, only_missing=F
         print("  6. Research Paper Analysis Pipeline - Agent-level connections")
         print("  7. Full-Stack Development Workflow - Multi-stage complete cycle")
         print("  8. Self-Improving Prompt Optimization - Reflection agent analyzing prompts")
+        print("  9. Simple Code Editor - Optimized for Code Editor page file operations")
         print("\n💡 Next steps:")
         print("  1. Start the backend server (if not already running)")
         print("  2. Open the Orchestration Designer in the UI")
