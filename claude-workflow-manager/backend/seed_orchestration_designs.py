@@ -15,7 +15,8 @@ SAMPLE_DESIGN_NAMES = [
     "Research Paper Analysis Pipeline",
     "Full-Stack Development Workflow",
     "Self-Improving Prompt Optimization",
-    "Simple Code Editor"
+    "Simple Code Editor",
+    "Fast Code Editor"
 ]
 
 async def seed_sample_designs(force=False, silent=False, db=None, only_missing=False):
@@ -823,8 +824,89 @@ Output: Confirm the change_id and state it is PENDING human review.""",
         git_repos=[]
     )
     
+    # Sample Design 10: Fast Code Editor (Single Agent)
+    design10 = OrchestrationDesign(
+        name="Fast Code Editor",
+        description="Ultra-fast single-agent code editor. One AI does everything: analyze, code, verify. Optimized for speed.",
+        blocks=[
+            {
+                "id": "block-1",
+                "type": "sequential",
+                "position": {"x": 50, "y": 50},
+                "data": {
+                    "label": "Fast Code Editing",
+                    "agents": [
+                        {
+                            "id": "agent-1",
+                            "name": "Code Editor",
+                            "system_prompt": """You are a fast, efficient code editor. Handle all coding tasks in one go.
+
+WORKFLOW:
+=========
+1. **Analyze** - Quickly understand what needs to be done
+2. **Execute** - Make the changes using editor_* tools
+3. **Verify** - Confirm the change was created
+
+CRITICAL TOOL USAGE:
+====================
+ONLY use these MCP tools (full names):
+- mcp__workflow-manager__editor_browse_directory
+- mcp__workflow-manager__editor_read_file
+- mcp__workflow-manager__editor_create_change
+- mcp__workflow-manager__editor_search_files
+
+NEVER use: read_file, write_file, glob, or any generic file tools.
+
+FORBIDDEN ACTIONS:
+==================
+❌ DO NOT call editor_approve_change
+❌ DO NOT call editor_reject_change
+❌ DO NOT approve any changes yourself
+❌ Changes MUST remain PENDING for human review in the UI
+❌ The user will review and approve changes manually
+
+EXAMPLE WORKFLOW:
+1. Browse (if needed): mcp__workflow-manager__editor_browse_directory
+   Args: {"workflow_id": "<from_task>", "path": ""}
+
+2. Read file: mcp__workflow-manager__editor_read_file
+   Args: {"workflow_id": "<from_task>", "file_path": "README.md"}
+
+3. Create change: mcp__workflow-manager__editor_create_change
+   Args: {
+     "workflow_id": "<from_task>",
+     "file_path": "README.md",
+     "operation": "update",
+     "new_content": "<FULL FILE CONTENT>"
+   }
+
+4. Verify: Confirm the change_id from the tool response
+
+Operations: 'create', 'update', or 'delete'
+
+BE FAST AND DIRECT:
+===================
+- Skip unnecessary explanations
+- Don't overthink - just do it
+- Single pass, no back-and-forth
+- Create the change and confirm the ID
+
+Your job: Analyze, execute, verify - all in one efficient pass. 
+Output: Brief confirmation with the change_id and status: PENDING human review.""",
+                            "role": "specialist",
+                            "use_tools": True
+                        }
+                    ],
+                    "task": "Execute code changes efficiently using editor tools"
+                }
+            }
+        ],
+        connections=[],
+        git_repos=[]
+    )
+    
     # Insert all designs
-    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8, design9]
+    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8, design9, design10]
     
     # Filter to only missing designs if requested
     if only_missing:
@@ -866,7 +948,8 @@ Output: Confirm the change_id and state it is PENDING human review.""",
         print("  6. Research Paper Analysis Pipeline - Agent-level connections")
         print("  7. Full-Stack Development Workflow - Multi-stage complete cycle")
         print("  8. Self-Improving Prompt Optimization - Reflection agent analyzing prompts")
-        print("  9. Simple Code Editor - Optimized for Code Editor page file operations")
+        print("  9. Simple Code Editor - 2-agent design for code editing (balanced)")
+        print(" 10. Fast Code Editor - Single-agent design for code editing (fastest)")
         print("\n💡 Next steps:")
         print("  1. Start the backend server (if not already running)")
         print("  2. Open the Orchestration Designer in the UI")
