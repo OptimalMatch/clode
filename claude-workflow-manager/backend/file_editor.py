@@ -156,7 +156,10 @@ class FileEditorManager:
                      new_content: Optional[str] = None,
                      old_path: Optional[str] = None) -> FileChange:
         """
-        Create a new file change for approval
+        Create a new file change - applies immediately but tracks as pending for review/undo
+        
+        This follows the Cursor/Windsurf model where changes are applied immediately,
+        then shown as "pending" for the user to approve (keep) or reject (undo).
         
         Args:
             file_path: Target file path
@@ -172,7 +175,7 @@ class FileEditorManager:
         change_id = str(uuid.uuid4())
         full_path = os.path.join(self.repo_path, file_path)
         
-        # Get old content if file exists
+        # Get old content if file exists (for potential undo)
         old_content = None
         if operation in ["update", "delete"] and os.path.exists(full_path):
             try:
@@ -181,13 +184,31 @@ class FileEditorManager:
             except UnicodeDecodeError:
                 old_content = None  # Binary file
         
+        # **APPLY THE CHANGE IMMEDIATELY** (Cursor/Windsurf model)
+        try:
+            if operation == "create" or operation == "update":
+                # Create parent directories if needed
+                os.makedirs(os.path.dirname(full_path) if os.path.dirname(full_path) else self.repo_path, exist_ok=True)
+                with open(full_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content or "")
+            
+            elif operation == "delete":
+                if os.path.exists(full_path):
+                    os.remove(full_path)
+        
+        except Exception as e:
+            # If application fails, raise error immediately
+            raise RuntimeError(f"Failed to apply change: {str(e)}")
+        
+        # Track as "pending" for UI review/undo purposes
         change = FileChange(
             change_id=change_id,
             file_path=file_path,
             operation=operation,
             old_content=old_content,
             new_content=new_content,
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.utcnow().isoformat(),
+            status="pending"  # Pending = shown in UI for review, can be undone
         )
         
         self.changes[change_id] = change
@@ -203,7 +224,12 @@ class FileEditorManager:
         return [c.to_dict() for c in changes]
     
     def approve_change(self, change_id: str) -> Dict:
-        """Approve and apply a change"""
+        """
+        Approve a change - marks as approved (change already applied)
+        
+        In the Cursor/Windsurf model, changes are already applied to the file.
+        Approving just confirms the user wants to keep the change.
+        """
         if change_id not in self.changes:
             raise ValueError(f"Change not found: {change_id}")
         
@@ -212,45 +238,57 @@ class FileEditorManager:
         if change.status != "pending":
             raise ValueError(f"Change already {change.status}")
         
-        # Apply the change
-        full_path = os.path.join(self.repo_path, change.file_path)
+        # Change is already applied to file - just mark as approved
+        change.status = "approved"
+        self.change_history.append(change)
+        del self.changes[change_id]
         
-        try:
-            if change.operation == "create":
-                # Create parent directories if needed
-                os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, 'w', encoding='utf-8') as f:
-                    f.write(change.new_content or "")
-            
-            elif change.operation == "update":
-                with open(full_path, 'w', encoding='utf-8') as f:
-                    f.write(change.new_content or "")
-            
-            elif change.operation == "delete":
-                if os.path.exists(full_path):
-                    os.remove(full_path)
-            
-            change.status = "approved"
-            self.change_history.append(change)
-            del self.changes[change_id]
-            
-            return {"success": True, "message": "Change applied successfully"}
-        
-        except Exception as e:
-            change.status = "error"
-            return {"success": False, "error": str(e)}
+        return {"success": True, "message": "Change approved (already applied)"}
     
     def reject_change(self, change_id: str) -> Dict:
-        """Reject a pending change"""
+        """
+        Reject a pending change - undoes the change that was already applied
+        
+        In the Cursor/Windsurf model, rejecting means reverting the file
+        to its state before this change was applied.
+        """
         if change_id not in self.changes:
             raise ValueError(f"Change not found: {change_id}")
         
         change = self.changes[change_id]
-        change.status = "rejected"
-        self.change_history.append(change)
-        del self.changes[change_id]
+        full_path = os.path.join(self.repo_path, change.file_path)
         
-        return {"success": True, "message": "Change rejected"}
+        try:
+            # Undo the change by restoring the old content
+            if change.operation == "create":
+                # Remove the created file
+                if os.path.exists(full_path):
+                    os.remove(full_path)
+            
+            elif change.operation == "update":
+                # Restore old content
+                if change.old_content is not None:
+                    with open(full_path, 'w', encoding='utf-8') as f:
+                        f.write(change.old_content)
+                else:
+                    # No old content (binary file?) - just log warning
+                    print(f"Warning: Cannot restore old content for {change.file_path}")
+            
+            elif change.operation == "delete":
+                # Restore deleted file
+                if change.old_content is not None:
+                    os.makedirs(os.path.dirname(full_path) if os.path.dirname(full_path) else self.repo_path, exist_ok=True)
+                    with open(full_path, 'w', encoding='utf-8') as f:
+                        f.write(change.old_content)
+            
+            change.status = "rejected"
+            self.change_history.append(change)
+            del self.changes[change_id]
+            
+            return {"success": True, "message": "Change rejected and reverted"}
+        
+        except Exception as e:
+            return {"success": False, "error": f"Failed to revert change: {str(e)}"}
     
     def rollback_change(self, change_id: str) -> Dict:
         """Rollback a previously applied change"""
