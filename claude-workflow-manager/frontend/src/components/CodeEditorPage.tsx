@@ -753,8 +753,8 @@ const CodeEditorPage: React.FC = () => {
           result = await executeBlockParallel(contextualAgents, blockTask, gitRepo, signal);
           break;
         case 'routing':
-          const router = contextualAgents.find(a => a.role === 'manager' || a.name.toLowerCase().includes('router'));
-          const specialists = contextualAgents.filter(a => a.role === 'specialist');
+          const router = contextualAgents.find((a: any) => a.role === 'manager' || a.name.toLowerCase().includes('router'));
+          const specialists = contextualAgents.filter((a: any) => a.role === 'specialist');
           if (router && specialists.length > 0) {
             result = await executeBlockRouting(router, specialists, blockTask, gitRepo, signal);
           } else {
