@@ -95,6 +95,8 @@ class FileEditorManager:
                 
                 item_path = os.path.join(full_path, item)
                 rel_path = os.path.join(path, item) if path else item
+                # Normalize to forward slashes for cross-platform compatibility
+                rel_path = rel_path.replace('\\', '/')
                 
                 is_dir = os.path.isdir(item_path)
                 size = 0 if is_dir else os.path.getsize(item_path)
@@ -381,6 +383,8 @@ class FileEditorManager:
                 if fnmatch.fnmatch(compare_name, f"*{query}*"):
                     full_path = os.path.join(root, filename)
                     rel_path = os.path.relpath(full_path, self.repo_path)
+                    # Normalize to forward slashes for cross-platform compatibility
+                    rel_path = rel_path.replace('\\', '/')
                     
                     matches.append({
                         "name": filename,
@@ -458,6 +462,8 @@ class FileEditorManager:
                 
                 item_path = os.path.join(full_path, item)
                 rel_path = os.path.join(path, item) if path else item
+                # Normalize to forward slashes for cross-platform compatibility
+                rel_path = rel_path.replace('\\', '/')
                 is_dir = os.path.isdir(item_path)
                 
                 node = {

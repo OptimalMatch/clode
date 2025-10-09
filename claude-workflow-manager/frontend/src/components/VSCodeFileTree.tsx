@@ -96,26 +96,36 @@ const VSCodeFileTreeItem: React.FC<{
   const isDirectory = item.type === 'directory';
   const isSelected = selectedPath === item.path;
   
+  // Normalize paths to use forward slashes for comparison (Windows compatibility)
+  const normalizePath = (path: string) => path.replace(/\\/g, '/');
+  const normalizedItemPath = normalizePath(item.path);
+  
   // Check if this file or directory has pending changes
   const fileHasChanges = isDirectory
-    ? pendingChanges?.some(change => 
+    ? pendingChanges?.some(change => {
+        const normalizedChangePath = normalizePath(change.file_path);
         // For directories: check if any change is within this directory
-        change.file_path.startsWith(item.path + '/') || change.file_path === item.path
-      )
-    : pendingChanges?.some(change => 
+        return normalizedChangePath.startsWith(normalizedItemPath + '/') || 
+               normalizedChangePath === normalizedItemPath;
+      })
+    : pendingChanges?.some(change => {
+        const normalizedChangePath = normalizePath(change.file_path);
         // For files: exact match
-        change.file_path === item.path
-      );
+        return normalizedChangePath === normalizedItemPath;
+      });
   
   const changeCount = isDirectory
-    ? pendingChanges?.filter(change => 
+    ? pendingChanges?.filter(change => {
+        const normalizedChangePath = normalizePath(change.file_path);
         // Count all changes within this directory
-        change.file_path.startsWith(item.path + '/') || change.file_path === item.path
-      ).length || 0
-    : pendingChanges?.filter(change => 
+        return normalizedChangePath.startsWith(normalizedItemPath + '/') || 
+               normalizedChangePath === normalizedItemPath;
+      }).length || 0
+    : pendingChanges?.filter(change => {
+        const normalizedChangePath = normalizePath(change.file_path);
         // Count changes for this specific file
-        change.file_path === item.path
-      ).length || 0;
+        return normalizedChangePath === normalizedItemPath;
+      }).length || 0;
 
   const handleClick = () => {
     if (isDirectory) {
