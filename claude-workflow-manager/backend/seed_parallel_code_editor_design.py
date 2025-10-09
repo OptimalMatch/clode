@@ -70,7 +70,7 @@ Example output:
 - Agent 4: Tasks 16-20 (api.py, utils.py)
 
 Ready for parallel execution!""",
-                            "role": "coordinator",
+                            "role": "manager",
                             "use_tools": True
                         }
                     ]
@@ -107,7 +107,7 @@ Operations:
 - "delete": Remove file (no new_content)
 
 Work quickly and accurately. Changes remain pending for human review.""",
-                            "role": "executor",
+                            "role": "worker",
                             "use_tools": True
                         },
                         {
@@ -136,7 +136,7 @@ Operations:
 - "delete": Remove file (no new_content)
 
 Work quickly and accurately. Changes remain pending for human review.""",
-                            "role": "executor",
+                            "role": "worker",
                             "use_tools": True
                         },
                         {
@@ -165,7 +165,7 @@ Operations:
 - "delete": Remove file (no new_content)
 
 Work quickly and accurately. Changes remain pending for human review.""",
-                            "role": "executor",
+                            "role": "worker",
                             "use_tools": True
                         },
                         {
@@ -194,7 +194,7 @@ Operations:
 - "delete": Remove file (no new_content)
 
 Work quickly and accurately. Changes remain pending for human review.""",
-                            "role": "executor",
+                            "role": "worker",
                             "use_tools": True
                         }
                     ]
