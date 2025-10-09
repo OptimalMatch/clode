@@ -1619,6 +1619,7 @@ const CodeEditorPage: React.FC = () => {
                           </Box>
                           <Box sx={{ flexGrow: 1 }}>
                             <DiffEditor
+                              key={`${diffChange.change_id}-${diffViewMode}`}
                               height="100%"
                               language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
                               original={diffChange.old_content || ''}
