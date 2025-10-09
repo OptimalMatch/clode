@@ -9,23 +9,31 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
 ### 1. **Automatic Diff Display**
 - AI creates a change via `editor_create_change` tool
 - If the file is currently open, **diff mode activates automatically**
-- Side-by-side comparison: Original (left) vs. Proposed (right)
+- Inline/vertical diff view: Changes shown in context with unchanged lines
+- Red lines (deletions) and green lines (additions) clearly marked
 - No need to switch tabs or navigate away
 
-### 2. **Inline Accept/Reject**
+### 2. **Toggle Between Inline and Side-by-Side Views**
+- **View toggle buttons** in the action bar
+- **Inline view (≡)**: Unified diff with changes shown in context (default)
+- **Side-by-Side view (||)**: Split panes showing original and modified side by side
+- **One-click switching**: Instantly toggle between views
+- **Persistent preference**: Choice maintained during the session
+
+### 3. **Inline Accept/Reject**
 - **Accept** button: Approve and apply the change immediately
 - **Reject** button: Discard the proposed change
 - Action bar at the top with clear visual indicators
 - Changes apply instantly, editor returns to normal mode
 
-### 3. **Monaco DiffEditor**
-- Full syntax highlighting for both versions
-- Line-by-line change indicators (red/green)
-- Side-by-side view with synchronized scrolling
+### 4. **Monaco DiffEditor**
+- Full syntax highlighting for modified code
+- Line-by-line change indicators (red/green with -/+ prefixes)
+- Inline or side-by-side view (user's choice)
 - Minimap shows change locations
-- All Monaco features: folding, search, etc.
+- Overview ruler for quick navigation to changes
 
-### 4. **Smart State Management**
+### 5. **Smart State Management**
 - Automatically detects pending changes for current file
 - Shows most recent pending change if multiple exist
 - Exits diff mode after accept/reject
@@ -48,22 +56,38 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
 └────────────────────────────────────────┘
 ```
 
-### Diff Mode (AI Suggested Change)
+### Diff Mode (AI Suggested Change) - Inline View
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ ✏️ AI Suggested Change  [UPDATE]  [Accept] [Reject]        │
+│ ✏️ AI Suggested Change [UPDATE] [≡][||] [Accept] [Reject] │
 ├────────────────────────────────────────────────────────────┤
-│        ORIGINAL              │         MODIFIED            │
-├──────────────────────────────┼─────────────────────────────┤
-│ 1  # My Project              │ 1  # My Project             │
-│ 2  This is the description   │ 2  This is the description  │
-│ 3                            │ 3                           │
-│ 4  ## Features               │ 4  ## Features              │
-│ 5 -Feature 1                 │ 5 +Feature 1 - Enhanced     │
-│ 6 -Feature 2                 │ 6 +Feature 2 - Improved     │
-│                              │ 7 +Feature 3 - New          │
-└──────────────────────────────┴─────────────────────────────┘
-       Red = Deleted                   Green = Added
+│ 1  # My Project                                            │
+│ 2  This is the description                                 │
+│ 3                                                          │
+│ 4  ## Features                                             │
+│ 5 -Feature 1                              ← Red (deleted)  │
+│ 6 +Feature 1 - Enhanced                   ← Green (added)  │
+│ 7 -Feature 2                              ← Red (deleted)  │
+│ 8 +Feature 2 - Improved                   ← Green (added)  │
+│ 9 +Feature 3 - New                        ← Green (added)  │
+└────────────────────────────────────────────────────────────┘
+     Inline View (≡ button selected) - Changes in context
+
+### Diff Mode - Side-by-Side View
+┌────────────────────────────────────────────────────────────┐
+│ ✏️ AI Suggested Change [UPDATE] [≡][||] [Accept] [Reject] │
+├────────────────────────────────────────────────────────────┤
+│     ORIGINAL          │      MODIFIED                      │
+├───────────────────────┼────────────────────────────────────┤
+│ 1  # My Project       │ 1  # My Project                    │
+│ 2  This is...         │ 2  This is...                      │
+│ 3                     │ 3                                  │
+│ 4  ## Features        │ 4  ## Features                     │
+│ 5 -Feature 1          │ 5 +Feature 1 - Enhanced            │
+│ 6 -Feature 2          │ 6 +Feature 2 - Improved            │
+│                       │ 7 +Feature 3 - New                 │
+└───────────────────────┴────────────────────────────────────┘
+     Side-by-Side View (|| button selected) - Split panes
 ```
 
 ## User Workflow
@@ -76,20 +100,26 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
 4. **Editor AUTOMATICALLY switches to diff mode**:
    - Yellow action bar appears at top
    - "AI Suggested Change" label with operation chip
-   - Side-by-side diff view activates
-   - Original content (left), Proposed content (right)
+   - Inline/vertical diff view activates
+   - Changes shown in context with unchanged lines
    - Accept/Reject buttons ready
 
 5. **User reviews the diff**:
-   - Scrolls through changes (both sides scroll together)
-   - Sees line-by-line comparisons
-   - Red lines = removed, Green lines = added
+   - Scrolls through the unified view (inline mode by default)
+   - Sees line-by-line comparisons inline
+   - Red lines (- prefix) = removed, Green lines (+ prefix) = added
+   
+6. **User can toggle view mode** (optional):
+   - Click **≡ button** for inline/unified view
+   - Click **|| button** for side-by-side view
+   - View instantly switches without losing position
+   - Choice is remembered for the session
 
-6. **User accepts or rejects**:
+7. **User accepts or rejects**:
    - **Click "Accept"**: Change applied, file updated, diff mode exits
    - **Click "Reject"**: Change discarded, original content restored, diff mode exits
 
-7. **Editor returns to normal mode** with updated (or original) content
+8. **Editor returns to normal mode** with updated (or original) content
 
 ## Technical Implementation
 
@@ -99,7 +129,14 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
 ```typescript
 const [showDiff, setShowDiff] = useState(false);
 const [diffChange, setDiffChange] = useState<FileChange | null>(null);
+const [diffViewMode, setDiffViewMode] = useState<'inline' | 'sideBySide'>('inline');
 ```
+
+**diffViewMode State:**
+- `'inline'`: Shows unified/vertical diff (default)
+- `'sideBySide'`: Shows split-pane comparison
+- Persists during the session (doesn't reset between files)
+- Controlled by ToggleButtonGroup in the action bar
 
 #### Auto-Detection useEffect
 ```typescript
@@ -203,15 +240,14 @@ useEffect(() => {
 <DiffEditor
   height="100%"
   language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
-  original={diffChange.old_content || ''}  // Left side
-  modified={diffChange.new_content || ''}  // Right side
+  original={diffChange.old_content || ''}  // Original content
+  modified={diffChange.new_content || ''}  // Modified content
   theme="vs-dark"
   options={{
     readOnly: true,                        // Prevent editing in diff mode
     minimap: { enabled: true },            // Show minimap with change indicators
-    fontSize: 14,                          // Font size for both panes
-    renderSideBySide: true,                // Side-by-side (not inline)
-    enableSplitViewResizing: true,         // Allow resizing left/right panes
+    fontSize: 14,                          // Font size
+    renderSideBySide: false,               // Inline/vertical view (not side-by-side)
     ignoreTrimWhitespace: false,           // Show whitespace changes
     renderOverviewRuler: true,             // Show overview ruler with change indicators
   }}
@@ -219,6 +255,8 @@ useEffect(() => {
 ```
 
 **Note:** `DiffEditor` has a more limited set of options compared to the regular `Editor`. Options like `tabSize`, `lineNumbers`, `wordWrap`, `folding`, etc. are not available in `IDiffEditorConstructionOptions`.
+
+**Inline Mode:** With `renderSideBySide: false`, the diff is displayed vertically with `-` lines (red) for deletions and `+` lines (green) for additions, similar to Git diffs and GitHub's unified view.
 
 ### Action Handlers
 
@@ -264,6 +302,40 @@ const handleRejectChange = async (changeId: string) => {
 6. Editor returns to regular mode
 
 ## UI Elements
+
+### View Toggle Buttons
+
+```tsx
+<ToggleButtonGroup
+  value={diffViewMode}
+  exclusive
+  onChange={(_e: React.MouseEvent<HTMLElement>, newMode: 'inline' | 'sideBySide' | null) => {
+    if (newMode !== null) {
+      setDiffViewMode(newMode);
+    }
+  }}
+  size="small"
+  sx={{ height: 32 }}
+>
+  <ToggleButton value="inline">
+    <Tooltip title="Inline View">
+      <ViewStream sx={{ fontSize: 18 }} />
+    </Tooltip>
+  </ToggleButton>
+  <ToggleButton value="sideBySide">
+    <Tooltip title="Side-by-Side View">
+      <ViewColumn sx={{ fontSize: 18 }} />
+    </Tooltip>
+  </ToggleButton>
+</ToggleButtonGroup>
+```
+
+**Features:**
+- **Exclusive selection**: Only one mode active at a time
+- **Icons**: `ViewStream` (≡) for inline, `ViewColumn` (||) for side-by-side
+- **Tooltips**: Descriptive labels on hover
+- **Visual feedback**: Selected button is highlighted
+- **Null check**: Prevents deselecting both options
 
 ### Action Bar (Diff Mode)
 
@@ -360,7 +432,7 @@ const handleRejectChange = async (changeId: string) => {
 |---------|----------------|-------------------|--------|
 | Inline diff display | ✅ | ✅ | Implemented |
 | Accept/Reject buttons | ✅ | ✅ | Implemented |
-| Side-by-side view | ✅ | ✅ | Implemented |
+| Unified/inline view | ✅ | ✅ | Implemented |
 | Syntax highlighting | ✅ | ✅ | Implemented |
 | Line-by-line changes | ✅ | ✅ | Implemented |
 | Minimap indicators | ✅ | ✅ | Implemented |
@@ -504,11 +576,13 @@ const handleRejectChange = async (changeId: string) => {
 The Code Editor now provides a **Cursor/Windsurf-like inline diff experience**:
 
 ✅ **Auto-detection** - Changes appear instantly when AI modifies current file  
-✅ **Side-by-side diff** - Monaco DiffEditor with full syntax highlighting  
+✅ **Flexible viewing** - Toggle between inline and side-by-side diff views  
+✅ **Monaco DiffEditor** - Full syntax highlighting and professional diff rendering  
 ✅ **One-click actions** - Accept/Reject buttons right in the editor  
 ✅ **Smart state** - Automatically enters/exits diff mode  
+✅ **User choice** - Pick the diff view that works best for you  
 ✅ **Professional UX** - Familiar workflow for modern developers  
 ✅ **Seamless integration** - Works with all existing features  
 
-Developers can now **review and apply AI changes without leaving the editor**, creating a smooth, efficient workflow that feels native and professional! 🎉
+Developers can now **review and apply AI changes without leaving the editor**, with the flexibility to choose between inline (unified, Git-style) or side-by-side (split-pane) diff views, creating a smooth, efficient workflow that feels native and professional! 🎉
 
