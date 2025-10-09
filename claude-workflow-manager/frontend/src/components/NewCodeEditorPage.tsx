@@ -66,7 +66,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor, { DiffEditor, loader } from '@monaco-editor/react';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
 import api from '../services/api';
-import VSCodeFileTree from './VSCodeFileTree';
+import EnhancedFileTree, { getFileIcon } from './EnhancedFileTree';
 import InlineDiffViewer from './InlineDiffViewer';
 
 interface FileItem {
@@ -75,6 +75,16 @@ interface FileItem {
   type: 'file' | 'directory';
   size?: number;
   modified?: string;
+  children?: FileItem[];
+}
+
+interface EditorTab {
+  path: string;
+  name: string;
+  content: string;
+  originalContent: string;
+  isPermanent: boolean;
+  isModified: boolean;
 }
 
 interface FileChange {
@@ -166,6 +176,10 @@ const NewCodeEditorPage: React.FC = () => {
   const [selectedTheme, setSelectedTheme] = useState<string>('vs-dark');
   const [activityBarView, setActivityBarView] = useState<'explorer' | 'search' | 'changes' | 'chat'>('explorer');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Tab system state
+  const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
+  const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
   
   // Chat & Orchestration state
   const [orchestrationDesigns, setOrchestrationDesigns] = useState<OrchestrationDesign[]>([]);
