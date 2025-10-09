@@ -394,12 +394,205 @@ const NewCodeEditorPage: React.FC = () => {
     }
   };
   
-  const handleItemClick = async (item: FileItem) => {
+  const handleItemClick = async (item: FileItem, isDoubleClick: boolean = false) => {
     if (item.type === 'directory') {
-      setCurrentPath(item.path);
-    } else {
+      // Directories are handled by the tree component
+      return;
+    }
+    
+    // Load file content
+    const content = await loadFileContentForTab(item.path);
+    if (content === null) return; // Failed to load
+    
+    const existingTabIndex = openTabs.findIndex(tab => tab.path === item.path);
+    
+    if (existingTabIndex !== -1) {
+      // Tab already exists
+      if (isDoubleClick) {
+        // Make it permanent
+        const updatedTabs = [...openTabs];
+        updatedTabs[existingTabIndex] = { ...updatedTabs[existingTabIndex], isPermanent: true };
+        setOpenTabs(updatedTabs);
+      }
+      setActiveTabIndex(existingTabIndex);
       setSelectedFile(item);
-      await loadFileContent(item.path);
+      setFileContent(openTabs[existingTabIndex].content);
+      setOriginalContent(openTabs[existingTabIndex].originalContent);
+    } else {
+      // Create new tab
+      const newTab: EditorTab = {
+        path: item.path,
+        name: item.name,
+        content,
+        originalContent: content,
+        isPermanent: isDoubleClick,
+        isModified: false,
+      };
+      
+      // Remove any preview tabs if this is a single click
+      if (!isDoubleClick) {
+        const permanentTabs = openTabs.filter(tab => tab.isPermanent);
+        setOpenTabs([...permanentTabs, newTab]);
+        setActiveTabIndex(permanentTabs.length);
+      } else {
+        setOpenTabs([...openTabs, newTab]);
+        setActiveTabIndex(openTabs.length);
+      }
+      
+      setSelectedFile(item);
+      setFileContent(content);
+      setOriginalContent(content);
+    }
+  };
+  
+  const loadFileContentForTab = async (filePath: string): Promise<string | null> => {
+    if (!selectedWorkflow) return null;
+    
+    try {
+      const response = await api.post('/api/file-editor/read', {
+        workflow_id: selectedWorkflow,
+        file_path: filePath,
+      });
+      
+      if (response.data.is_binary) {
+        enqueueSnackbar('Cannot edit binary files', { variant: 'warning' });
+        return '[Binary file]';
+      }
+      return response.data.content || '';
+    } catch (error: any) {
+      enqueueSnackbar(error.response?.data?.detail || 'Failed to load file', { variant: 'error' });
+      return null;
+    }
+  };
+  
+  const handleCloseTab = (index: number) => {
+    const tab = openTabs[index];
+    
+    if (tab.isModified) {
+      if (!window.confirm(`${tab.name} has unsaved changes. Close anyway?`)) {
+        return;
+      }
+    }
+    
+    const newTabs = openTabs.filter((_, i) => i !== index);
+    setOpenTabs(newTabs);
+    
+    if (activeTabIndex === index) {
+      // Switch to adjacent tab
+      if (newTabs.length > 0) {
+        const newIndex = Math.min(index, newTabs.length - 1);
+        setActiveTabIndex(newIndex);
+        setFileContent(newTabs[newIndex].content);
+        setOriginalContent(newTabs[newIndex].originalContent);
+        setSelectedFile({ name: newTabs[newIndex].name, path: newTabs[newIndex].path, type: 'file' });
+      } else {
+        setActiveTabIndex(-1);
+        setSelectedFile(null);
+        setFileContent('');
+        setOriginalContent('');
+      }
+    } else if (activeTabIndex > index) {
+      setActiveTabIndex(activeTabIndex - 1);
+    }
+  };
+  
+  const handleTabClick = (index: number) => {
+    setActiveTabIndex(index);
+    const tab = openTabs[index];
+    setFileContent(tab.content);
+    setOriginalContent(tab.originalContent);
+    setSelectedFile({ name: tab.name, path: tab.path, type: 'file' });
+  };
+  
+  const handleContentChange = (newContent: string) => {
+    setFileContent(newContent);
+    
+    if (activeTabIndex !== -1) {
+      const updatedTabs = [...openTabs];
+      updatedTabs[activeTabIndex] = {
+        ...updatedTabs[activeTabIndex],
+        content: newContent,
+        isModified: newContent !== updatedTabs[activeTabIndex].originalContent,
+      };
+      setOpenTabs(updatedTabs);
+    }
+  };
+  
+  const handleRename = async (oldPath: string, newName: string) => {
+    if (!selectedWorkflow) return;
+    
+    try {
+      await api.post('/api/file-editor/rename', {
+        workflow_id: selectedWorkflow,
+        old_path: oldPath,
+        new_name: newName,
+      });
+      enqueueSnackbar('Renamed successfully', { variant: 'success' });
+      loadDirectory(currentPath);
+      
+      // Update tab if open
+      const tabIndex = openTabs.findIndex(tab => tab.path === oldPath);
+      if (tabIndex !== -1) {
+        const updatedTabs = [...openTabs];
+        const pathParts = oldPath.split('/');
+        pathParts[pathParts.length - 1] = newName;
+        const newPath = pathParts.join('/');
+        updatedTabs[tabIndex] = { ...updatedTabs[tabIndex], name: newName, path: newPath };
+        setOpenTabs(updatedTabs);
+      }
+    } catch (error: any) {
+      enqueueSnackbar(error.response?.data?.detail || 'Failed to rename', { variant: 'error' });
+    }
+  };
+  
+  const handleDeleteFile = async (path: string) => {
+    if (!selectedWorkflow) return;
+    
+    try {
+      await api.post('/api/file-editor/delete', {
+        workflow_id: selectedWorkflow,
+        file_path: path,
+      });
+      enqueueSnackbar('Deleted successfully', { variant: 'success' });
+      loadDirectory(currentPath);
+      
+      // Close tab if open
+      const tabIndex = openTabs.findIndex(tab => tab.path === path);
+      if (tabIndex !== -1) {
+        handleCloseTab(tabIndex);
+      }
+    } catch (error: any) {
+      enqueueSnackbar(error.response?.data?.detail || 'Failed to delete', { variant: 'error' });
+    }
+  };
+  
+  const handleCreateFile = async (parentPath: string, fileName: string) => {
+    if (!selectedWorkflow) return;
+    
+    try {
+      const filePath = parentPath ? `${parentPath}/${fileName}` : fileName;
+      await api.post('/api/file-editor/create-change', {
+        workflow_id: selectedWorkflow,
+        file_path: filePath,
+        operation: 'create',
+        new_content: '',
+      });
+      
+      // Approve the change immediately to create the file
+      await loadChanges();
+      const changes = await api.post('/api/file-editor/changes', { workflow_id: selectedWorkflow });
+      const latestChange = changes.data.changes.find((c: any) => c.file_path === filePath);
+      if (latestChange) {
+        await api.post('/api/file-editor/approve', {
+          workflow_id: selectedWorkflow,
+          change_id: latestChange.change_id,
+        });
+      }
+      
+      enqueueSnackbar('File created', { variant: 'success' });
+      loadDirectory(currentPath);
+    } catch (error: any) {
+      enqueueSnackbar(error.response?.data?.detail || 'Failed to create file', { variant: 'error' });
     }
   };
   
@@ -968,8 +1161,12 @@ const NewCodeEditorPage: React.FC = () => {
                       <Box sx={{ flex: 1, overflow: 'auto' }}>
                         <EnhancedFileTree
                           items={items}
-                          onItemClick={(item, _isDoubleClick) => handleItemClick(item)}
+                          onItemClick={handleItemClick}
                           onFolderExpand={handleFolderExpand}
+                          onRename={handleRename}
+                          onDelete={handleDeleteFile}
+                          onCreateFile={handleCreateFile}
+                          onCreateFolder={handleCreateFolder}
                           selectedPath={selectedFile?.path}
                           openTabs={openTabs.map(tab => tab.path)}
                           pendingChanges={pendingChanges}
@@ -1234,52 +1431,80 @@ const NewCodeEditorPage: React.FC = () => {
             {/* Main Editor Panel - Always show when workflow is selected */}
             <Panel defaultSize={sidebarCollapsed ? 100 : 80} minSize={50}>
               <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#1e1e1e' }}>
-                {/* Editor Tabs/Header */}
+                {/* Tab Bar */}
                 <Box 
                   sx={{ 
                     display: 'flex', 
                     alignItems: 'center',
-                    px: 2,
-                    py: 1,
                     borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
                     bgcolor: '#252526',
                     minHeight: '35px',
-                    gap: 1,
+                    overflowX: 'auto',
+                    overflowY: 'hidden',
+                    '&::-webkit-scrollbar': { height: '3px' },
+                    '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255, 255, 255, 0.2)' },
                   }}
                 >
-                  {selectedFile ? (
-                    <>
-                      <FileIcon sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.7)' }} />
-                      <Typography variant="body2" sx={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.9)' }}>
-                        {selectedFile.name}
-                      </Typography>
-                      {hasUnsavedChanges && (
-                        <Box 
-                          sx={{ 
-                            width: 8, 
-                            height: 8, 
-                            borderRadius: '50%', 
-                            bgcolor: '#ff9800',
-                          }} 
-                        />
-                      )}
-                      <Box sx={{ flexGrow: 1 }} />
-                      {hasUnsavedChanges && (
-                        <Tooltip title="Save Changes">
-                          <IconButton
-                            size="small"
-                            onClick={handleSaveFile}
-                            disabled={fileContent === '[Binary file]'}
-                            sx={{ color: 'rgba(255, 255, 255, 0.7)' }}
-                          >
-                            <Save sx={{ fontSize: 16 }} />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                    </>
+                  {openTabs.length > 0 ? (
+                    openTabs.map((tab, index) => (
+                      <Box
+                        key={tab.path}
+                        onClick={() => handleTabClick(index)}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.5,
+                          px: 1.5,
+                          py: 0.75,
+                          borderRight: '1px solid rgba(255, 255, 255, 0.05)',
+                          bgcolor: activeTabIndex === index ? '#1e1e1e' : 'transparent',
+                          cursor: 'pointer',
+                          minWidth: 120,
+                          maxWidth: 200,
+                          '&:hover': {
+                            bgcolor: activeTabIndex === index ? '#1e1e1e' : 'rgba(255, 255, 255, 0.05)',
+                          },
+                        }}
+                      >
+                        {getFileIcon(tab.name, 'inherit')}
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontSize: 12,
+                            fontStyle: tab.isPermanent ? 'normal' : 'italic',
+                            color: tab.isModified ? '#ff9800' : 'rgba(255, 255, 255, 0.9)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            flex: 1,
+                          }}
+                        >
+                          {tab.name}
+                          {tab.isModified && ' •'}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCloseTab(index);
+                          }}
+                          sx={{
+                            p: 0.25,
+                            ml: 0.5,
+                            color: 'rgba(255, 255, 255, 0.6)',
+                            '&:hover': { 
+                              color: 'rgba(255, 255, 255, 1)',
+                              bgcolor: 'rgba(255, 255, 255, 0.1)',
+                            },
+                          }}
+                        >
+                          <Close sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Box>
+                    ))
                   ) : (
-                    <Typography variant="body2" sx={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.5)' }}>
-                      No file selected
+                    <Typography variant="body2" sx={{ px: 2, fontSize: 12, color: 'rgba(255, 255, 255, 0.5)' }}>
+                      No files open
                     </Typography>
                   )}
                 </Box>
@@ -1429,7 +1654,7 @@ const NewCodeEditorPage: React.FC = () => {
                         height="100%"
                         language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
                         value={fileContent}
-                        onChange={(value) => setFileContent(value || '')}
+                        onChange={(value) => handleContentChange(value || '')}
                         theme={selectedTheme}
                         options={{
                           readOnly: !selectedFile || fileContent === '[Binary file]',
