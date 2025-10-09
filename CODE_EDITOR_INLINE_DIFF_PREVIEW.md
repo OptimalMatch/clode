@@ -209,31 +209,16 @@ useEffect(() => {
   options={{
     readOnly: true,                        // Prevent editing in diff mode
     minimap: { enabled: true },            // Show minimap with change indicators
-    fontSize: 14,
-    lineNumbers: 'on',
-    renderWhitespace: 'selection',
-    scrollBeyondLastLine: false,
-    automaticLayout: true,
-    tabSize: 2,
-    wordWrap: 'off',                       // Disable word wrap for side-by-side
-    folding: true,
-    enableSplitViewResizing: true,         // Allow resizing left/right panes
+    fontSize: 14,                          // Font size for both panes
     renderSideBySide: true,                // Side-by-side (not inline)
+    enableSplitViewResizing: true,         // Allow resizing left/right panes
     ignoreTrimWhitespace: false,           // Show whitespace changes
-    glyphMargin: true,
-    scrollbar: {
-      vertical: 'auto',
-      horizontal: 'auto',
-      useShadows: true,
-      verticalScrollbarSize: 10,
-      horizontalScrollbarSize: 10,
-    },
-    cursorBlinking: 'smooth',
-    smoothScrolling: true,
-    bracketPairColorization: { enabled: true },
+    renderOverviewRuler: true,             // Show overview ruler with change indicators
   }}
 />
 ```
+
+**Note:** `DiffEditor` has a more limited set of options compared to the regular `Editor`. Options like `tabSize`, `lineNumbers`, `wordWrap`, `folding`, etc. are not available in `IDiffEditorConstructionOptions`.
 
 ### Action Handlers
 
