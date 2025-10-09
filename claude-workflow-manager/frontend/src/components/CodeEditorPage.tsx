@@ -704,14 +704,6 @@ const CodeEditorPage: React.FC = () => {
   };
   
   const executeDesignWithStreaming = async (design: OrchestrationDesign, task: string, signal: AbortSignal) => {
-    // Parse design structure to determine execution type
-    const firstBlock = design.blocks[0];
-    const blockType = firstBlock?.type || 'sequential';
-    
-    // Collect all agents from all blocks
-    const agents = design.blocks.flatMap(block => block.data.agents || []);
-    const agentNames = agents.map(a => a.name);
-    
     // Get the git_repo for the selected workflow
     const currentWorkflow = workflows.find(w => w.id === selectedWorkflow);
     const gitRepo = currentWorkflow?.git_repo || '';
@@ -719,51 +711,161 @@ const CodeEditorPage: React.FC = () => {
     // Inject workflow context into task
     const contextualTask = `Working with workflow ID: ${selectedWorkflow}\n\nIMPORTANT: You MUST use the editor_* MCP tools (editor_read_file, editor_create_change, editor_browse_directory, etc.) with workflow_id="${selectedWorkflow}" for all file operations. These tools access the repository shown in the file explorer.\n\n${task}`;
     
-    // Update agent system prompts to include editor tool instructions
-    const contextualAgents = agents.map(agent => ({
-      ...agent,
-      system_prompt: `${agent.system_prompt}\n\nCRITICAL: Always use editor_* tools with workflow_id="${selectedWorkflow}":\n- editor_browse_directory(workflow_id, path) - Browse directory\n- editor_read_file(workflow_id, file_path) - Read file\n- editor_create_change(workflow_id, file_path, operation, new_content) - Create/update/delete file\n- editor_get_changes(workflow_id) - List pending changes\n- editor_search_files(workflow_id, query) - Search files\n\nNEVER use generic file tools. ALWAYS use editor_* tools.`
-    }));
+    // Build execution order using topological sort (from Designer logic)
+    const executionOrder = buildExecutionOrder(design.blocks, design.connections || []);
     
-    // Create execution request based on block type
-    let executionPromise;
-    
-    if (blockType === 'routing') {
-      // Dynamic routing execution
-      const router = contextualAgents.find(a => a.role === 'manager' || a.name.toLowerCase().includes('router'));
-      const specialists = contextualAgents.filter(a => a.role === 'specialist');
-      
-      if (router && specialists.length > 0) {
-        executionPromise = executeRoutingWithStreaming({
-          task: contextualTask,
-          router,
-          specialists,
-          specialist_names: specialists.map(s => s.name),
-          model: 'claude-sonnet-4-20250514',
-          git_repo: gitRepo
-        }, signal);
-      } else {
-        // Fall back to sequential
-        executionPromise = executeSequentialWithStreaming({
-          task: contextualTask,
-          agents: contextualAgents,
-          agent_sequence: agentNames,
-          model: 'claude-sonnet-4-20250514',
-          git_repo: gitRepo
-        }, signal);
-      }
-    } else {
-      // Default to sequential execution
-      executionPromise = executeSequentialWithStreaming({
-        task: contextualTask,
-        agents: contextualAgents,
-        agent_sequence: agentNames,
-        model: 'claude-sonnet-4-20250514',
-        git_repo: gitRepo
-      }, signal);
+    if (executionOrder.length === 0) {
+      throw new Error('No executable blocks found in design');
     }
     
-    await executionPromise;
+    console.log(`[Code Editor] Executing ${executionOrder.length} blocks in order:`, executionOrder);
+    
+    // Execute blocks in order, passing outputs from one to the next
+    const results = new Map<string, any>();
+    
+    for (const blockId of executionOrder) {
+      if (signal.aborted) break;
+      
+      const block = design.blocks.find(b => b.id === blockId);
+      if (!block) continue;
+      
+      console.log(`[Code Editor] Executing block ${blockId} (type: ${block.type})`);
+      
+      // Get inputs from connected blocks
+      const blockInputs = getBlockInputs(blockId, design.connections || [], results);
+      const blockTask = blockInputs.length > 0 
+        ? `${contextualTask}\n\nPrevious block outputs:\n${blockInputs.join('\n\n---\n\n')}`
+        : contextualTask;
+      
+      // Update agent system prompts to include editor tool instructions
+      const contextualAgents = block.data.agents.map(agent => ({
+        ...agent,
+        system_prompt: `${agent.system_prompt}\n\nCRITICAL: Always use editor_* tools with workflow_id="${selectedWorkflow}":\n- editor_browse_directory(workflow_id, path) - Browse directory\n- editor_read_file(workflow_id, file_path) - Read file\n- editor_create_change(workflow_id, file_path, operation, new_content) - Create/update/delete file\n- editor_get_changes(workflow_id) - List pending changes\n- editor_search_files(workflow_id, query) - Search files\n\nNEVER use generic file tools. ALWAYS use editor_* tools.`
+      }));
+      
+      // Execute block based on its type
+      let result;
+      switch (block.type) {
+        case 'sequential':
+          result = await executeBlockSequential(contextualAgents, blockTask, gitRepo, signal);
+          break;
+        case 'parallel':
+          result = await executeBlockParallel(contextualAgents, blockTask, gitRepo, signal);
+          break;
+        case 'routing':
+          const router = contextualAgents.find(a => a.role === 'manager' || a.name.toLowerCase().includes('router'));
+          const specialists = contextualAgents.filter(a => a.role === 'specialist');
+          if (router && specialists.length > 0) {
+            result = await executeBlockRouting(router, specialists, blockTask, gitRepo, signal);
+          } else {
+            // Fall back to sequential
+            result = await executeBlockSequential(contextualAgents, blockTask, gitRepo, signal);
+          }
+          break;
+        default:
+          // Fall back to sequential for other types
+          result = await executeBlockSequential(contextualAgents, blockTask, gitRepo, signal);
+      }
+      
+      results.set(blockId, result);
+    }
+    
+    console.log(`[Code Editor] All blocks completed`);
+  };
+  
+  // Build execution order using topological sort (adapted from Designer)
+  const buildExecutionOrder = (blocks: any[], connections: any[]): string[] => {
+    const adjList = new Map<string, string[]>();
+    const inDegree = new Map<string, number>();
+    
+    // Initialize
+    blocks.forEach(block => {
+      adjList.set(block.id, []);
+      inDegree.set(block.id, 0);
+    });
+    
+    // Build graph from block-level connections
+    connections.forEach(conn => {
+      if (conn.type === 'block' || !conn.type) {  // Default to block-level
+        adjList.get(conn.source)?.push(conn.target);
+        inDegree.set(conn.target, (inDegree.get(conn.target) || 0) + 1);
+      }
+    });
+    
+    // Topological sort using Kahn's algorithm
+    const queue: string[] = [];
+    inDegree.forEach((degree, blockId) => {
+      if (degree === 0) queue.push(blockId);
+    });
+    
+    const result: string[] = [];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      result.push(current);
+      
+      adjList.get(current)?.forEach(neighbor => {
+        const newDegree = (inDegree.get(neighbor) || 0) - 1;
+        inDegree.set(neighbor, newDegree);
+        if (newDegree === 0) queue.push(neighbor);
+      });
+    }
+    
+    return result;
+  };
+  
+  // Get inputs from connected blocks
+  const getBlockInputs = (blockId: string, connections: any[], results: Map<string, any>): string[] => {
+    const inputs: string[] = [];
+    
+    connections.filter(conn => conn.target === blockId).forEach(conn => {
+      const sourceResult = results.get(conn.source);
+      if (sourceResult) {
+        if (typeof sourceResult === 'string') {
+          inputs.push(sourceResult);
+        } else if (sourceResult.final_result) {
+          inputs.push(sourceResult.final_result);
+        } else if (sourceResult.result) {
+          inputs.push(sourceResult.result);
+        }
+      }
+    });
+    
+    return inputs;
+  };
+  
+  // Execute a sequential block
+  const executeBlockSequential = async (agents: any[], task: string, gitRepo: string, signal: AbortSignal) => {
+    return await executeSequentialWithStreaming({
+      task,
+      agents,
+      agent_sequence: agents.map(a => a.name),
+      model: 'claude-sonnet-4-20250514',
+      git_repo: gitRepo
+    }, signal);
+  };
+  
+  // Execute a parallel block
+  const executeBlockParallel = async (agents: any[], task: string, gitRepo: string, signal: AbortSignal) => {
+    return await executeParallelWithStreaming({
+      task,
+      agents,
+      agent_names: agents.map(a => a.name),
+      aggregator: null,
+      model: 'claude-sonnet-4-20250514',
+      git_repo: gitRepo
+    }, signal);
+  };
+  
+  // Execute a routing block
+  const executeBlockRouting = async (router: any, specialists: any[], task: string, gitRepo: string, signal: AbortSignal) => {
+    return await executeRoutingWithStreaming({
+      task,
+      router,
+      specialists,
+      specialist_names: specialists.map(s => s.name),
+      model: 'claude-sonnet-4-20250514',
+      git_repo: gitRepo
+    }, signal);
   };
   
   const executeSequentialWithStreaming = async (request: any, signal: AbortSignal) => {
@@ -929,6 +1031,94 @@ const CodeEditorPage: React.FC = () => {
                 id: `msg-${Date.now()}-complete`,
                 type: 'system',
                 content: '✅ Execution completed successfully',
+                timestamp: new Date(),
+              };
+              setChatMessages(prev => [...prev, completeMessage]);
+              // Reload changes to show any new pending changes created by agents
+              loadChanges();
+            } else if (event.type === 'error') {
+              throw new Error(event.error || 'Execution failed');
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE event:', e);
+          }
+        }
+      }
+    }
+  };
+  
+  const executeParallelWithStreaming = async (request: any, signal: AbortSignal) => {
+    const API_URL = api.defaults.baseURL;
+    const token = localStorage.getItem('access_token');
+    
+    const response = await fetch(`${API_URL}/api/orchestration/parallel/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+      body: JSON.stringify(request),
+      signal,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    
+    if (!reader) {
+      throw new Error('No response body');
+    }
+    
+    let buffer = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.slice(6));
+            
+            if (event.type === 'status' && event.agent) {
+              setExecutionStatus({
+                executing: true,
+                currentAgent: event.agent,
+                progress: event.data,
+              });
+            } else if (event.type === 'chunk' && event.data) {
+              setChatMessages(prev => {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === executionStatus.currentAgent) {
+                  return [
+                    ...prev.slice(0, -1),
+                    { ...lastMsg, content: lastMsg.content + event.data }
+                  ];
+                } else {
+                  return [
+                    ...prev,
+                    {
+                      id: `msg-${Date.now()}`,
+                      type: 'agent',
+                      content: event.data,
+                      agent: executionStatus.currentAgent,
+                      timestamp: new Date(),
+                    }
+                  ];
+                }
+              });
+            } else if (event.type === 'complete') {
+              const completeMessage: ChatMessage = {
+                id: `msg-${Date.now()}-complete`,
+                type: 'system',
+                content: '✅ Parallel execution completed',
                 timestamp: new Date(),
               };
               setChatMessages(prev => [...prev, completeMessage]);
