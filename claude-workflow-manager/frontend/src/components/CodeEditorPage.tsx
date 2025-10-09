@@ -237,16 +237,19 @@ const CodeEditorPage: React.FC = () => {
       new Map(fileChanges.map((c: FileChange) => [c.change_id, c])).values()
     ) as FileChange[];
     
-    // Further deduplicate based on content similarity (in case multiple agents created same change)
+    // Further deduplicate based on EXACT content match (in case multiple agents created identical change)
+    // Only remove if old_content AND new_content are EXACTLY the same
     const contentMap = new Map<string, FileChange>();
     for (const change of uniqueChanges) {
-      const contentKey = `${change.operation}:${change.old_content?.substring(0, 100)}:${change.new_content?.substring(0, 100)}`;
+      // Use full content for exact matching, not just first 100 chars
+      const contentKey = `${change.operation}:${change.old_content || ''}:${change.new_content || ''}`;
       if (!contentMap.has(contentKey)) {
         contentMap.set(contentKey, change);
       } else {
-        console.log('[Code Editor] Skipping duplicate content change:', {
+        console.log('[Code Editor] Skipping EXACT duplicate change:', {
           existingId: contentMap.get(contentKey)?.change_id,
           duplicateId: change.change_id,
+          operation: change.operation,
         });
       }
     }
@@ -846,6 +849,8 @@ const CodeEditorPage: React.FC = () => {
                 timestamp: new Date(),
               };
               setChatMessages(prev => [...prev, completeMessage]);
+              // Reload changes to show any new pending changes created by agents
+              loadChanges();
             } else if (event.type === 'error') {
               throw new Error(event.error || 'Execution failed');
             }
@@ -932,6 +937,8 @@ const CodeEditorPage: React.FC = () => {
                 timestamp: new Date(),
               };
               setChatMessages(prev => [...prev, completeMessage]);
+              // Reload changes to show any new pending changes created by agents
+              loadChanges();
             } else if (event.type === 'error') {
               throw new Error(event.error || 'Execution failed');
             }
