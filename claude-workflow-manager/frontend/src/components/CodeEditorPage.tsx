@@ -57,6 +57,8 @@ import {
   SmartToy,
   Person,
   Stop,
+  Close,
+  Menu as MenuIcon,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
@@ -169,6 +171,7 @@ const CodeEditorPage: React.FC = () => {
   const [chatInput, setChatInput] = useState<string>('');
   const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>({ executing: false });
   const [showChat, setShowChat] = useState(false);
+  const [showExplorer, setShowExplorer] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
@@ -931,57 +934,75 @@ const CodeEditorPage: React.FC = () => {
             </Grid>
           )}
           
-          <Grid item xs={12} md={showChat ? 3 : 4}>
-            <Paper 
-              elevation={0}
-              sx={{ 
-                height: 'calc(100vh - 280px)', 
-                display: 'flex',
-                flexDirection: 'column',
-                backgroundColor: '#1e1e1e',
-                borderRadius: 0,
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-              }}
-            >
-              {/* Header */}
-              <Box 
+          {showExplorer && (
+            <Grid item xs={12} md={showChat ? 2 : 2.5}>
+              <Paper 
+                elevation={0}
                 sx={{ 
-                  p: 1.5,
-                  px: 2,
-                  borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                  height: 'calc(100vh - 280px)', 
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                  flexDirection: 'column',
+                  backgroundColor: '#1e1e1e',
+                  borderRadius: 0,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
                 }}
               >
-                <Typography 
-                  variant="subtitle2" 
+                {/* Header */}
+                <Box 
                   sx={{ 
-                    fontWeight: 600,
-                    fontSize: 11,
-                    textTransform: 'uppercase',
-                    letterSpacing: 0.5,
-                    color: 'rgba(255, 255, 255, 0.7)',
+                    p: 1.5,
+                    px: 2,
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: 'rgba(0, 0, 0, 0.2)',
                   }}
                 >
-                  Explorer
-                </Typography>
-                <IconButton
-                  onClick={handleNavigateUp}
-                  disabled={!currentPath}
-                  size="small"
-                  sx={{ 
-                    p: 0.5,
-                    color: 'rgba(255, 255, 255, 0.6)',
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    },
-                  }}
-                >
-                  <ArrowBack sx={{ fontSize: 18 }} />
-                </IconButton>
-              </Box>
+                  <Typography 
+                    variant="subtitle2" 
+                    sx={{ 
+                      fontWeight: 600,
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5,
+                      color: 'rgba(255, 255, 255, 0.7)',
+                    }}
+                  >
+                    Explorer
+                  </Typography>
+                  <Box display="flex" gap={0.5}>
+                    <IconButton
+                      onClick={handleNavigateUp}
+                      disabled={!currentPath}
+                      size="small"
+                      sx={{ 
+                        p: 0.5,
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        '&:hover': {
+                          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                        },
+                      }}
+                    >
+                      <ArrowBack sx={{ fontSize: 18 }} />
+                    </IconButton>
+                    <Tooltip title="Hide Explorer">
+                      <IconButton
+                        onClick={() => setShowExplorer(false)}
+                        size="small"
+                        sx={{ 
+                          p: 0.5,
+                          color: 'rgba(255, 255, 255, 0.6)',
+                          '&:hover': {
+                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                          },
+                        }}
+                      >
+                        <Close sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </Box>
               
               {/* Breadcrumbs */}
               <Box 
@@ -1050,14 +1071,28 @@ const CodeEditorPage: React.FC = () => {
               )}
             </Paper>
           </Grid>
+          )}
           
-          <Grid item xs={12} md={showChat ? 6 : 8}>
+          <Grid item xs={12} md={showExplorer ? (showChat ? 6 : 7.5) : (showChat ? 8 : 10)}>
             <Paper sx={{ height: 'calc(100vh - 280px)', display: 'flex', flexDirection: 'column' }}>
-              <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                <Tab label="Editor" />
-                <Tab label="Preview" />
-                <Tab label={`Changes (${pendingChanges.length})`} />
-              </Tabs>
+              <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
+                {!showExplorer && (
+                  <Tooltip title="Show Explorer">
+                    <IconButton
+                      onClick={() => setShowExplorer(true)}
+                      size="small"
+                      sx={{ ml: 1, color: 'text.secondary' }}
+                    >
+                      <MenuIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ flexGrow: 1 }}>
+                  <Tab label="Editor" />
+                  <Tab label="Preview" />
+                  <Tab label={`Changes (${pendingChanges.length})`} />
+                </Tabs>
+              </Box>
               
               <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
                 {tabValue === 0 && (
