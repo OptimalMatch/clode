@@ -233,15 +233,31 @@ const CodeEditorPage: React.FC = () => {
     );
     
     // Remove duplicates based on change_id
-    const uniqueChanges = Array.from(
+    let uniqueChanges = Array.from(
       new Map(fileChanges.map((c: FileChange) => [c.change_id, c])).values()
     ) as FileChange[];
+    
+    // Further deduplicate based on content similarity (in case multiple agents created same change)
+    const contentMap = new Map<string, FileChange>();
+    for (const change of uniqueChanges) {
+      const contentKey = `${change.operation}:${change.old_content?.substring(0, 100)}:${change.new_content?.substring(0, 100)}`;
+      if (!contentMap.has(contentKey)) {
+        contentMap.set(contentKey, change);
+      } else {
+        console.log('[Code Editor] Skipping duplicate content change:', {
+          existingId: contentMap.get(contentKey)?.change_id,
+          duplicateId: change.change_id,
+        });
+      }
+    }
+    uniqueChanges = Array.from(contentMap.values());
     
     console.log('[Code Editor] Pending changes for file:', {
       filePath: selectedFile.path,
       totalChanges: changes.length,
       fileChanges: fileChanges.length,
-      uniqueChanges: uniqueChanges.length,
+      uniqueChangesById: Array.from(new Map(fileChanges.map((c: FileChange) => [c.change_id, c])).values()).length,
+      uniqueChangesByContent: uniqueChanges.length,
       changeIds: uniqueChanges.map((c: FileChange) => c.change_id),
     });
     

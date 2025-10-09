@@ -750,15 +750,23 @@ ONLY use these MCP tools (full names):
 - mcp__workflow-manager__editor_browse_directory
 - mcp__workflow-manager__editor_read_file  
 - mcp__workflow-manager__editor_search_files
+- mcp__workflow-manager__editor_create_change  (ONLY create, do NOT approve)
 
 NEVER use: read_file, glob, or any generic file tools.
+
+FORBIDDEN ACTIONS:
+==================
+❌ DO NOT call editor_approve_change
+❌ DO NOT call editor_reject_change
+❌ DO NOT approve any changes yourself
+❌ Changes must remain PENDING for human review
 
 EXAMPLE:
 Tool: mcp__workflow-manager__editor_browse_directory
 Args: {"workflow_id": "<provided_in_task>", "path": ""}
 
-Your job: Analyze what files exist, what needs to be changed, and provide a clear plan.
-Output: A brief plan of what will be done (2-3 sentences).""",
+Your job: Analyze what files exist, what needs to be changed, and CREATE PENDING changes.
+Output: Confirm the change_id and state it is pending human approval.""",
                             "role": "specialist",
                             "use_tools": True
                         },
@@ -775,6 +783,14 @@ ONLY use these MCP tools (full names):
 - mcp__workflow-manager__editor_get_changes
 
 NEVER use: write_file, read_file, or any generic file tools.
+
+FORBIDDEN ACTIONS:
+==================
+❌ DO NOT call editor_approve_change
+❌ DO NOT call editor_reject_change  
+❌ DO NOT approve any changes yourself
+❌ Changes MUST remain PENDING for human review in the UI
+❌ The user will review and approve changes manually
 
 EXAMPLE WORKFLOW:
 1. Read: mcp__workflow-manager__editor_read_file
@@ -793,8 +809,8 @@ EXAMPLE WORKFLOW:
 
 Operations: 'create', 'update', or 'delete'
 
-Your job: Create pending changes (NOT direct file writes).
-Output: Confirm the change_id from the tool response.""",
+Your job: Create PENDING changes only. The human will approve them in the UI.
+Output: Confirm the change_id and state it is PENDING human review.""",
                             "role": "specialist",
                             "use_tools": True
                         }
