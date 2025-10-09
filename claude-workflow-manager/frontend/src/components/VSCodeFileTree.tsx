@@ -53,45 +53,59 @@ interface VSCodeFileTreeProps {
 // Helper to get file icon based on extension
 const getFileIcon = (filename: string, size: number = 16) => {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
-  const iconProps = { size, style: { marginRight: 8, flexShrink: 0 } };
+  const iconStyle = { marginRight: 8, flexShrink: 0 };
   
-  // Language-specific icons
-  const iconMap: { [key: string]: React.ReactNode } = {
-    'js': <SiJavascript {...iconProps} color="#f7df1e" />,
-    'jsx': <SiReact {...iconProps} color="#61dafb" />,
-    'ts': <SiTypescript {...iconProps} color="#3178c6" />,
-    'tsx': <SiReact {...iconProps} color="#61dafb" />,
-    'json': <VscJson {...iconProps} color="#f7df1e" />,
-    'py': <SiPython {...iconProps} color="#3776ab" />,
-    'html': <SiHtml5 {...iconProps} color="#e34f26" />,
-    'htm': <SiHtml5 {...iconProps} color="#e34f26" />,
-    'css': <SiCss3 {...iconProps} color="#1572b6" />,
-    'scss': <SiCss3 {...iconProps} color="#c6538c" />,
-    'sass': <SiCss3 {...iconProps} color="#c6538c" />,
-    'less': <SiCss3 {...iconProps} color="#1d365d" />,
-    'md': <VscMarkdown {...iconProps} color="#519aba" />,
-    'dockerfile': <SiDocker {...iconProps} color="#2496ed" />,
-    'yaml': <SiYaml {...iconProps} color="#cb171e" />,
-    'yml': <SiYaml {...iconProps} color="#cb171e" />,
-    'gitignore': <SiGit {...iconProps} color="#f05032" />,
-    'git': <SiGit {...iconProps} color="#f05032" />,
-  };
-  
-  // Special filenames
+  // Special filenames first
   if (filename === 'package.json' || filename === 'package-lock.json') {
-    return <VscJson {...iconProps} color="#cb3837" />;
+    return <VscJson size={size} style={iconStyle} color="#cb3837" />;
   }
   if (filename === 'tsconfig.json') {
-    return <SiTypescript {...iconProps} color="#3178c6" />;
+    return <SiTypescript size={size} style={iconStyle} color="#3178c6" />;
   }
   if (filename.toLowerCase().includes('readme')) {
-    return <VscMarkdown {...iconProps} color="#519aba" />;
+    return <VscMarkdown size={size} style={iconStyle} color="#519aba" />;
   }
   if (filename.toLowerCase().includes('docker')) {
-    return <SiDocker {...iconProps} color="#2496ed" />;
+    return <SiDocker size={size} style={iconStyle} color="#2496ed" />;
   }
   
-  return iconMap[ext] || <VscFile {...iconProps} color="#a0a0a0" />;
+  // Language-specific icons by extension
+  switch (ext) {
+    case 'js':
+      return <SiJavascript size={size} style={iconStyle} color="#f7df1e" />;
+    case 'jsx':
+      return <SiReact size={size} style={iconStyle} color="#61dafb" />;
+    case 'ts':
+      return <SiTypescript size={size} style={iconStyle} color="#3178c6" />;
+    case 'tsx':
+      return <SiReact size={size} style={iconStyle} color="#61dafb" />;
+    case 'json':
+      return <VscJson size={size} style={iconStyle} color="#f7df1e" />;
+    case 'py':
+      return <SiPython size={size} style={iconStyle} color="#3776ab" />;
+    case 'html':
+    case 'htm':
+      return <SiHtml5 size={size} style={iconStyle} color="#e34f26" />;
+    case 'css':
+      return <SiCss3 size={size} style={iconStyle} color="#1572b6" />;
+    case 'scss':
+    case 'sass':
+      return <SiCss3 size={size} style={iconStyle} color="#c6538c" />;
+    case 'less':
+      return <SiCss3 size={size} style={iconStyle} color="#1d365d" />;
+    case 'md':
+      return <VscMarkdown size={size} style={iconStyle} color="#519aba" />;
+    case 'dockerfile':
+      return <SiDocker size={size} style={iconStyle} color="#2496ed" />;
+    case 'yaml':
+    case 'yml':
+      return <SiYaml size={size} style={iconStyle} color="#cb171e" />;
+    case 'gitignore':
+    case 'git':
+      return <SiGit size={size} style={iconStyle} color="#f05032" />;
+    default:
+      return <VscFile size={size} style={iconStyle} color="#a0a0a0" />;
+  }
 };
 
 const VSCodeFileTreeItem: React.FC<{
