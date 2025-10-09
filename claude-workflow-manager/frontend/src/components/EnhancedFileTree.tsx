@@ -24,8 +24,6 @@ import {
   DataObject,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  CreateNewFolder as CreateNewFolderIcon,
-  NoteAdd as NoteAddIcon,
   Image,
   Terminal,
   Storage,
@@ -33,6 +31,29 @@ import {
   Settings,
   SourceOutlined,
 } from '@mui/icons-material';
+import { SvgIcon, SvgIconProps } from '@mui/material';
+
+// VSCode-style "New File" icon from StackBlitz
+const NewFileIcon: React.FC<SvgIconProps> = (props) => (
+  <SvgIcon {...props} viewBox="0 0 16 16">
+    <path 
+      fillRule="evenodd" 
+      d="m9.5 1.1 3.4 3.5.1.4v2h-1V6H8V2H3v11h4v1H2.5l-.5-.5v-12l.5-.5h6.7zM9 2v3h2.9zm4 14h-1v-3H9v-1h3V9h1v3h3v1h-3z" 
+      clipRule="evenodd"
+    />
+  </SvgIcon>
+);
+
+// VSCode-style "New Folder" icon from StackBlitz
+const NewFolderIcon: React.FC<SvgIconProps> = (props) => (
+  <SvgIcon {...props} viewBox="0 0 16 16">
+    <path 
+      fillRule="evenodd" 
+      d="M14.5 2H7.71l-.85-.85L6.51 1h-5l-.5.5v11l.5.5H7v-1H1.99V6h4.49l.35-.15.86-.86H14v1.5l-.001.51h1.011V2.5zm-.51 2h-6.5l-.35.15-.86.86H2v-3h4.29l.85.85.36.15H14zM13 16h-1v-3H9v-1h3V9h1v3h3v1h-3z" 
+      clipRule="evenodd"
+    />
+  </SvgIcon>
+);
 
 interface FileItem {
   name: string;
@@ -478,7 +499,7 @@ const EnhancedFileTree: React.FC<EnhancedFileTreeProps> = ({
                   onClick={() => setCreateDialog('file')}
                   sx={{ p: 0.5, color: 'rgba(255, 255, 255, 0.6)' }}
                 >
-                  <NoteAddIcon sx={{ fontSize: 16 }} />
+                  <NewFileIcon sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
             )}
@@ -489,7 +510,7 @@ const EnhancedFileTree: React.FC<EnhancedFileTreeProps> = ({
                   onClick={() => setCreateDialog('folder')}
                   sx={{ p: 0.5, color: 'rgba(255, 255, 255, 0.6)' }}
                 >
-                  <CreateNewFolderIcon sx={{ fontSize: 16 }} />
+                  <NewFolderIcon sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
             )}
