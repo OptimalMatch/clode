@@ -2377,154 +2377,7 @@ const NewCodeEditorPage: React.FC = () => {
                 {/* Editor Area */}
                 <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
                   {selectedFile ? (
-                    showDiff && diffChange ? (
-                      // Diff Mode
-                      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                        {/* Diff Toolbar - Floating Badge Style */}
-                        <Box 
-                          sx={{ 
-                            position: 'absolute',
-                            top: 12,
-                            left: 12,
-                            zIndex: 10,
-                            p: 0.75, 
-                            bgcolor: 'rgba(237, 108, 2, 0.85)', // warning.dark with transparency
-                            backdropFilter: 'blur(8px)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 0.75,
-                            flexShrink: 0,
-                            borderRadius: 2,
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                            maxWidth: '300px',
-                            flexWrap: 'wrap',
-                          }}
-                        >
-                          <Edit sx={{ fontSize: 16 }} />
-                          <Typography variant="body2" fontWeight="bold" sx={{ fontSize: 10 }}>
-                            {changeViewMode === 'combined' && pendingChangesForFile.length > 1
-                              ? `AI Changes (${pendingChangesForFile.length})`
-                              : 'AI Change'}
-                          </Typography>
-                          <Chip 
-                            label={diffChange.operation.toUpperCase()} 
-                            size="small" 
-                            sx={{ height: 18, fontSize: 9 }}
-                            color={
-                              diffChange.operation === 'create' ? 'success' : 
-                              diffChange.operation === 'delete' ? 'error' : 'info'
-                            }
-                          />
-                          
-                          {pendingChangesForFile.length > 1 && (
-                            <>
-                              <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-                              <ToggleButtonGroup
-                                value={changeViewMode}
-                                exclusive
-                                onChange={(_, newMode) => newMode && setChangeViewMode(newMode)}
-                                size="small"
-                                sx={{ height: 20 }}
-                              >
-                                <ToggleButton value="individual" sx={{ px: 0.5, fontSize: 9 }}>
-                                  <Tooltip title="Individual"><ViewAgenda sx={{ fontSize: 12 }} /></Tooltip>
-                                </ToggleButton>
-                                <ToggleButton value="combined" sx={{ px: 0.5, fontSize: 9 }}>
-                                  <Tooltip title="Combined"><CallMerge sx={{ fontSize: 12 }} /></Tooltip>
-                                </ToggleButton>
-                              </ToggleButtonGroup>
-                              
-                              {changeViewMode === 'individual' && (
-                                <Box display="flex" alignItems="center" gap={0.25}>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => setCurrentChangeIndex(Math.max(0, currentChangeIndex - 1))}
-                                    disabled={currentChangeIndex === 0}
-                                    sx={{ p: 0.15 }}
-                                  >
-                                    <KeyboardArrowUp sx={{ fontSize: 14 }} />
-                                  </IconButton>
-                                  <Typography variant="caption" sx={{ fontSize: 9, minWidth: 35, textAlign: 'center' }}>
-                                    {currentChangeIndex + 1}/{pendingChangesForFile.length}
-                                  </Typography>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => setCurrentChangeIndex(Math.min(pendingChangesForFile.length - 1, currentChangeIndex + 1))}
-                                    disabled={currentChangeIndex === pendingChangesForFile.length - 1}
-                                    sx={{ p: 0.15 }}
-                                  >
-                                    <KeyboardArrowDown sx={{ fontSize: 14 }} />
-                                  </IconButton>
-                                </Box>
-                              )}
-                            </>
-                          )}
-                          
-                          {/* Spacer removed for compact layout */}
-                          
-                          <ToggleButtonGroup
-                            value={diffViewMode}
-                            exclusive
-                            onChange={(_, newMode) => newMode && setDiffViewMode(newMode)}
-                            size="small"
-                            sx={{ height: 20 }}
-                          >
-                            <ToggleButton value="inline" sx={{ px: 0.5 }}>
-                              <Tooltip title="Inline"><ViewStream sx={{ fontSize: 12 }} /></Tooltip>
-                            </ToggleButton>
-                            <ToggleButton value="sideBySide" sx={{ px: 0.5 }}>
-                              <Tooltip title="Side by Side"><ViewColumn sx={{ fontSize: 12 }} /></Tooltip>
-                            </ToggleButton>
-                          </ToggleButtonGroup>
-                          
-                          <Button
-                            size="small"
-                            variant="contained"
-                            color="success"
-                            startIcon={<CheckCircle sx={{ fontSize: 12 }} />}
-                            onClick={() => handleApproveChange(diffChange.change_id)}
-                            sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75 }}
-                          >
-                            Accept
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="error"
-                            startIcon={<Cancel sx={{ fontSize: 12 }} />}
-                            onClick={() => handleRejectChange(diffChange.change_id)}
-                            sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75 }}
-                          >
-                            Reject
-                          </Button>
-                        </Box>
-                        
-                        {/* Diff Editor */}
-                        <Box sx={{ flex: 1 }}>
-                          <DiffEditor
-                            height="100%"
-                            language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
-                            original={diffChange.old_content || ''}
-                            modified={diffChange.new_content || ''}
-                            theme={selectedTheme}
-                            options={{
-                              readOnly: true,
-                              minimap: { enabled: true },
-                              fontSize: 13,
-                              renderSideBySide: diffViewMode === 'sideBySide',
-                              ignoreTrimWhitespace: false,
-                            }}
-                            loading={
-                              <Box display="flex" alignItems="center" justifyContent="center" height="100%">
-                                <CircularProgress />
-                              </Box>
-                            }
-                          />
-                        </Box>
-                      </Box>
-                    ) : (
-                      // Regular Editor Mode
-                      splitViewEnabled ? (
+                    splitViewEnabled ? (
                         // Split View - Each pane with its own tab bar
                         <PanelGroup direction="horizontal">
                           {/* Left Pane */}
@@ -2659,28 +2512,128 @@ const NewCodeEditorPage: React.FC = () => {
                               </Box>
                               
                               {/* Left Editor */}
-                              <Box sx={{ flex: 1 }}>
+                              <Box sx={{ flex: 1, position: 'relative' }}>
                                 {leftActiveIndex >= 0 && leftPaneTabs[leftActiveIndex] ? (
-                                  <Editor
-                                    height="100%"
-                                    language={getLanguageFromFilename(leftPaneTabs[leftActiveIndex].name)}
-                                    value={leftPaneTabs[leftActiveIndex].content}
-                                    onChange={(value) => handleSplitPaneContentChange('left', value || '')}
-                                    theme={selectedTheme}
-                                    options={{
-                                      readOnly: leftPaneTabs[leftActiveIndex].content === '[Binary file]',
-                                      minimap: { enabled: true },
-                                      fontSize: 13,
-                                      lineNumbers: 'on',
-                                      renderWhitespace: 'selection',
-                                      scrollBeyondLastLine: false,
-                                      automaticLayout: true,
-                                      tabSize: 2,
-                                      wordWrap: 'on',
-                                      folding: true,
-                                      bracketPairColorization: { enabled: true },
-                                    }}
-                                  />
+                                  showDiff && diffChange && selectedFile && leftPaneTabs[leftActiveIndex].path === selectedFile.path ? (
+                                    // Show Diff in left pane
+                                    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                      {/* Floating AI Change Badge */}
+                                      <Box 
+                                        sx={{ 
+                                          position: 'absolute',
+                                          top: 12,
+                                          left: 12,
+                                          zIndex: 10,
+                                          p: 0.75, 
+                                          bgcolor: 'rgba(237, 108, 2, 0.85)',
+                                          backdropFilter: 'blur(8px)',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 0.75,
+                                          flexShrink: 0,
+                                          borderRadius: 2,
+                                          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                          maxWidth: '300px',
+                                          flexWrap: 'wrap',
+                                        }}
+                                      >
+                                        <Edit sx={{ fontSize: 16 }} />
+                                        <Typography variant="body2" fontWeight="bold" sx={{ fontSize: 10 }}>
+                                          {changeViewMode === 'combined' && pendingChangesForFile.length > 1
+                                            ? `AI Changes (${pendingChangesForFile.length})`
+                                            : 'AI Change'}
+                                        </Typography>
+                                        <Chip 
+                                          label={diffChange.operation.toUpperCase()} 
+                                          size="small" 
+                                          sx={{ height: 18, fontSize: 9 }}
+                                          color={
+                                            diffChange.operation === 'create' ? 'success' : 
+                                            diffChange.operation === 'delete' ? 'error' : 'info'
+                                          }
+                                        />
+                                        {pendingChangesForFile.length > 1 && (
+                                          <>
+                                            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                                            <ToggleButtonGroup
+                                              value={changeViewMode}
+                                              exclusive
+                                              onChange={(_, newMode) => newMode && setChangeViewMode(newMode)}
+                                              size="small"
+                                              sx={{ height: 20 }}
+                                            >
+                                              <ToggleButton value="individual" sx={{ px: 0.5, fontSize: 9 }}>
+                                                <Tooltip title="Individual"><ViewAgenda sx={{ fontSize: 12 }} /></Tooltip>
+                                              </ToggleButton>
+                                              <ToggleButton value="combined" sx={{ px: 0.5, fontSize: 9 }}>
+                                                <Tooltip title="Combined"><CallMerge sx={{ fontSize: 12 }} /></Tooltip>
+                                              </ToggleButton>
+                                            </ToggleButtonGroup>
+                                            {changeViewMode === 'individual' && (
+                                              <Box display="flex" alignItems="center" gap={0.25}>
+                                                <IconButton size="small" onClick={() => setCurrentChangeIndex(Math.max(0, currentChangeIndex - 1))} disabled={currentChangeIndex === 0} sx={{ p: 0.15 }}>
+                                                  <KeyboardArrowUp sx={{ fontSize: 14 }} />
+                                                </IconButton>
+                                                <Typography variant="caption" sx={{ fontSize: 9, minWidth: 35, textAlign: 'center' }}>
+                                                  {currentChangeIndex + 1}/{pendingChangesForFile.length}
+                                                </Typography>
+                                                <IconButton size="small" onClick={() => setCurrentChangeIndex(Math.min(pendingChangesForFile.length - 1, currentChangeIndex + 1))} disabled={currentChangeIndex === pendingChangesForFile.length - 1} sx={{ p: 0.15 }}>
+                                                  <KeyboardArrowDown sx={{ fontSize: 14 }} />
+                                                </IconButton>
+                                              </Box>
+                                            )}
+                                          </>
+                                        )}
+                                        <ToggleButtonGroup value={diffViewMode} exclusive onChange={(_, newMode) => newMode && setDiffViewMode(newMode)} size="small" sx={{ height: 20 }}>
+                                          <ToggleButton value="inline" sx={{ px: 0.5 }}>
+                                            <Tooltip title="Inline"><ViewStream sx={{ fontSize: 12 }} /></Tooltip>
+                                          </ToggleButton>
+                                          <ToggleButton value="sideBySide" sx={{ px: 0.5 }}>
+                                            <Tooltip title="Side by Side"><ViewColumn sx={{ fontSize: 12 }} /></Tooltip>
+                                          </ToggleButton>
+                                        </ToggleButtonGroup>
+                                        <Button size="small" variant="contained" color="success" startIcon={<CheckCircle sx={{ fontSize: 12 }} />} onClick={() => handleApproveChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75 }}>
+                                          Accept
+                                        </Button>
+                                        <Button size="small" variant="outlined" color="error" startIcon={<Cancel sx={{ fontSize: 12 }} />} onClick={() => handleRejectChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75 }}>
+                                          Reject
+                                        </Button>
+                                      </Box>
+                                      <Box sx={{ flex: 1 }}>
+                                        <DiffEditor
+                                          height="100%"
+                                          language={getLanguageFromFilename(leftPaneTabs[leftActiveIndex].name)}
+                                          original={diffChange.old_content || ''}
+                                          modified={diffChange.new_content || ''}
+                                          theme={selectedTheme}
+                                          options={{ readOnly: true, minimap: { enabled: true }, fontSize: 13, renderSideBySide: diffViewMode === 'sideBySide', ignoreTrimWhitespace: false }}
+                                          loading={<Box display="flex" alignItems="center" justifyContent="center" height="100%"><CircularProgress /></Box>}
+                                        />
+                                      </Box>
+                                    </Box>
+                                  ) : (
+                                    // Regular editor in left pane
+                                    <Editor
+                                      height="100%"
+                                      language={getLanguageFromFilename(leftPaneTabs[leftActiveIndex].name)}
+                                      value={leftPaneTabs[leftActiveIndex].content}
+                                      onChange={(value) => handleSplitPaneContentChange('left', value || '')}
+                                      theme={selectedTheme}
+                                      options={{
+                                        readOnly: leftPaneTabs[leftActiveIndex].content === '[Binary file]',
+                                        minimap: { enabled: true },
+                                        fontSize: 13,
+                                        lineNumbers: 'on',
+                                        renderWhitespace: 'selection',
+                                        scrollBeyondLastLine: false,
+                                        automaticLayout: true,
+                                        tabSize: 2,
+                                        wordWrap: 'on',
+                                        folding: true,
+                                        bracketPairColorization: { enabled: true },
+                                      }}
+                                    />
+                                  )
                                 ) : (
                                   <Box display="flex" alignItems="center" justifyContent="center" height="100%" flexDirection="column" gap={2}>
                                     <Code sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)' }} />
@@ -2831,28 +2784,44 @@ const NewCodeEditorPage: React.FC = () => {
                                   </Box>
                                   
                                   {/* Middle Editor */}
-                                  <Box sx={{ flex: 1 }}>
+                                  <Box sx={{ flex: 1, position: 'relative' }}>
                                     {middleActiveIndex >= 0 && middlePaneTabs[middleActiveIndex] ? (
-                                      <Editor
-                                        height="100%"
-                                        language={getLanguageFromFilename(middlePaneTabs[middleActiveIndex].name)}
-                                        value={middlePaneTabs[middleActiveIndex].content}
-                                        onChange={(value) => handleSplitPaneContentChange('middle', value || '')}
-                                        theme={selectedTheme}
-                                        options={{
-                                          readOnly: middlePaneTabs[middleActiveIndex].content === '[Binary file]',
-                                          minimap: { enabled: true },
-                                          fontSize: 13,
-                                          lineNumbers: 'on',
-                                          renderWhitespace: 'selection',
-                                          scrollBeyondLastLine: false,
-                                          automaticLayout: true,
-                                          tabSize: 2,
-                                          wordWrap: 'on',
-                                          folding: true,
-                                          bracketPairColorization: { enabled: true },
-                                        }}
-                                      />
+                                      showDiff && diffChange && selectedFile && middlePaneTabs[middleActiveIndex].path === selectedFile.path ? (
+                                        // Show Diff in middle pane
+                                        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                          <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 10, p: 0.75, bgcolor: 'rgba(237, 108, 2, 0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0, borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.3)', maxWidth: '300px', flexWrap: 'wrap' }}>
+                                            <Edit sx={{ fontSize: 16 }} />
+                                            <Typography variant="body2" fontWeight="bold" sx={{ fontSize: 10 }}>{changeViewMode === 'combined' && pendingChangesForFile.length > 1 ? `AI Changes (${pendingChangesForFile.length})` : 'AI Change'}</Typography>
+                                            <Chip label={diffChange.operation.toUpperCase()} size="small" sx={{ height: 18, fontSize: 9 }} color={diffChange.operation === 'create' ? 'success' : diffChange.operation === 'delete' ? 'error' : 'info'} />
+                                            {pendingChangesForFile.length > 1 && (<><Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} /><ToggleButtonGroup value={changeViewMode} exclusive onChange={(_, newMode) => newMode && setChangeViewMode(newMode)} size="small" sx={{ height: 20 }}><ToggleButton value="individual" sx={{ px: 0.5, fontSize: 9 }}><Tooltip title="Individual"><ViewAgenda sx={{ fontSize: 12 }} /></Tooltip></ToggleButton><ToggleButton value="combined" sx={{ px: 0.5, fontSize: 9 }}><Tooltip title="Combined"><CallMerge sx={{ fontSize: 12 }} /></Tooltip></ToggleButton></ToggleButtonGroup>{changeViewMode === 'individual' && (<Box display="flex" alignItems="center" gap={0.25}><IconButton size="small" onClick={() => setCurrentChangeIndex(Math.max(0, currentChangeIndex - 1))} disabled={currentChangeIndex === 0} sx={{ p: 0.15 }}><KeyboardArrowUp sx={{ fontSize: 14 }} /></IconButton><Typography variant="caption" sx={{ fontSize: 9, minWidth: 35, textAlign: 'center' }}>{currentChangeIndex + 1}/{pendingChangesForFile.length}</Typography><IconButton size="small" onClick={() => setCurrentChangeIndex(Math.min(pendingChangesForFile.length - 1, currentChangeIndex + 1))} disabled={currentChangeIndex === pendingChangesForFile.length - 1} sx={{ p: 0.15 }}><KeyboardArrowDown sx={{ fontSize: 14 }} /></IconButton></Box>)}</>)}
+                                            <ToggleButtonGroup value={diffViewMode} exclusive onChange={(_, newMode) => newMode && setDiffViewMode(newMode)} size="small" sx={{ height: 20 }}><ToggleButton value="inline" sx={{ px: 0.5 }}><Tooltip title="Inline"><ViewStream sx={{ fontSize: 12 }} /></Tooltip></ToggleButton><ToggleButton value="sideBySide" sx={{ px: 0.5 }}><Tooltip title="Side by Side"><ViewColumn sx={{ fontSize: 12 }} /></Tooltip></ToggleButton></ToggleButtonGroup>
+                                            <Button size="small" variant="contained" color="success" startIcon={<CheckCircle sx={{ fontSize: 12 }} />} onClick={() => handleApproveChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75 }}>Accept</Button>
+                                            <Button size="small" variant="outlined" color="error" startIcon={<Cancel sx={{ fontSize: 12 }} />} onClick={() => handleRejectChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75 }}>Reject</Button>
+                                          </Box>
+                                          <Box sx={{ flex: 1 }}><DiffEditor height="100%" language={getLanguageFromFilename(middlePaneTabs[middleActiveIndex].name)} original={diffChange.old_content || ''} modified={diffChange.new_content || ''} theme={selectedTheme} options={{ readOnly: true, minimap: { enabled: true }, fontSize: 13, renderSideBySide: diffViewMode === 'sideBySide', ignoreTrimWhitespace: false }} loading={<Box display="flex" alignItems="center" justifyContent="center" height="100%"><CircularProgress /></Box>} /></Box>
+                                        </Box>
+                                      ) : (
+                                        <Editor
+                                          height="100%"
+                                          language={getLanguageFromFilename(middlePaneTabs[middleActiveIndex].name)}
+                                          value={middlePaneTabs[middleActiveIndex].content}
+                                          onChange={(value) => handleSplitPaneContentChange('middle', value || '')}
+                                          theme={selectedTheme}
+                                          options={{
+                                            readOnly: middlePaneTabs[middleActiveIndex].content === '[Binary file]',
+                                            minimap: { enabled: true },
+                                            fontSize: 13,
+                                            lineNumbers: 'on',
+                                            renderWhitespace: 'selection',
+                                            scrollBeyondLastLine: false,
+                                            automaticLayout: true,
+                                            tabSize: 2,
+                                            wordWrap: 'on',
+                                            folding: true,
+                                            bracketPairColorization: { enabled: true },
+                                          }}
+                                        />
+                                      )
                                     ) : (
                                       <Box display="flex" alignItems="center" justifyContent="center" height="100%" flexDirection="column" gap={2}>
                                         <Code sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)' }} />
@@ -3007,28 +2976,44 @@ const NewCodeEditorPage: React.FC = () => {
                               </Box>
                               
                               {/* Right Editor */}
-                              <Box sx={{ flex: 1 }}>
+                              <Box sx={{ flex: 1, position: 'relative' }}>
                                 {rightActiveIndex >= 0 && rightPaneTabs[rightActiveIndex] ? (
-                                  <Editor
-                                    height="100%"
-                                    language={getLanguageFromFilename(rightPaneTabs[rightActiveIndex].name)}
-                                    value={rightPaneTabs[rightActiveIndex].content}
-                                    onChange={(value) => handleSplitPaneContentChange('right', value || '')}
-                                    theme={selectedTheme}
-                                    options={{
-                                      readOnly: rightPaneTabs[rightActiveIndex].content === '[Binary file]',
-                                      minimap: { enabled: true },
-                                      fontSize: 13,
-                                      lineNumbers: 'on',
-                                      renderWhitespace: 'selection',
-                                      scrollBeyondLastLine: false,
-                                      automaticLayout: true,
-                                      tabSize: 2,
-                                      wordWrap: 'on',
-                                      folding: true,
-                                      bracketPairColorization: { enabled: true },
-                                    }}
-                                  />
+                                  showDiff && diffChange && selectedFile && rightPaneTabs[rightActiveIndex].path === selectedFile.path ? (
+                                    // Show Diff in right pane
+                                    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                      <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 10, p: 0.75, bgcolor: 'rgba(237, 108, 2, 0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0, borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.3)', maxWidth: '300px', flexWrap: 'wrap' }}>
+                                        <Edit sx={{ fontSize: 16 }} />
+                                        <Typography variant="body2" fontWeight="bold" sx={{ fontSize: 10 }}>{changeViewMode === 'combined' && pendingChangesForFile.length > 1 ? `AI Changes (${pendingChangesForFile.length})` : 'AI Change'}</Typography>
+                                        <Chip label={diffChange.operation.toUpperCase()} size="small" sx={{ height: 18, fontSize: 9 }} color={diffChange.operation === 'create' ? 'success' : diffChange.operation === 'delete' ? 'error' : 'info'} />
+                                        {pendingChangesForFile.length > 1 && (<><Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} /><ToggleButtonGroup value={changeViewMode} exclusive onChange={(_, newMode) => newMode && setChangeViewMode(newMode)} size="small" sx={{ height: 20 }}><ToggleButton value="individual" sx={{ px: 0.5, fontSize: 9 }}><Tooltip title="Individual"><ViewAgenda sx={{ fontSize: 12 }} /></Tooltip></ToggleButton><ToggleButton value="combined" sx={{ px: 0.5, fontSize: 9 }}><Tooltip title="Combined"><CallMerge sx={{ fontSize: 12 }} /></Tooltip></ToggleButton></ToggleButtonGroup>{changeViewMode === 'individual' && (<Box display="flex" alignItems="center" gap={0.25}><IconButton size="small" onClick={() => setCurrentChangeIndex(Math.max(0, currentChangeIndex - 1))} disabled={currentChangeIndex === 0} sx={{ p: 0.15 }}><KeyboardArrowUp sx={{ fontSize: 14 }} /></IconButton><Typography variant="caption" sx={{ fontSize: 9, minWidth: 35, textAlign: 'center' }}>{currentChangeIndex + 1}/{pendingChangesForFile.length}</Typography><IconButton size="small" onClick={() => setCurrentChangeIndex(Math.min(pendingChangesForFile.length - 1, currentChangeIndex + 1))} disabled={currentChangeIndex === pendingChangesForFile.length - 1} sx={{ p: 0.15 }}><KeyboardArrowDown sx={{ fontSize: 14 }} /></IconButton></Box>)}</>)}
+                                        <ToggleButtonGroup value={diffViewMode} exclusive onChange={(_, newMode) => newMode && setDiffViewMode(newMode)} size="small" sx={{ height: 20 }}><ToggleButton value="inline" sx={{ px: 0.5 }}><Tooltip title="Inline"><ViewStream sx={{ fontSize: 12 }} /></Tooltip></ToggleButton><ToggleButton value="sideBySide" sx={{ px: 0.5 }}><Tooltip title="Side by Side"><ViewColumn sx={{ fontSize: 12 }} /></Tooltip></ToggleButton></ToggleButtonGroup>
+                                        <Button size="small" variant="contained" color="success" startIcon={<CheckCircle sx={{ fontSize: 12 }} />} onClick={() => handleApproveChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75 }}>Accept</Button>
+                                        <Button size="small" variant="outlined" color="error" startIcon={<Cancel sx={{ fontSize: 12 }} />} onClick={() => handleRejectChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75 }}>Reject</Button>
+                                      </Box>
+                                      <Box sx={{ flex: 1 }}><DiffEditor height="100%" language={getLanguageFromFilename(rightPaneTabs[rightActiveIndex].name)} original={diffChange.old_content || ''} modified={diffChange.new_content || ''} theme={selectedTheme} options={{ readOnly: true, minimap: { enabled: true }, fontSize: 13, renderSideBySide: diffViewMode === 'sideBySide', ignoreTrimWhitespace: false }} loading={<Box display="flex" alignItems="center" justifyContent="center" height="100%"><CircularProgress /></Box>} /></Box>
+                                    </Box>
+                                  ) : (
+                                    <Editor
+                                      height="100%"
+                                      language={getLanguageFromFilename(rightPaneTabs[rightActiveIndex].name)}
+                                      value={rightPaneTabs[rightActiveIndex].content}
+                                      onChange={(value) => handleSplitPaneContentChange('right', value || '')}
+                                      theme={selectedTheme}
+                                      options={{
+                                        readOnly: rightPaneTabs[rightActiveIndex].content === '[Binary file]',
+                                        minimap: { enabled: true },
+                                        fontSize: 13,
+                                        lineNumbers: 'on',
+                                        renderWhitespace: 'selection',
+                                        scrollBeyondLastLine: false,
+                                        automaticLayout: true,
+                                        tabSize: 2,
+                                        wordWrap: 'on',
+                                        folding: true,
+                                        bracketPairColorization: { enabled: true },
+                                      }}
+                                    />
+                                  )
                                 ) : (
                                   <Box display="flex" alignItems="center" justifyContent="center" height="100%" flexDirection="column" gap={2}>
                                     <Code sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)' }} />
@@ -3042,34 +3027,179 @@ const NewCodeEditorPage: React.FC = () => {
                           </Panel>
                         </PanelGroup>
                       ) : (
-                        // Single View
-                        <Editor
-                          height="100%"
-                          language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
-                          value={fileContent}
-                          onChange={(value) => handleContentChange(value || '')}
-                          theme={selectedTheme}
-                          options={{
-                            readOnly: !selectedFile || fileContent === '[Binary file]',
-                            minimap: { enabled: true },
-                            fontSize: 13,
-                            lineNumbers: 'on',
-                            renderWhitespace: 'selection',
-                            scrollBeyondLastLine: false,
-                            automaticLayout: true,
-                            tabSize: 2,
-                            wordWrap: 'on',
-                            folding: true,
-                            bracketPairColorization: { enabled: true },
-                          }}
-                          loading={
-                            <Box display="flex" alignItems="center" justifyContent="center" height="100%">
-                              <CircularProgress />
+                        // Single View - Check if we should show diff or regular editor
+                        showDiff && diffChange ? (
+                          // Show Diff in single view
+                          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                            {/* Floating AI Change Badge */}
+                            <Box 
+                              sx={{ 
+                                position: 'absolute',
+                                top: 12,
+                                left: 12,
+                                zIndex: 10,
+                                p: 0.75, 
+                                bgcolor: 'rgba(237, 108, 2, 0.85)',
+                                backdropFilter: 'blur(8px)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.75,
+                                flexShrink: 0,
+                                borderRadius: 2,
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                maxWidth: '300px',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              <Edit sx={{ fontSize: 16 }} />
+                              <Typography variant="body2" fontWeight="bold" sx={{ fontSize: 10 }}>
+                                {changeViewMode === 'combined' && pendingChangesForFile.length > 1
+                                  ? `AI Changes (${pendingChangesForFile.length})`
+                                  : 'AI Change'}
+                              </Typography>
+                              <Chip 
+                                label={diffChange.operation.toUpperCase()} 
+                                size="small" 
+                                sx={{ height: 18, fontSize: 9 }}
+                                color={
+                                  diffChange.operation === 'create' ? 'success' : 
+                                  diffChange.operation === 'delete' ? 'error' : 'info'
+                                }
+                              />
+                              
+                              {pendingChangesForFile.length > 1 && (
+                                <>
+                                  <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                                  <ToggleButtonGroup
+                                    value={changeViewMode}
+                                    exclusive
+                                    onChange={(_, newMode) => newMode && setChangeViewMode(newMode)}
+                                    size="small"
+                                    sx={{ height: 20 }}
+                                  >
+                                    <ToggleButton value="individual" sx={{ px: 0.5, fontSize: 9 }}>
+                                      <Tooltip title="Individual"><ViewAgenda sx={{ fontSize: 12 }} /></Tooltip>
+                                    </ToggleButton>
+                                    <ToggleButton value="combined" sx={{ px: 0.5, fontSize: 9 }}>
+                                      <Tooltip title="Combined"><CallMerge sx={{ fontSize: 12 }} /></Tooltip>
+                                    </ToggleButton>
+                                  </ToggleButtonGroup>
+                                  
+                                  {changeViewMode === 'individual' && (
+                                    <Box display="flex" alignItems="center" gap={0.25}>
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => setCurrentChangeIndex(Math.max(0, currentChangeIndex - 1))}
+                                        disabled={currentChangeIndex === 0}
+                                        sx={{ p: 0.15 }}
+                                      >
+                                        <KeyboardArrowUp sx={{ fontSize: 14 }} />
+                                      </IconButton>
+                                      <Typography variant="caption" sx={{ fontSize: 9, minWidth: 35, textAlign: 'center' }}>
+                                        {currentChangeIndex + 1}/{pendingChangesForFile.length}
+                                      </Typography>
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => setCurrentChangeIndex(Math.min(pendingChangesForFile.length - 1, currentChangeIndex + 1))}
+                                        disabled={currentChangeIndex === pendingChangesForFile.length - 1}
+                                        sx={{ p: 0.15 }}
+                                      >
+                                        <KeyboardArrowDown sx={{ fontSize: 14 }} />
+                                      </IconButton>
+                                    </Box>
+                                  )}
+                                </>
+                              )}
+                              
+                              <ToggleButtonGroup
+                                value={diffViewMode}
+                                exclusive
+                                onChange={(_, newMode) => newMode && setDiffViewMode(newMode)}
+                                size="small"
+                                sx={{ height: 20 }}
+                              >
+                                <ToggleButton value="inline" sx={{ px: 0.5 }}>
+                                  <Tooltip title="Inline"><ViewStream sx={{ fontSize: 12 }} /></Tooltip>
+                                </ToggleButton>
+                                <ToggleButton value="sideBySide" sx={{ px: 0.5 }}>
+                                  <Tooltip title="Side by Side"><ViewColumn sx={{ fontSize: 12 }} /></Tooltip>
+                                </ToggleButton>
+                              </ToggleButtonGroup>
+                              
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                startIcon={<CheckCircle sx={{ fontSize: 12 }} />}
+                                onClick={() => handleApproveChange(diffChange.change_id)}
+                                sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75 }}
+                              >
+                                Accept
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                startIcon={<Cancel sx={{ fontSize: 12 }} />}
+                                onClick={() => handleRejectChange(diffChange.change_id)}
+                                sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75 }}
+                              >
+                                Reject
+                              </Button>
                             </Box>
-                          }
-                        />
+                            
+                            {/* Diff Editor */}
+                            <Box sx={{ flex: 1 }}>
+                              <DiffEditor
+                                height="100%"
+                                language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
+                                original={diffChange.old_content || ''}
+                                modified={diffChange.new_content || ''}
+                                theme={selectedTheme}
+                                options={{
+                                  readOnly: true,
+                                  minimap: { enabled: true },
+                                  fontSize: 13,
+                                  renderSideBySide: diffViewMode === 'sideBySide',
+                                  ignoreTrimWhitespace: false,
+                                }}
+                                loading={
+                                  <Box display="flex" alignItems="center" justifyContent="center" height="100%">
+                                    <CircularProgress />
+                                  </Box>
+                                }
+                              />
+                            </Box>
+                          </Box>
+                        ) : (
+                          // Regular single editor
+                          <Editor
+                            height="100%"
+                            language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
+                            value={fileContent}
+                            onChange={(value) => handleContentChange(value || '')}
+                            theme={selectedTheme}
+                            options={{
+                              readOnly: !selectedFile || fileContent === '[Binary file]',
+                              minimap: { enabled: true },
+                              fontSize: 13,
+                              lineNumbers: 'on',
+                              renderWhitespace: 'selection',
+                              scrollBeyondLastLine: false,
+                              automaticLayout: true,
+                              tabSize: 2,
+                              wordWrap: 'on',
+                              folding: true,
+                              bracketPairColorization: { enabled: true },
+                            }}
+                            loading={
+                              <Box display="flex" alignItems="center" justifyContent="center" height="100%">
+                                <CircularProgress />
+                              </Box>
+                            }
+                          />
+                        )
                       )
-                    )
                   ) : (
                     <Box 
                       display="flex" 
