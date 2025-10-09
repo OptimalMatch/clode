@@ -59,6 +59,7 @@ import {
   Save,
   ArrowBack,
   History,
+  Menu as MenuIcon,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
