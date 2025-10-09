@@ -665,7 +665,7 @@ const NewCodeEditorPage: React.FC = () => {
     if (splitViewEnabled) {
       // In split view, close the pane that triggered this action
       if (moreActionsPaneId === 'left') {
-        // Close left pane, keep right pane tabs and switch to single view
+        // Close left pane
         const modifiedTabs = leftPaneTabs.filter(tab => tab.isModified);
         if (modifiedTabs.length > 0) {
           const tabNames = modifiedTabs.map(t => t.name).join(', ');
@@ -674,19 +674,40 @@ const NewCodeEditorPage: React.FC = () => {
             return;
           }
         }
-        // Transfer right pane tabs to single view
-        setOpenTabs(rightPaneTabs);
-        setActiveTabIndex(rightActiveIndex >= 0 ? rightActiveIndex : 0);
-        if (rightActiveIndex >= 0 && rightPaneTabs[rightActiveIndex]) {
-          setFileContent(rightPaneTabs[rightActiveIndex].content);
-          setOriginalContent(rightPaneTabs[rightActiveIndex].originalContent);
-          setSelectedFile({ name: rightPaneTabs[rightActiveIndex].name, path: rightPaneTabs[rightActiveIndex].path, type: 'file' });
+        
+        if (paneCount === 3) {
+          // In 3-pane view, remove left pane and shift panes
+          setLeftPaneTabs(middlePaneTabs);
+          setLeftActiveIndex(middleActiveIndex);
+          setMiddlePaneTabs([]);
+          setMiddleActiveIndex(-1);
+          setPaneCount(2);
+          if (activePaneId === 'left') {
+            setActivePaneId('left');
+            if (middleActiveIndex >= 0 && middlePaneTabs[middleActiveIndex]) {
+              setFileContent(middlePaneTabs[middleActiveIndex].content);
+              setOriginalContent(middlePaneTabs[middleActiveIndex].originalContent);
+              setSelectedFile({ name: middlePaneTabs[middleActiveIndex].name, path: middlePaneTabs[middleActiveIndex].path, type: 'file' });
+            }
+          }
+        } else {
+          // In 2-pane view, close left and transfer right pane tabs to single view
+          setOpenTabs(rightPaneTabs);
+          setActiveTabIndex(rightActiveIndex >= 0 ? rightActiveIndex : 0);
+          if (rightActiveIndex >= 0 && rightPaneTabs[rightActiveIndex]) {
+            setFileContent(rightPaneTabs[rightActiveIndex].content);
+            setOriginalContent(rightPaneTabs[rightActiveIndex].originalContent);
+            setSelectedFile({ name: rightPaneTabs[rightActiveIndex].name, path: rightPaneTabs[rightActiveIndex].path, type: 'file' });
+          }
+          setLeftPaneTabs([]);
+          setLeftActiveIndex(-1);
+          setRightPaneTabs([]);
+          setRightActiveIndex(-1);
+          setSplitViewEnabled(false);
+          setPaneCount(1);
         }
-        setLeftPaneTabs([]);
-        setLeftActiveIndex(-1);
-        setSplitViewEnabled(false);
       } else if (moreActionsPaneId === 'right') {
-        // Close right pane, keep left pane tabs and switch to single view
+        // Close right pane
         const modifiedTabs = rightPaneTabs.filter(tab => tab.isModified);
         if (modifiedTabs.length > 0) {
           const tabNames = modifiedTabs.map(t => t.name).join(', ');
@@ -695,17 +716,59 @@ const NewCodeEditorPage: React.FC = () => {
             return;
           }
         }
-        // Transfer left pane tabs to single view
-        setOpenTabs(leftPaneTabs);
-        setActiveTabIndex(leftActiveIndex >= 0 ? leftActiveIndex : 0);
-        if (leftActiveIndex >= 0 && leftPaneTabs[leftActiveIndex]) {
-          setFileContent(leftPaneTabs[leftActiveIndex].content);
-          setOriginalContent(leftPaneTabs[leftActiveIndex].originalContent);
-          setSelectedFile({ name: leftPaneTabs[leftActiveIndex].name, path: leftPaneTabs[leftActiveIndex].path, type: 'file' });
+        
+        if (paneCount === 3) {
+          // In 3-pane view, remove right pane, keep left and middle
+          setRightPaneTabs([]);
+          setRightActiveIndex(-1);
+          setPaneCount(2);
+          if (activePaneId === 'right') {
+            setActivePaneId('left');
+            if (leftActiveIndex >= 0 && leftPaneTabs[leftActiveIndex]) {
+              setFileContent(leftPaneTabs[leftActiveIndex].content);
+              setOriginalContent(leftPaneTabs[leftActiveIndex].originalContent);
+              setSelectedFile({ name: leftPaneTabs[leftActiveIndex].name, path: leftPaneTabs[leftActiveIndex].path, type: 'file' });
+            }
+          }
+        } else {
+          // In 2-pane view, close right and transfer left pane tabs to single view
+          setOpenTabs(leftPaneTabs);
+          setActiveTabIndex(leftActiveIndex >= 0 ? leftActiveIndex : 0);
+          if (leftActiveIndex >= 0 && leftPaneTabs[leftActiveIndex]) {
+            setFileContent(leftPaneTabs[leftActiveIndex].content);
+            setOriginalContent(leftPaneTabs[leftActiveIndex].originalContent);
+            setSelectedFile({ name: leftPaneTabs[leftActiveIndex].name, path: leftPaneTabs[leftActiveIndex].path, type: 'file' });
+          }
+          setLeftPaneTabs([]);
+          setLeftActiveIndex(-1);
+          setRightPaneTabs([]);
+          setRightActiveIndex(-1);
+          setSplitViewEnabled(false);
+          setPaneCount(1);
         }
-        setRightPaneTabs([]);
-        setRightActiveIndex(-1);
-        setSplitViewEnabled(false);
+      } else if (moreActionsPaneId === 'middle') {
+        // Close middle pane, keep left and right panes and go back to 2-pane view
+        const modifiedTabs = middlePaneTabs.filter(tab => tab.isModified);
+        if (modifiedTabs.length > 0) {
+          const tabNames = modifiedTabs.map(t => t.name).join(', ');
+          if (!window.confirm(`${modifiedTabs.length} file(s) in middle pane have unsaved changes (${tabNames}). Close pane anyway?`)) {
+            setMoreActionsAnchor(null);
+            return;
+          }
+        }
+        // Remove middle pane, keep left and right
+        setMiddlePaneTabs([]);
+        setMiddleActiveIndex(-1);
+        setPaneCount(2);
+        // Switch to left or right pane if middle was active
+        if (activePaneId === 'middle') {
+          setActivePaneId('left');
+          if (leftActiveIndex >= 0 && leftPaneTabs[leftActiveIndex]) {
+            setFileContent(leftPaneTabs[leftActiveIndex].content);
+            setOriginalContent(leftPaneTabs[leftActiveIndex].originalContent);
+            setSelectedFile({ name: leftPaneTabs[leftActiveIndex].name, path: leftPaneTabs[leftActiveIndex].path, type: 'file' });
+          }
+        }
       }
     } else {
       // Single view - close all tabs
@@ -785,6 +848,39 @@ const NewCodeEditorPage: React.FC = () => {
           if (rightActiveIndex >= 0 && rightPaneTabs[rightActiveIndex] && !rightPaneTabs[rightActiveIndex].isModified) {
             setRightActiveIndex(0);
             if (activePaneId === 'right') {
+              setFileContent(newTabs[0].content);
+              setOriginalContent(newTabs[0].originalContent);
+              setSelectedFile({ name: newTabs[0].name, path: newTabs[0].path, type: 'file' });
+            }
+          }
+        }
+      } else if (moreActionsPaneId === 'middle') {
+        const savedTabs = middlePaneTabs.filter(tab => !tab.isModified);
+        if (savedTabs.length === 0) {
+          enqueueSnackbar('No saved tabs to close in middle pane', { variant: 'info' });
+          setMoreActionsAnchor(null);
+          return;
+        }
+        const newTabs = middlePaneTabs.filter(tab => tab.isModified);
+        setMiddlePaneTabs(newTabs);
+        
+        // If all tabs were saved, close the middle pane
+        if (newTabs.length === 0) {
+          setMiddleActiveIndex(-1);
+          setPaneCount(2);
+          if (activePaneId === 'middle') {
+            setActivePaneId('left');
+            if (leftActiveIndex >= 0 && leftPaneTabs[leftActiveIndex]) {
+              setFileContent(leftPaneTabs[leftActiveIndex].content);
+              setOriginalContent(leftPaneTabs[leftActiveIndex].originalContent);
+              setSelectedFile({ name: leftPaneTabs[leftActiveIndex].name, path: leftPaneTabs[leftActiveIndex].path, type: 'file' });
+            }
+          }
+        } else {
+          // Adjust active tab if needed
+          if (middleActiveIndex >= 0 && middlePaneTabs[middleActiveIndex] && !middlePaneTabs[middleActiveIndex].isModified) {
+            setMiddleActiveIndex(0);
+            if (activePaneId === 'middle') {
               setFileContent(newTabs[0].content);
               setOriginalContent(newTabs[0].originalContent);
               setSelectedFile({ name: newTabs[0].name, path: newTabs[0].path, type: 'file' });
@@ -2071,7 +2167,7 @@ const NewCodeEditorPage: React.FC = () => {
                         // Split View - Each pane with its own tab bar
                         <PanelGroup direction="horizontal">
                           {/* Left Pane */}
-                          <Panel defaultSize={50} minSize={20}>
+                          <Panel defaultSize={paneCount === 3 ? 33 : 50} minSize={15}>
                             <Box 
                               sx={{ 
                                 height: '100%',
@@ -2242,8 +2338,180 @@ const NewCodeEditorPage: React.FC = () => {
                             transition: 'background-color 0.2s',
                           }} />
                           
+                          {/* Middle Pane (only when paneCount === 3) */}
+                          {paneCount === 3 && (
+                            <>
+                              <Panel defaultSize={33} minSize={15}>
+                                <Box 
+                                  sx={{ 
+                                    height: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    borderTop: activePaneId === 'middle' ? '2px solid #007acc' : 'none',
+                                  }}
+                                  onClick={() => setActivePaneId('middle')}
+                                >
+                                  {/* Middle Pane Tab Bar */}
+                                  <Box 
+                                    sx={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center',
+                                      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                                      bgcolor: '#252526',
+                                      minHeight: '35px',
+                                    }}
+                                  >
+                                    <Box
+                                      sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        flex: 1,
+                                        overflowX: 'auto',
+                                        overflowY: 'hidden',
+                                      }}
+                                    >
+                                      {middlePaneTabs.length > 0 ? (
+                                        middlePaneTabs.map((tab, index) => (
+                                          <Box
+                                            key={tab.path}
+                                            onClick={(e) => { e.stopPropagation(); handleSplitPaneTabClick('middle', index); }}
+                                            sx={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: 0.5,
+                                              px: 1.5,
+                                              py: 0.75,
+                                              borderRight: '1px solid rgba(255, 255, 255, 0.05)',
+                                              bgcolor: middleActiveIndex === index ? '#1e1e1e' : 'transparent',
+                                              cursor: 'pointer',
+                                              minWidth: 120,
+                                              maxWidth: 200,
+                                              '&:hover': {
+                                                bgcolor: middleActiveIndex === index ? '#1e1e1e' : 'rgba(255, 255, 255, 0.05)',
+                                              },
+                                            }}
+                                          >
+                                            {getFileIcon(tab.name, 'inherit')}
+                                            <Typography
+                                              variant="body2"
+                                              sx={{
+                                                fontSize: 12,
+                                                fontStyle: tab.isPermanent ? 'normal' : 'italic',
+                                                color: tab.isModified ? '#ff9800' : 'rgba(255, 255, 255, 0.9)',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap',
+                                                flex: 1,
+                                              }}
+                                            >
+                                              {tab.name}
+                                              {tab.isModified && ' •'}
+                                            </Typography>
+                                            <IconButton
+                                              size="small"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSplitPaneTabClose('middle', index);
+                                              }}
+                                              sx={{
+                                                p: 0.25,
+                                                ml: 0.5,
+                                                color: 'rgba(255, 255, 255, 0.6)',
+                                                '&:hover': { 
+                                                  color: 'rgba(255, 255, 255, 1)',
+                                                  bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                                },
+                                              }}
+                                            >
+                                              <Close sx={{ fontSize: 14 }} />
+                                            </IconButton>
+                                          </Box>
+                                        ))
+                                      ) : (
+                                        <Typography variant="body2" sx={{ px: 2, fontSize: 12, color: 'rgba(255, 255, 255, 0.5)' }}>
+                                          No files open
+                                        </Typography>
+                                      )}
+                                    </Box>
+                                    {/* Middle Pane Action Buttons */}
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pr: 1 }}>
+                                      <Tooltip title="Max 3 panes">
+                                        <IconButton
+                                          size="small"
+                                          disabled
+                                          sx={{
+                                            p: 0.5,
+                                            color: 'rgba(255, 255, 255, 0.3)',
+                                          }}
+                                        >
+                                          <SplitEditorIcon sx={{ fontSize: 16 }} />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <Tooltip title="More Actions">
+                                        <IconButton
+                                          size="small"
+                                          onClick={(e) => { e.stopPropagation(); setMoreActionsAnchor(e.currentTarget); setMoreActionsPaneId('middle'); }}
+                                          sx={{
+                                            p: 0.5,
+                                            color: 'rgba(255, 255, 255, 0.6)',
+                                            '&:hover': {
+                                              bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                            },
+                                          }}
+                                        >
+                                          <MoreActionsIcon sx={{ fontSize: 16 }} />
+                                        </IconButton>
+                                      </Tooltip>
+                                    </Box>
+                                  </Box>
+                                  
+                                  {/* Middle Editor */}
+                                  <Box sx={{ flex: 1 }}>
+                                    {middleActiveIndex >= 0 && middlePaneTabs[middleActiveIndex] ? (
+                                      <Editor
+                                        height="100%"
+                                        language={getLanguageFromFilename(middlePaneTabs[middleActiveIndex].name)}
+                                        value={middlePaneTabs[middleActiveIndex].content}
+                                        onChange={(value) => handleSplitPaneContentChange('middle', value || '')}
+                                        theme={selectedTheme}
+                                        options={{
+                                          readOnly: middlePaneTabs[middleActiveIndex].content === '[Binary file]',
+                                          minimap: { enabled: true },
+                                          fontSize: 13,
+                                          lineNumbers: 'on',
+                                          renderWhitespace: 'selection',
+                                          scrollBeyondLastLine: false,
+                                          automaticLayout: true,
+                                          tabSize: 2,
+                                          wordWrap: 'on',
+                                          folding: true,
+                                          bracketPairColorization: { enabled: true },
+                                        }}
+                                      />
+                                    ) : (
+                                      <Box display="flex" alignItems="center" justifyContent="center" height="100%" flexDirection="column" gap={2}>
+                                        <Code sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)' }} />
+                                        <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: 12 }}>
+                                          Middle Pane
+                                        </Typography>
+                                      </Box>
+                                    )}
+                                  </Box>
+                                </Box>
+                              </Panel>
+                              
+                              {/* Second Resize Handle */}
+                              <PanelResizeHandle style={{
+                                width: '4px',
+                                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                cursor: 'col-resize',
+                                transition: 'background-color 0.2s',
+                              }} />
+                            </>
+                          )}
+                          
                           {/* Right Pane */}
-                          <Panel defaultSize={50} minSize={20}>
+                          <Panel defaultSize={paneCount === 3 ? 34 : 50} minSize={15}>
                             <Box 
                               sx={{ 
                                 height: '100%',
