@@ -33,6 +33,7 @@ interface VSCodeFileTreeProps {
   onItemClick: (item: FileItem) => void;
   selectedPath?: string;
   pendingChanges?: Array<{ file_path: string }>;
+  currentPath?: string;
   level?: number;
 }
 
@@ -90,15 +91,20 @@ const VSCodeFileTreeItem: React.FC<{
   onItemClick: (item: FileItem) => void;
   selectedPath?: string;
   pendingChanges?: Array<{ file_path: string }>;
+  currentPath?: string;
   level: number;
-}> = ({ item, onItemClick, selectedPath, pendingChanges, level }) => {
+}> = ({ item, onItemClick, selectedPath, pendingChanges, currentPath, level }) => {
   const [expanded, setExpanded] = useState(false);
   const isDirectory = item.type === 'directory';
   const isSelected = selectedPath === item.path;
   
   // Normalize paths to use forward slashes for comparison (Windows compatibility)
   const normalizePath = (path: string) => path.replace(/\\/g, '/');
-  const normalizedItemPath = normalizePath(item.path);
+  
+  // Construct full path from repo root for change comparison
+  // When navigating into subdirectories, item.path is relative to currentPath
+  const fullItemPath = currentPath ? `${currentPath}/${item.path}` : item.path;
+  const normalizedItemPath = normalizePath(fullItemPath);
   
   // Check if this file or directory has pending changes
   const fileHasChanges = isDirectory
@@ -249,6 +255,7 @@ const VSCodeFileTreeItem: React.FC<{
                 onItemClick={onItemClick}
                 selectedPath={selectedPath}
                 pendingChanges={pendingChanges}
+                currentPath={currentPath}
                 level={level + 1}
               />
             ))}
@@ -264,6 +271,7 @@ const VSCodeFileTree: React.FC<VSCodeFileTreeProps> = ({
   onItemClick,
   selectedPath,
   pendingChanges,
+  currentPath,
   level = 1,
 }) => {
   // Sort items: directories first, then files, both alphabetically
@@ -291,6 +299,7 @@ const VSCodeFileTree: React.FC<VSCodeFileTreeProps> = ({
           onItemClick={onItemClick}
           selectedPath={selectedPath}
           pendingChanges={pendingChanges}
+          currentPath={currentPath}
           level={level}
         />
       ))}
