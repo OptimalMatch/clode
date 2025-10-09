@@ -34,6 +34,8 @@ import {
   CircularProgress,
   LinearProgress,
   Avatar,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import {
   Folder as FolderIcon,
@@ -59,6 +61,8 @@ import {
   Stop,
   Close,
   Menu as MenuIcon,
+  ViewColumn,
+  ViewStream,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
@@ -174,6 +178,7 @@ const CodeEditorPage: React.FC = () => {
   const [showExplorer, setShowExplorer] = useState(true);
   const [showDiff, setShowDiff] = useState(false);
   const [diffChange, setDiffChange] = useState<FileChange | null>(null);
+  const [diffViewMode, setDiffViewMode] = useState<'inline' | 'sideBySide'>('inline');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
@@ -1068,7 +1073,30 @@ const CodeEditorPage: React.FC = () => {
                                 }
                               />
                             </Box>
-                            <Box display="flex" gap={1}>
+                            <Box display="flex" gap={1} alignItems="center">
+                              <ToggleButtonGroup
+                                value={diffViewMode}
+                                exclusive
+                                onChange={(_e: React.MouseEvent<HTMLElement>, newMode: 'inline' | 'sideBySide' | null) => {
+                                  if (newMode !== null) {
+                                    setDiffViewMode(newMode);
+                                  }
+                                }}
+                                size="small"
+                                sx={{ height: 32 }}
+                              >
+                                <ToggleButton value="inline">
+                                  <Tooltip title="Inline View">
+                                    <ViewStream sx={{ fontSize: 18 }} />
+                                  </Tooltip>
+                                </ToggleButton>
+                                <ToggleButton value="sideBySide">
+                                  <Tooltip title="Side-by-Side View">
+                                    <ViewColumn sx={{ fontSize: 18 }} />
+                                  </Tooltip>
+                                </ToggleButton>
+                              </ToggleButtonGroup>
+                              <Divider orientation="vertical" flexItem />
                               <Button
                                 size="small"
                                 variant="contained"
@@ -1100,8 +1128,7 @@ const CodeEditorPage: React.FC = () => {
                                 readOnly: true,
                                 minimap: { enabled: true },
                                 fontSize: 14,
-                                renderSideBySide: true,
-                                enableSplitViewResizing: true,
+                                renderSideBySide: diffViewMode === 'sideBySide',
                                 ignoreTrimWhitespace: false,
                                 renderOverviewRuler: true,
                               }}
