@@ -96,13 +96,26 @@ const VSCodeFileTreeItem: React.FC<{
   const isDirectory = item.type === 'directory';
   const isSelected = selectedPath === item.path;
   
-  // Check if this file has pending changes
-  const fileHasChanges = pendingChanges?.some(
-    change => change.file_path === item.path || change.file_path.endsWith(item.name)
-  );
-  const changeCount = pendingChanges?.filter(
-    change => change.file_path === item.path || change.file_path.endsWith(item.name)
-  ).length || 0;
+  // Check if this file or directory has pending changes
+  const fileHasChanges = isDirectory
+    ? pendingChanges?.some(change => 
+        // For directories: check if any change is within this directory
+        change.file_path.startsWith(item.path + '/') || change.file_path === item.path
+      )
+    : pendingChanges?.some(change => 
+        // For files: exact match
+        change.file_path === item.path
+      );
+  
+  const changeCount = isDirectory
+    ? pendingChanges?.filter(change => 
+        // Count all changes within this directory
+        change.file_path.startsWith(item.path + '/') || change.file_path === item.path
+      ).length || 0
+    : pendingChanges?.filter(change => 
+        // Count changes for this specific file
+        change.file_path === item.path
+      ).length || 0;
 
   const handleClick = () => {
     if (isDirectory) {
