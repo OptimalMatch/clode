@@ -736,7 +736,14 @@ const NewCodeEditorPage: React.FC = () => {
           <Tooltip title="Explorer" placement="right">
             <IconButton
               size="small"
-              onClick={() => { setActivityBarView('explorer'); setSidebarCollapsed(false); }}
+              onClick={() => {
+                if (activityBarView === 'explorer' && !sidebarCollapsed) {
+                  setSidebarCollapsed(true);
+                } else {
+                  setActivityBarView('explorer');
+                  setSidebarCollapsed(false);
+                }
+              }}
               sx={{ 
                 color: activityBarView === 'explorer' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
                 borderLeft: activityBarView === 'explorer' ? '2px solid #6495ed' : '2px solid transparent',
@@ -753,7 +760,14 @@ const NewCodeEditorPage: React.FC = () => {
           <Tooltip title="Search" placement="right">
             <IconButton
               size="small"
-              onClick={() => { setActivityBarView('search'); setSidebarCollapsed(false); }}
+              onClick={() => {
+                if (activityBarView === 'search' && !sidebarCollapsed) {
+                  setSidebarCollapsed(true);
+                } else {
+                  setActivityBarView('search');
+                  setSidebarCollapsed(false);
+                }
+              }}
               sx={{ 
                 color: activityBarView === 'search' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
                 borderLeft: activityBarView === 'search' ? '2px solid #6495ed' : '2px solid transparent',
@@ -778,7 +792,14 @@ const NewCodeEditorPage: React.FC = () => {
             >
               <IconButton
                 size="small"
-                onClick={() => { setActivityBarView('changes'); setSidebarCollapsed(false); }}
+                onClick={() => {
+                  if (activityBarView === 'changes' && !sidebarCollapsed) {
+                    setSidebarCollapsed(true);
+                  } else {
+                    setActivityBarView('changes');
+                    setSidebarCollapsed(false);
+                  }
+                }}
                 sx={{ 
                   color: activityBarView === 'changes' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
                   borderLeft: activityBarView === 'changes' ? '2px solid #6495ed' : '2px solid transparent',
@@ -796,7 +817,14 @@ const NewCodeEditorPage: React.FC = () => {
           <Tooltip title="AI Assistant" placement="right">
             <IconButton
               size="small"
-              onClick={() => { setActivityBarView('chat'); setSidebarCollapsed(false); }}
+              onClick={() => {
+                if (activityBarView === 'chat' && !sidebarCollapsed) {
+                  setSidebarCollapsed(true);
+                } else {
+                  setActivityBarView('chat');
+                  setSidebarCollapsed(false);
+                }
+              }}
               sx={{ 
                 color: activityBarView === 'chat' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
                 borderLeft: activityBarView === 'chat' ? '2px solid #6495ed' : '2px solid transparent',
