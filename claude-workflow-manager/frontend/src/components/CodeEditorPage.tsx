@@ -460,7 +460,6 @@ const CodeEditorPage: React.FC = () => {
     if (pendingChangesForFile.length === 0) return null;
     if (pendingChangesForFile.length === 1) return pendingChangesForFile[0];
     
-    // Create a combined change showing all modifications
     // Sort by timestamp to ensure chronological order
     const sortedChanges = [...pendingChangesForFile].sort((a, b) => {
       try {
@@ -476,26 +475,22 @@ const CodeEditorPage: React.FC = () => {
     const firstChange = sortedChanges[0];
     const lastChange = sortedChanges[sortedChanges.length - 1];
     
-    console.log('[Code Editor] Creating combined change:', {
+    console.log('[Code Editor] Creating combined view (Cursor/Windsurf model):', {
       totalChanges: sortedChanges.length,
-      firstChangeId: firstChange.change_id,
-      lastChangeId: lastChange.change_id,
-      firstOldContentLength: firstChange.old_content?.length || 0,
-      lastNewContentLength: lastChange.new_content?.length || 0,
+      changeIds: sortedChanges.map((c: FileChange) => c.change_id),
+      note: 'Changes were applied sequentially to file, so naturally merged'
     });
     
-    // Use the original content from the first change
-    // and the final content from the last change
-    // If old_content is null on first change, it means it's a new file
-    // If new_content is null on last change, it means it's a deletion
+    // In the Cursor/Windsurf model, changes are applied sequentially to the file.
+    // Change 1 applied first, then change 2 reads the modified file.
+    // So the last change's new_content already includes all previous changes!
+    // We just need to show: original → final (after all changes)
     return {
       ...firstChange,
       change_id: 'combined',
-      operation: firstChange.operation === 'create' && lastChange.operation === 'delete' ? 'update' : 
-                 lastChange.operation === 'delete' ? 'delete' : 
-                 firstChange.operation === 'create' ? 'create' : 'update',
-      old_content: firstChange.old_content || '',
-      new_content: lastChange.new_content || '',
+      operation: 'update',
+      old_content: firstChange.old_content || '', // Original before any changes
+      new_content: lastChange.new_content || '',  // Final after all changes
     };
   };
 
@@ -1223,26 +1218,42 @@ const CodeEditorPage: React.FC = () => {
                     </Box>
                     
                     <Box sx={{ flexGrow: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
-                      {showDiff && diffChange ? (
-                        <>
-                          {/* Diff Mode: Show inline diff with action buttons */}
-                          <Box 
-                            sx={{ 
-                              p: 1.5, 
-                              bgcolor: 'warning.dark',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: 2,
-                            }}
-                          >
-                            <Box display="flex" alignItems="center" gap={1}>
-                              <Edit sx={{ fontSize: 20 }} />
-                              <Typography variant="body2" fontWeight="bold">
-                                {changeViewMode === 'combined' && pendingChangesForFile.length > 1
-                                  ? `AI Suggested Changes (${pendingChangesForFile.length})`
-                                  : 'AI Suggested Change'}
-                              </Typography>
+                        {showDiff && diffChange ? (
+                          <>
+                            {/* Info banner for combined mode */}
+                            {changeViewMode === 'combined' && pendingChangesForFile.length > 1 && (
+                              <Box 
+                                sx={{ 
+                                  p: 1, 
+                                  bgcolor: 'info.dark',
+                                  borderBottom: '1px solid',
+                                  borderColor: 'divider',
+                                }}
+                              >
+                                <Typography variant="caption" display="flex" alignItems="center" gap={0.5}>
+                                  ✨ <strong>Combined View:</strong> Showing cumulative effect of all {pendingChangesForFile.length} changes (applied sequentially).
+                                  Use Individual mode (📋) to review each change separately. Note: Changes are already applied to the file; "Accept" keeps them, "Reject" reverts them.
+                                </Typography>
+                              </Box>
+                            )}
+                            {/* Diff Mode: Show inline diff with action buttons */}
+                            <Box 
+                              sx={{ 
+                                p: 1.5, 
+                                bgcolor: 'warning.dark',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 2,
+                              }}
+                            >
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <Edit sx={{ fontSize: 20 }} />
+                                <Typography variant="body2" fontWeight="bold">
+                                  {changeViewMode === 'combined' && pendingChangesForFile.length > 1
+                                    ? `AI Suggested Changes (${pendingChangesForFile.length})`
+                                    : 'AI Suggested Change'}
+                                </Typography>
                               <Chip 
                                 label={diffChange.operation.toUpperCase()} 
                                 size="small" 
