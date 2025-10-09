@@ -30,7 +30,10 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   CircularProgress,
+  Menu,
+  SvgIcon,
 } from '@mui/material';
+import type { SvgIconProps } from '@mui/material';
 import {
   FolderOutlined,
   SearchOutlined,
@@ -160,6 +163,20 @@ const getLanguageFromFilename = (filename: string): string => {
   return languageMap[ext] || 'plaintext';
 };
 
+// VSCode-style "Split Editor" icon from StackBlitz
+const SplitEditorIcon: React.FC<SvgIconProps> = (props) => (
+  <SvgIcon {...props} viewBox="0 0 16 16">
+    <path d="M14 1H3L2 2v11l1 1h11l1-1V2zM8 13H3V2h5zm6 0H9V2h5z" />
+  </SvgIcon>
+);
+
+// VSCode-style "More Actions" icon (three dots) from StackBlitz
+const MoreActionsIcon: React.FC<SvgIconProps> = (props) => (
+  <SvgIcon {...props} viewBox="0 0 16 16">
+    <path d="M4 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m5 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m5 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+  </SvgIcon>
+);
+
 const NewCodeEditorPage: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
   
@@ -180,6 +197,8 @@ const NewCodeEditorPage: React.FC = () => {
   // Tab system state
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
+  const [splitViewEnabled, setSplitViewEnabled] = useState(false);
+  const [moreActionsAnchor, setMoreActionsAnchor] = useState<null | HTMLElement>(null);
   
   // Chat & Orchestration state
   const [orchestrationDesigns, setOrchestrationDesigns] = useState<OrchestrationDesign[]>([]);
@@ -494,6 +513,50 @@ const NewCodeEditorPage: React.FC = () => {
     } else if (activeTabIndex > index) {
       setActiveTabIndex(activeTabIndex - 1);
     }
+  };
+
+  const handleCloseAllTabs = () => {
+    const modifiedTabs = openTabs.filter(tab => tab.isModified);
+    if (modifiedTabs.length > 0) {
+      const tabNames = modifiedTabs.map(t => t.name).join(', ');
+      if (!window.confirm(`${modifiedTabs.length} file(s) have unsaved changes (${tabNames}). Close all anyway?`)) {
+        return;
+      }
+    }
+    setOpenTabs([]);
+    setActiveTabIndex(-1);
+    setSelectedFile(null);
+    setFileContent('');
+    setOriginalContent('');
+    setMoreActionsAnchor(null);
+  };
+
+  const handleCloseSavedTabs = () => {
+    const savedTabs = openTabs.filter(tab => !tab.isModified);
+    if (savedTabs.length === 0) {
+      enqueueSnackbar('No saved tabs to close', { variant: 'info' });
+      setMoreActionsAnchor(null);
+      return;
+    }
+
+    const newTabs = openTabs.filter(tab => tab.isModified);
+    setOpenTabs(newTabs);
+
+    // Adjust active tab if needed
+    if (activeTabIndex >= 0 && openTabs[activeTabIndex] && !openTabs[activeTabIndex].isModified) {
+      if (newTabs.length > 0) {
+        setActiveTabIndex(0);
+        setFileContent(newTabs[0].content);
+        setOriginalContent(newTabs[0].originalContent);
+        setSelectedFile({ name: newTabs[0].name, path: newTabs[0].path, type: 'file' });
+      } else {
+        setActiveTabIndex(-1);
+        setSelectedFile(null);
+        setFileContent('');
+        setOriginalContent('');
+      }
+    }
+    setMoreActionsAnchor(null);
   };
   
   const handleTabClick = (index: number) => {
@@ -1439,14 +1502,22 @@ const NewCodeEditorPage: React.FC = () => {
                     borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
                     bgcolor: '#252526',
                     minHeight: '35px',
-                    overflowX: 'auto',
-                    overflowY: 'hidden',
                     '&::-webkit-scrollbar': { height: '3px' },
                     '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255, 255, 255, 0.2)' },
                   }}
                 >
-                  {openTabs.length > 0 ? (
-                    openTabs.map((tab, index) => (
+                  {/* Tab List */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flex: 1,
+                      overflowX: 'auto',
+                      overflowY: 'hidden',
+                    }}
+                  >
+                    {openTabs.length > 0 ? (
+                      openTabs.map((tab, index) => (
                       <Box
                         key={tab.path}
                         onClick={() => handleTabClick(index)}
@@ -1507,6 +1578,76 @@ const NewCodeEditorPage: React.FC = () => {
                       No files open
                     </Typography>
                   )}
+                  </Box>
+
+                  {/* Action Buttons */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pr: 1 }}>
+                    <Tooltip title="Split Editor">
+                      <IconButton
+                        size="small"
+                        onClick={() => setSplitViewEnabled(!splitViewEnabled)}
+                        sx={{
+                          p: 0.5,
+                          color: splitViewEnabled ? '#007acc' : 'rgba(255, 255, 255, 0.6)',
+                          '&:hover': {
+                            bgcolor: 'rgba(255, 255, 255, 0.1)',
+                          },
+                        }}
+                      >
+                        <SplitEditorIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="More Actions">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => setMoreActionsAnchor(e.currentTarget)}
+                        sx={{
+                          p: 0.5,
+                          color: 'rgba(255, 255, 255, 0.6)',
+                          '&:hover': {
+                            bgcolor: 'rgba(255, 255, 255, 0.1)',
+                          },
+                        }}
+                      >
+                        <MoreActionsIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+
+                  {/* More Actions Menu */}
+                  <Menu
+                    anchorEl={moreActionsAnchor}
+                    open={Boolean(moreActionsAnchor)}
+                    onClose={() => setMoreActionsAnchor(null)}
+                    PaperProps={{
+                      sx: {
+                        bgcolor: '#252526',
+                        color: 'rgba(255, 255, 255, 0.9)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                      },
+                    }}
+                  >
+                    <MenuItem
+                      onClick={handleCloseAllTabs}
+                      disabled={openTabs.length === 0}
+                      sx={{
+                        fontSize: 13,
+                        '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+                      }}
+                    >
+                      Close All
+                    </MenuItem>
+                    <MenuItem
+                      onClick={handleCloseSavedTabs}
+                      disabled={openTabs.length === 0 || openTabs.every(t => t.isModified)}
+                      sx={{
+                        fontSize: 13,
+                        '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+                      }}
+                    >
+                      Close Saved
+                    </MenuItem>
+                  </Menu>
                 </Box>
                 
                 {/* Editor Area */}
