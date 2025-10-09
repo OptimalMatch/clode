@@ -34,6 +34,7 @@
     "web-vitals": "^3.5.1",
     "@monaco-editor/react": "^4.6.0",
     "monaco-editor": "^0.45.0",
+    "monaco-themes": "^0.4.4",
     "react-diff-viewer-continued": "^3.4.0"
   },
   "scripts": {
