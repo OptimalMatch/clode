@@ -183,7 +183,7 @@ const CodeEditorPage: React.FC = () => {
   const [showDiff, setShowDiff] = useState(false);
   const [diffChange, setDiffChange] = useState<FileChange | null>(null);
   const [diffViewMode, setDiffViewMode] = useState<'inline' | 'sideBySide'>('inline');
-  const [changeViewMode, setChangeViewMode] = useState<'individual' | 'combined'>('individual');
+  const [changeViewMode, setChangeViewMode] = useState<'individual' | 'combined'>('combined');
   const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
   const [pendingChangesForFile, setPendingChangesForFile] = useState<FileChange[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
