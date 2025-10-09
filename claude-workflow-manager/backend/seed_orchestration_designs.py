@@ -953,7 +953,7 @@ Example output:
 Ready for parallel execution!
 
 Be specific about which files each agent should focus on.""",
-                            "role": "coordinator",
+                            "role": "manager",
                             "use_tools": True
                         }
                     ],
@@ -994,7 +994,7 @@ Operations:
 - "delete": Remove file (no new_content)
 
 Work quickly and accurately. Changes remain pending for human review.""",
-                            "role": "executor",
+                            "role": "worker",
                             "use_tools": True
                         },
                         {
@@ -1024,7 +1024,7 @@ Operations:
 - "delete": Remove file (no new_content)
 
 Work quickly and accurately. Changes remain pending for human review.""",
-                            "role": "executor",
+                            "role": "worker",
                             "use_tools": True
                         },
                         {
@@ -1054,7 +1054,7 @@ Operations:
 - "delete": Remove file (no new_content)
 
 Work quickly and accurately. Changes remain pending for human review.""",
-                            "role": "executor",
+                            "role": "worker",
                             "use_tools": True
                         },
                         {
@@ -1084,7 +1084,7 @@ Operations:
 - "delete": Remove file (no new_content)
 
 Work quickly and accurately. Changes remain pending for human review.""",
-                            "role": "executor",
+                            "role": "worker",
                             "use_tools": True
                         }
                     ],
