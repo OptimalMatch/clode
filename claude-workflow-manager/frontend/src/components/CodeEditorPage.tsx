@@ -73,7 +73,7 @@ import { useSnackbar } from 'notistack';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
 import api from '../services/api';
 import InlineDiffViewer from './InlineDiffViewer';
-import Editor, { DiffEditor } from '@monaco-editor/react';
+import Editor, { DiffEditor, loader } from '@monaco-editor/react';
 import VSCodeFileTree from './VSCodeFileTree';
 
 interface FileItem {
@@ -114,6 +114,68 @@ interface ExecutionStatus {
   currentAgent?: string;
   progress?: string;
 }
+
+// Helper function to get available themes
+const getAvailableThemes = (): Array<{ value: string; label: string }> => {
+  return [
+    { value: 'vs', label: 'Visual Studio Light' },
+    { value: 'vs-dark', label: 'Visual Studio Dark' },
+    { value: 'hc-black', label: 'High Contrast Black' },
+    { value: 'hc-light', label: 'High Contrast Light' },
+    { value: 'active4d', label: 'Active4D' },
+    { value: 'all-hallows-eve', label: 'All Hallows Eve' },
+    { value: 'amy', label: 'Amy' },
+    { value: 'birds-of-paradise', label: 'Birds Of Paradise' },
+    { value: 'blackboard', label: 'Blackboard' },
+    { value: 'brilliance-black', label: 'Brilliance Black' },
+    { value: 'brilliance-dull', label: 'Brilliance Dull' },
+    { value: 'chrome-devtools', label: 'Chrome DevTools' },
+    { value: 'clouds-midnight', label: 'Clouds Midnight' },
+    { value: 'clouds', label: 'Clouds' },
+    { value: 'cobalt', label: 'Cobalt' },
+    { value: 'cobalt2', label: 'Cobalt2' },
+    { value: 'dawn', label: 'Dawn' },
+    { value: 'dracula', label: 'Dracula' },
+    { value: 'dreamweaver', label: 'Dreamweaver' },
+    { value: 'eiffel', label: 'Eiffel' },
+    { value: 'espresso-libre', label: 'Espresso Libre' },
+    { value: 'github', label: 'GitHub' },
+    { value: 'github-dark', label: 'GitHub Dark' },
+    { value: 'idle', label: 'IDLE' },
+    { value: 'katzenmilch', label: 'Katzenmilch' },
+    { value: 'kuroir-theme', label: 'Kuroir Theme' },
+    { value: 'lazy', label: 'Lazy' },
+    { value: 'magicwb--amiga-', label: 'MagicWB (Amiga)' },
+    { value: 'merbivore-soft', label: 'Merbivore Soft' },
+    { value: 'merbivore', label: 'Merbivore' },
+    { value: 'monokai-bright', label: 'Monokai Bright' },
+    { value: 'monokai', label: 'Monokai' },
+    { value: 'night-owl', label: 'Night Owl' },
+    { value: 'nord', label: 'Nord' },
+    { value: 'oceanic-next', label: 'Oceanic Next' },
+    { value: 'pastels-on-dark', label: 'Pastels On Dark' },
+    { value: 'slush-and-poppies', label: 'Slush And Poppies' },
+    { value: 'solarized-dark', label: 'Solarized Dark' },
+    { value: 'solarized-light', label: 'Solarized Light' },
+    { value: 'spacecadet', label: 'SpaceCadet' },
+    { value: 'sunburst', label: 'Sunburst' },
+    { value: 'textmate--mac-classic-', label: 'Textmate (Mac Classic)' },
+    { value: 'tomorrow-night-blue', label: 'Tomorrow Night Blue' },
+    { value: 'tomorrow-night-bright', label: 'Tomorrow Night Bright' },
+    { value: 'tomorrow-night-eighties', label: 'Tomorrow Night Eighties' },
+    { value: 'tomorrow-night', label: 'Tomorrow Night' },
+    { value: 'tomorrow', label: 'Tomorrow' },
+    { value: 'twilight', label: 'Twilight' },
+    { value: 'upstream-sunburst', label: 'Upstream Sunburst' },
+    { value: 'vibrant-ink', label: 'Vibrant Ink' },
+    { value: 'xcode-default', label: 'Xcode Default' },
+    { value: 'zenburnesque', label: 'Zenburnesque' },
+    { value: 'iplastic', label: 'iPlastic' },
+    { value: 'idlefingers', label: 'idleFingers' },
+    { value: 'krtheme', label: 'krTheme' },
+    { value: 'monoindustrial', label: 'monoindustrial' },
+  ];
+};
 
 // Helper function to detect language from file extension
 const getLanguageFromFilename = (filename: string): string => {
@@ -207,6 +269,7 @@ const CodeEditorPage: React.FC = () => {
   const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
   const [pendingChangesForFile, setPendingChangesForFile] = useState<FileChange[]>([]);
   const [animateChangesCount, setAnimateChangesCount] = useState(false);
+  const [selectedTheme, setSelectedTheme] = useState<string>('vs-dark');
   const prevChangesCountRef = useRef(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const changesPollingIntervalRef = useRef<any>(null);
@@ -230,6 +293,82 @@ const CodeEditorPage: React.FC = () => {
     return () => {
       stopChangesPolling();
     };
+  }, []);
+  
+  // Configure Monaco themes
+  useEffect(() => {
+    loader.init().then((monaco) => {
+      // Define custom themes from monaco-themes package
+      const themeMap: { [key: string]: string } = {
+        'active4d': 'Active4D',
+        'all-hallows-eve': 'All Hallows Eve',
+        'amy': 'Amy',
+        'birds-of-paradise': 'Birds of Paradise',
+        'blackboard': 'Blackboard',
+        'brilliance-black': 'Brilliance Black',
+        'brilliance-dull': 'Brilliance Dull',
+        'chrome-devtools': 'Chrome DevTools',
+        'clouds-midnight': 'Clouds Midnight',
+        'clouds': 'Clouds',
+        'cobalt': 'Cobalt',
+        'cobalt2': 'Cobalt2',
+        'dawn': 'Dawn',
+        'dracula': 'Dracula',
+        'dreamweaver': 'Dreamweaver',
+        'eiffel': 'Eiffel',
+        'espresso-libre': 'Espresso Libre',
+        'github': 'GitHub',
+        'github-dark': 'GitHub Dark',
+        'idle': 'IDLE',
+        'katzenmilch': 'Katzenmilch',
+        'kuroir-theme': 'Kuroir Theme',
+        'lazy': 'Lazy',
+        'magicwb--amiga-': 'MagicWB (Amiga)',
+        'merbivore-soft': 'Merbivore Soft',
+        'merbivore': 'Merbivore',
+        'monokai-bright': 'Monokai Bright',
+        'monokai': 'Monokai',
+        'night-owl': 'Night Owl',
+        'nord': 'Nord',
+        'oceanic-next': 'Oceanic Next',
+        'pastels-on-dark': 'Pastels on Dark',
+        'slush-and-poppies': 'Slush and Poppies',
+        'solarized-dark': 'Solarized-dark',
+        'solarized-light': 'Solarized-light',
+        'spacecadet': 'SpaceCadet',
+        'sunburst': 'Sunburst',
+        'textmate--mac-classic-': 'Textmate (Mac Classic)',
+        'tomorrow-night-blue': 'Tomorrow-Night-Blue',
+        'tomorrow-night-bright': 'Tomorrow-Night-Bright',
+        'tomorrow-night-eighties': 'Tomorrow-Night-Eighties',
+        'tomorrow-night': 'Tomorrow-Night',
+        'tomorrow': 'Tomorrow',
+        'twilight': 'Twilight',
+        'upstream-sunburst': 'Upstream Sunburst',
+        'vibrant-ink': 'Vibrant Ink',
+        'xcode-default': 'Xcode_default',
+        'zenburnesque': 'Zenburnesque',
+        'iplastic': 'iPlastic',
+        'idlefingers': 'idleFingers',
+        'krtheme': 'krTheme',
+        'monoindustrial': 'monoindustrial',
+      };
+
+      // Load each theme from CDN
+      Object.keys(themeMap).forEach((themeKey) => {
+        const themeName = themeMap[themeKey];
+        fetch(`https://raw.githubusercontent.com/brijeshb42/monaco-themes/master/themes/${themeName}.json`)
+          .then((response) => response.json())
+          .then((data) => {
+            monaco.editor.defineTheme(themeKey, data);
+          })
+          .catch((error) => {
+            console.error(`Failed to load theme ${themeKey}:`, error);
+          });
+      });
+    }).catch((error) => {
+      console.error('Failed to initialize Monaco editor:', error);
+    });
   }, []);
   
   // Auto-scroll chat to bottom
@@ -1266,7 +1405,7 @@ const CodeEditorPage: React.FC = () => {
       
       <Paper sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={4}>
             <FormControl fullWidth>
               <InputLabel>Repository</InputLabel>
               <Select
@@ -1277,6 +1416,22 @@ const CodeEditorPage: React.FC = () => {
                 {workflows.map((workflow) => (
                   <MenuItem key={workflow.id} value={workflow.id}>
                     {workflow.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Editor Theme</InputLabel>
+              <Select
+                value={selectedTheme}
+                onChange={(e) => setSelectedTheme(e.target.value)}
+                label="Editor Theme"
+              >
+                {getAvailableThemes().map((theme) => (
+                  <MenuItem key={theme.value} value={theme.value}>
+                    {theme.label}
                   </MenuItem>
                 ))}
               </Select>
@@ -1699,7 +1854,7 @@ const CodeEditorPage: React.FC = () => {
                               language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
                               original={diffChange.old_content || ''}
                               modified={diffChange.new_content || ''}
-                              theme="vs-dark"
+                              theme={selectedTheme}
                               options={{
                                 readOnly: true,
                                 minimap: { enabled: true },
@@ -1724,7 +1879,7 @@ const CodeEditorPage: React.FC = () => {
                             language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
                             value={fileContent}
                             onChange={(value) => setFileContent(value || '')}
-                            theme="vs-dark"
+                            theme={selectedTheme}
                             options={{
                               readOnly: !selectedFile || fileContent === '[Binary file]',
                               minimap: { enabled: true },
