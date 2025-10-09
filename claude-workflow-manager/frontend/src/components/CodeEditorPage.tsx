@@ -64,7 +64,7 @@ import { useSnackbar } from 'notistack';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
 import api from '../services/api';
 import InlineDiffViewer from './InlineDiffViewer';
-import Editor from '@monaco-editor/react';
+import Editor, { DiffEditor } from '@monaco-editor/react';
 import VSCodeFileTree from './VSCodeFileTree';
 
 interface FileItem {
@@ -172,6 +172,8 @@ const CodeEditorPage: React.FC = () => {
   const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>({ executing: false });
   const [showChat, setShowChat] = useState(false);
   const [showExplorer, setShowExplorer] = useState(true);
+  const [showDiff, setShowDiff] = useState(false);
+  const [diffChange, setDiffChange] = useState<FileChange | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
@@ -202,6 +204,31 @@ const CodeEditorPage: React.FC = () => {
       loadChanges();
     }
   }, [selectedWorkflow, currentPath]);
+  
+  // Watch for new changes on currently open file and show in diff mode
+  useEffect(() => {
+    if (!selectedFile || !selectedWorkflow) {
+      setShowDiff(false);
+      setDiffChange(null);
+      return;
+    }
+    
+    // Find pending changes for the current file
+    const pendingChangesForFile = changes.filter(
+      (c: FileChange) => c.file_path === selectedFile.path && c.status === 'pending'
+    );
+    
+    if (pendingChangesForFile.length > 0) {
+      // Show the most recent pending change
+      const latestChange = pendingChangesForFile[pendingChangesForFile.length - 1];
+      setDiffChange(latestChange);
+      setShowDiff(true);
+    } else {
+      // No pending changes, exit diff mode
+      setShowDiff(false);
+      setDiffChange(null);
+    }
+  }, [changes, selectedFile, selectedWorkflow]);
   
   const loadWorkflows = async () => {
     try {
@@ -1013,55 +1040,149 @@ const CodeEditorPage: React.FC = () => {
                       )}
                     </Box>
                     
-                    <Box sx={{ flexGrow: 1, height: '100%' }}>
-                      <Editor
-                        height="100%"
-                        language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
-                        value={fileContent}
-                        onChange={(value) => setFileContent(value || '')}
-                        theme="vs-dark"
-                        options={{
-                          readOnly: !selectedFile || fileContent === '[Binary file]',
-                          minimap: { enabled: true },
-                          fontSize: 14,
-                          lineNumbers: 'on',
-                          renderWhitespace: 'selection',
-                          scrollBeyondLastLine: false,
-                          automaticLayout: true,
-                          tabSize: 2,
-                          wordWrap: 'on',
-                          formatOnPaste: true,
-                          formatOnType: true,
-                          folding: true,
-                          lineDecorationsWidth: 10,
-                          lineNumbersMinChars: 3,
-                          glyphMargin: true,
-                          scrollbar: {
-                            vertical: 'auto',
-                            horizontal: 'auto',
-                            useShadows: true,
-                            verticalScrollbarSize: 10,
-                            horizontalScrollbarSize: 10,
-                          },
-                          suggest: {
-                            showKeywords: true,
-                            showSnippets: true,
-                          },
-                          quickSuggestions: true,
-                          parameterHints: { enabled: true },
-                          cursorBlinking: 'smooth',
-                          cursorSmoothCaretAnimation: 'on',
-                          smoothScrolling: true,
-                          contextmenu: true,
-                          mouseWheelZoom: true,
-                          bracketPairColorization: { enabled: true },
-                        }}
-                        loading={
-                          <Box display="flex" alignItems="center" justifyContent="center" height="100%">
-                            <CircularProgress />
+                    <Box sx={{ flexGrow: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                      {showDiff && diffChange ? (
+                        <>
+                          {/* Diff Mode: Show inline diff with action buttons */}
+                          <Box 
+                            sx={{ 
+                              p: 1.5, 
+                              bgcolor: 'warning.dark',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 2,
+                            }}
+                          >
+                            <Box display="flex" alignItems="center" gap={1}>
+                              <Edit sx={{ fontSize: 20 }} />
+                              <Typography variant="body2" fontWeight="bold">
+                                AI Suggested Change
+                              </Typography>
+                              <Chip 
+                                label={diffChange.operation.toUpperCase()} 
+                                size="small" 
+                                color={
+                                  diffChange.operation === 'create' ? 'success' : 
+                                  diffChange.operation === 'delete' ? 'error' : 'info'
+                                }
+                              />
+                            </Box>
+                            <Box display="flex" gap={1}>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                startIcon={<CheckCircle />}
+                                onClick={() => handleApproveChange(diffChange.change_id)}
+                              >
+                                Accept
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                startIcon={<Cancel />}
+                                onClick={() => handleRejectChange(diffChange.change_id)}
+                              >
+                                Reject
+                              </Button>
+                            </Box>
                           </Box>
-                        }
-                      />
+                          <Box sx={{ flexGrow: 1 }}>
+                            <DiffEditor
+                              height="100%"
+                              language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
+                              original={diffChange.old_content || ''}
+                              modified={diffChange.new_content || ''}
+                              theme="vs-dark"
+                              options={{
+                                readOnly: true,
+                                minimap: { enabled: true },
+                                fontSize: 14,
+                                lineNumbers: 'on',
+                                renderWhitespace: 'selection',
+                                scrollBeyondLastLine: false,
+                                automaticLayout: true,
+                                tabSize: 2,
+                                wordWrap: 'off',
+                                folding: true,
+                                enableSplitViewResizing: true,
+                                renderSideBySide: true,
+                                ignoreTrimWhitespace: false,
+                                glyphMargin: true,
+                                scrollbar: {
+                                  vertical: 'auto',
+                                  horizontal: 'auto',
+                                  useShadows: true,
+                                  verticalScrollbarSize: 10,
+                                  horizontalScrollbarSize: 10,
+                                },
+                                cursorBlinking: 'smooth',
+                                smoothScrolling: true,
+                                bracketPairColorization: { enabled: true },
+                              }}
+                              loading={
+                                <Box display="flex" alignItems="center" justifyContent="center" height="100%">
+                                  <CircularProgress />
+                                </Box>
+                              }
+                            />
+                          </Box>
+                        </>
+                      ) : (
+                        <>
+                          {/* Regular Edit Mode */}
+                          <Editor
+                            height="100%"
+                            language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
+                            value={fileContent}
+                            onChange={(value) => setFileContent(value || '')}
+                            theme="vs-dark"
+                            options={{
+                              readOnly: !selectedFile || fileContent === '[Binary file]',
+                              minimap: { enabled: true },
+                              fontSize: 14,
+                              lineNumbers: 'on',
+                              renderWhitespace: 'selection',
+                              scrollBeyondLastLine: false,
+                              automaticLayout: true,
+                              tabSize: 2,
+                              wordWrap: 'on',
+                              formatOnPaste: true,
+                              formatOnType: true,
+                              folding: true,
+                              lineDecorationsWidth: 10,
+                              lineNumbersMinChars: 3,
+                              glyphMargin: true,
+                              scrollbar: {
+                                vertical: 'auto',
+                                horizontal: 'auto',
+                                useShadows: true,
+                                verticalScrollbarSize: 10,
+                                horizontalScrollbarSize: 10,
+                              },
+                              suggest: {
+                                showKeywords: true,
+                                showSnippets: true,
+                              },
+                              quickSuggestions: true,
+                              parameterHints: { enabled: true },
+                              cursorBlinking: 'smooth',
+                              cursorSmoothCaretAnimation: 'on',
+                              smoothScrolling: true,
+                              contextmenu: true,
+                              mouseWheelZoom: true,
+                              bracketPairColorization: { enabled: true },
+                            }}
+                            loading={
+                              <Box display="flex" alignItems="center" justifyContent="center" height="100%">
+                                <CircularProgress />
+                              </Box>
+                            }
+                          />
+                        </>
+                      )}
                     </Box>
                   </Box>
                 )}
