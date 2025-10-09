@@ -1189,6 +1189,456 @@ const NewCodeEditorPage: React.FC = () => {
     };
   };
   
+  const executeDesignWithStreaming = async (design: OrchestrationDesign, task: string, signal: AbortSignal) => {
+    // Get the git_repo for the selected workflow
+    const currentWorkflow = workflows.find(w => w.id === selectedWorkflow);
+    const gitRepo = currentWorkflow?.git_repo || '';
+    
+    // Inject workflow context into task
+    const contextualTask = `Working with workflow ID: ${selectedWorkflow}\n\nIMPORTANT: You MUST use the editor_* MCP tools (editor_read_file, editor_create_change, editor_browse_directory, etc.) with workflow_id="${selectedWorkflow}" for all file operations. These tools access the repository shown in the file explorer.\n\n${task}`;
+    
+    // Build execution order using topological sort
+    const executionOrder = buildExecutionOrder(design.blocks, design.connections || []);
+    
+    if (executionOrder.length === 0) {
+      throw new Error('No executable blocks found in design');
+    }
+    
+    console.log(`[Code Editor] Executing ${executionOrder.length} blocks in order:`, executionOrder);
+    
+    // Execute blocks in order, passing outputs from one to the next
+    const results = new Map<string, any>();
+    
+    for (const blockId of executionOrder) {
+      if (signal.aborted) break;
+      
+      const block = design.blocks.find(b => b.id === blockId);
+      if (!block) continue;
+      
+      console.log(`[Code Editor] Executing block ${blockId} (type: ${block.type})`);
+      
+      // Get inputs from connected blocks
+      const blockInputs = getBlockInputs(blockId, design.connections || [], results);
+      const blockTask = blockInputs.length > 0 
+        ? `${contextualTask}\n\nPrevious block outputs:\n${blockInputs.join('\n\n---\n\n')}`
+        : contextualTask;
+      
+      // Update agent system prompts to include editor tool instructions
+      const contextualAgents = block.data.agents.map((agent: any) => ({
+        ...agent,
+        system_prompt: `${agent.system_prompt}\n\nCRITICAL: Always use editor_* tools with workflow_id="${selectedWorkflow}":\n- editor_browse_directory(workflow_id, path) - Browse directory\n- editor_read_file(workflow_id, file_path) - Read file\n- editor_create_change(workflow_id, file_path, operation, new_content) - Create/update/delete file\n- editor_get_changes(workflow_id) - List pending changes\n- editor_search_files(workflow_id, query) - Search files\n\nNEVER use generic file tools. ALWAYS use editor_* tools.`
+      }));
+      
+      // Execute block based on its type
+      let result;
+      switch (block.type) {
+        case 'sequential':
+          result = await executeBlockSequential(contextualAgents, blockTask, gitRepo, signal);
+          break;
+        case 'parallel':
+          result = await executeBlockParallel(contextualAgents, blockTask, gitRepo, signal);
+          break;
+        case 'routing':
+          const router = contextualAgents.find((a: any) => a.role === 'manager' || a.name.toLowerCase().includes('router'));
+          const specialists = contextualAgents.filter((a: any) => a.role === 'specialist');
+          if (router && specialists.length > 0) {
+            result = await executeBlockRouting(router, specialists, blockTask, gitRepo, signal);
+          } else {
+            // Fall back to sequential
+            result = await executeBlockSequential(contextualAgents, blockTask, gitRepo, signal);
+          }
+          break;
+        default:
+          // Fall back to sequential for other types
+          result = await executeBlockSequential(contextualAgents, blockTask, gitRepo, signal);
+      }
+      
+      results.set(blockId, result);
+    }
+    
+    console.log(`[Code Editor] All blocks completed`);
+    
+    // Add final completion message
+    const finalMessage: ChatMessage = {
+      id: `msg-${Date.now()}-final`,
+      type: 'system',
+      content: `✅ All ${executionOrder.length} blocks completed successfully!`,
+      timestamp: new Date(),
+    };
+    setChatMessages(prev => [...prev, finalMessage]);
+  };
+  
+  // Build execution order using topological sort
+  const buildExecutionOrder = (blocks: any[], connections: any[]): string[] => {
+    const adjList = new Map<string, string[]>();
+    const inDegree = new Map<string, number>();
+    
+    // Initialize
+    blocks.forEach(block => {
+      adjList.set(block.id, []);
+      inDegree.set(block.id, 0);
+    });
+    
+    // Build graph from block-level connections
+    connections.forEach(conn => {
+      if (conn.type === 'block' || !conn.type) {  // Default to block-level
+        adjList.get(conn.source)?.push(conn.target);
+        inDegree.set(conn.target, (inDegree.get(conn.target) || 0) + 1);
+      }
+    });
+    
+    // Topological sort using Kahn's algorithm
+    const queue: string[] = [];
+    inDegree.forEach((degree, blockId) => {
+      if (degree === 0) queue.push(blockId);
+    });
+    
+    const result: string[] = [];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      result.push(current);
+      
+      adjList.get(current)?.forEach(neighbor => {
+        const newDegree = (inDegree.get(neighbor) || 0) - 1;
+        inDegree.set(neighbor, newDegree);
+        if (newDegree === 0) queue.push(neighbor);
+      });
+    }
+    
+    return result;
+  };
+  
+  // Get inputs from connected blocks
+  const getBlockInputs = (blockId: string, connections: any[], results: Map<string, any>): string[] => {
+    const inputs: string[] = [];
+    
+    connections.filter(conn => conn.target === blockId).forEach(conn => {
+      const sourceResult = results.get(conn.source);
+      if (sourceResult) {
+        if (typeof sourceResult === 'string') {
+          inputs.push(sourceResult);
+        } else if (sourceResult.final_result) {
+          inputs.push(sourceResult.final_result);
+        } else if (sourceResult.result) {
+          inputs.push(sourceResult.result);
+        }
+      }
+    });
+    
+    return inputs;
+  };
+  
+  // Execute a sequential block
+  const executeBlockSequential = async (agents: any[], task: string, gitRepo: string, signal: AbortSignal) => {
+    return await executeSequentialWithStreaming({
+      task,
+      agents,
+      agent_sequence: agents.map(a => a.name),
+      model: 'claude-sonnet-4-20250514',
+      git_repo: gitRepo
+    }, signal);
+  };
+  
+  // Execute a parallel block
+  const executeBlockParallel = async (agents: any[], task: string, gitRepo: string, signal: AbortSignal) => {
+    return await executeParallelWithStreaming({
+      task,
+      agents,
+      agent_names: agents.map(a => a.name),
+      aggregator: null,
+      model: 'claude-sonnet-4-20250514',
+      git_repo: gitRepo
+    }, signal);
+  };
+  
+  // Execute a routing block
+  const executeBlockRouting = async (router: any, specialists: any[], task: string, gitRepo: string, signal: AbortSignal) => {
+    return await executeRoutingWithStreaming({
+      task,
+      router,
+      specialists,
+      specialist_names: specialists.map(s => s.name),
+      model: 'claude-sonnet-4-20250514',
+      git_repo: gitRepo
+    }, signal);
+  };
+  
+  const executeSequentialWithStreaming = async (request: any, signal: AbortSignal) => {
+    const API_URL = api.defaults.baseURL;
+    const token = localStorage.getItem('access_token');
+    
+    const response = await fetch(`${API_URL}/api/orchestration/sequential/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+      body: JSON.stringify(request),
+      signal,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    
+    if (!reader) {
+      throw new Error('No response body');
+    }
+    
+    let buffer = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.slice(6));
+            
+            if (event.type === 'status' && event.agent) {
+              setExecutionStatus({
+                executing: true,
+                currentAgent: event.agent,
+                progress: event.data,
+              });
+              if (event.data === 'completed') {
+                console.log(`[Code Editor] Agent ${event.agent} completed`);
+              }
+            } else if (event.type === 'chunk' && event.data) {
+              // Add agent message chunk
+              setChatMessages(prev => {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === executionStatus.currentAgent) {
+                  // Append to existing message
+                  return [
+                    ...prev.slice(0, -1),
+                    { ...lastMsg, content: lastMsg.content + event.data }
+                  ];
+                } else {
+                  // New agent message
+                  return [
+                    ...prev,
+                    {
+                      id: `msg-${Date.now()}`,
+                      type: 'agent',
+                      content: event.data,
+                      agent: executionStatus.currentAgent,
+                      timestamp: new Date(),
+                    }
+                  ];
+                }
+              });
+            } else if (event.type === 'complete') {
+              const completeMessage: ChatMessage = {
+                id: `msg-${Date.now()}-complete`,
+                type: 'system',
+                content: '✅ Execution completed successfully',
+                timestamp: new Date(),
+              };
+              setChatMessages(prev => [...prev, completeMessage]);
+              console.log('[Code Editor] Block completed, continuing polling');
+              loadChanges();
+            } else if (event.type === 'error') {
+              throw new Error(event.error || 'Execution failed');
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE event:', e);
+          }
+        }
+      }
+    }
+  };
+  
+  const executeRoutingWithStreaming = async (request: any, signal: AbortSignal) => {
+    const API_URL = api.defaults.baseURL;
+    const token = localStorage.getItem('access_token');
+    
+    const response = await fetch(`${API_URL}/api/orchestration/routing/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+      body: JSON.stringify(request),
+      signal,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    
+    if (!reader) {
+      throw new Error('No response body');
+    }
+    
+    let buffer = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.slice(6));
+            
+            if (event.type === 'status' && event.agent) {
+              setExecutionStatus({
+                executing: true,
+                currentAgent: event.agent,
+                progress: event.data,
+              });
+              if (event.data === 'completed') {
+                console.log(`[Code Editor] Agent ${event.agent} completed`);
+              }
+            } else if (event.type === 'chunk' && event.data) {
+              setChatMessages(prev => {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === executionStatus.currentAgent) {
+                  return [
+                    ...prev.slice(0, -1),
+                    { ...lastMsg, content: lastMsg.content + event.data }
+                  ];
+                } else {
+                  return [
+                    ...prev,
+                    {
+                      id: `msg-${Date.now()}`,
+                      type: 'agent',
+                      content: event.data,
+                      agent: executionStatus.currentAgent,
+                      timestamp: new Date(),
+                    }
+                  ];
+                }
+              });
+            } else if (event.type === 'complete') {
+              const completeMessage: ChatMessage = {
+                id: `msg-${Date.now()}-complete`,
+                type: 'system',
+                content: '✅ Execution completed successfully',
+                timestamp: new Date(),
+              };
+              setChatMessages(prev => [...prev, completeMessage]);
+              console.log('[Code Editor] Block completed, continuing polling');
+              loadChanges();
+            } else if (event.type === 'error') {
+              throw new Error(event.error || 'Execution failed');
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE event:', e);
+          }
+        }
+      }
+    }
+  };
+  
+  const executeParallelWithStreaming = async (request: any, signal: AbortSignal) => {
+    const API_URL = api.defaults.baseURL;
+    const token = localStorage.getItem('access_token');
+    
+    const response = await fetch(`${API_URL}/api/orchestration/parallel/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+      body: JSON.stringify(request),
+      signal,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    
+    if (!reader) {
+      throw new Error('No response body');
+    }
+    
+    let buffer = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.slice(6));
+            
+            if (event.type === 'status' && event.agent) {
+              setExecutionStatus({
+                executing: true,
+                currentAgent: event.agent,
+                progress: event.data,
+              });
+              if (event.data === 'completed') {
+                console.log(`[Code Editor] Agent ${event.agent} completed`);
+              }
+            } else if (event.type === 'chunk' && event.data) {
+              setChatMessages(prev => {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === executionStatus.currentAgent) {
+                  return [
+                    ...prev.slice(0, -1),
+                    { ...lastMsg, content: lastMsg.content + event.data }
+                  ];
+                } else {
+                  return [
+                    ...prev,
+                    {
+                      id: `msg-${Date.now()}`,
+                      type: 'agent',
+                      content: event.data,
+                      agent: executionStatus.currentAgent,
+                      timestamp: new Date(),
+                    }
+                  ];
+                }
+              });
+            } else if (event.type === 'complete') {
+              const completeMessage: ChatMessage = {
+                id: `msg-${Date.now()}-complete`,
+                type: 'system',
+                content: '✅ Parallel execution completed',
+                timestamp: new Date(),
+              };
+              setChatMessages(prev => [...prev, completeMessage]);
+              console.log('[Code Editor] Block completed, continuing polling');
+              loadChanges();
+            } else if (event.type === 'error') {
+              throw new Error(event.error || 'Execution failed');
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE event:', e);
+          }
+        }
+      }
+    }
+  };
+  
   const handleSendMessage = async () => {
     if (!chatInput.trim() || !selectedDesign || !selectedWorkflow) return;
     
@@ -1203,21 +1653,57 @@ const NewCodeEditorPage: React.FC = () => {
     setChatInput('');
     setExecutionStatus({ executing: true });
     
+    // Create abort controller for this execution
+    abortControllerRef.current = new AbortController();
+    
+    // Start polling for changes during execution
     startChangesPolling();
     
-    // Simplified execution - in production this would call the actual API
-    setTimeout(() => {
+    try {
+      const design = orchestrationDesigns.find(d => d.id === selectedDesign);
+      if (!design) {
+        throw new Error('Design not found');
+      }
+      
+      // Add system message
       const systemMessage: ChatMessage = {
         id: `msg-${Date.now()}-system`,
         type: 'system',
-        content: 'AI execution completed (simplified for demo)',
+        content: `Executing orchestration: ${design.name}`,
         timestamp: new Date(),
       };
       setChatMessages(prev => [...prev, systemMessage]);
+      
+      // Execute with streaming to show real-time progress
+      await executeDesignWithStreaming(design, chatInput, abortControllerRef.current.signal);
+      
+      // Reload changes after execution
+      await loadChanges();
+      
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        const cancelMessage: ChatMessage = {
+          id: `msg-${Date.now()}-cancel`,
+          type: 'system',
+          content: 'Execution cancelled by user',
+          timestamp: new Date(),
+        };
+        setChatMessages(prev => [...prev, cancelMessage]);
+      } else {
+        enqueueSnackbar(error.message || 'Execution failed', { variant: 'error' });
+        const errorMessage: ChatMessage = {
+          id: `msg-${Date.now()}-error`,
+          type: 'system',
+          content: `Error: ${error.message || 'Execution failed'}`,
+          timestamp: new Date(),
+        };
+        setChatMessages(prev => [...prev, errorMessage]);
+      }
+    } finally {
       setExecutionStatus({ executing: false });
+      abortControllerRef.current = null;
       stopChangesPolling();
-      loadChanges();
-    }, 2000);
+    }
   };
   
   const handleStopExecution = () => {
