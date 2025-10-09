@@ -65,6 +65,8 @@ import {
   ViewStream,
   KeyboardArrowUp,
   KeyboardArrowDown,
+  ViewAgenda,
+  CallMerge,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
@@ -181,6 +183,7 @@ const CodeEditorPage: React.FC = () => {
   const [showDiff, setShowDiff] = useState(false);
   const [diffChange, setDiffChange] = useState<FileChange | null>(null);
   const [diffViewMode, setDiffViewMode] = useState<'inline' | 'sideBySide'>('inline');
+  const [changeViewMode, setChangeViewMode] = useState<'individual' | 'combined'>('individual');
   const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
   const [pendingChangesForFile, setPendingChangesForFile] = useState<FileChange[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -235,7 +238,6 @@ const CodeEditorPage: React.FC = () => {
       // Reset to first change if the list changed
       const newIndex = currentChangeIndex >= fileChanges.length ? 0 : currentChangeIndex;
       setCurrentChangeIndex(newIndex);
-      setDiffChange(fileChanges[newIndex]);
       setShowDiff(true);
     } else {
       // No pending changes, exit diff mode
@@ -244,6 +246,20 @@ const CodeEditorPage: React.FC = () => {
       setCurrentChangeIndex(0);
     }
   }, [changes, selectedFile, selectedWorkflow]);
+  
+  // Update displayed change based on view mode
+  useEffect(() => {
+    if (pendingChangesForFile.length === 0) {
+      setDiffChange(null);
+      return;
+    }
+    
+    if (changeViewMode === 'combined') {
+      setDiffChange(getCombinedChange());
+    } else {
+      setDiffChange(pendingChangesForFile[currentChangeIndex]);
+    }
+  }, [changeViewMode, currentChangeIndex, pendingChangesForFile]);
   
   const loadWorkflows = async () => {
     try {
@@ -377,7 +393,9 @@ const CodeEditorPage: React.FC = () => {
     if (currentChangeIndex > 0) {
       const newIndex = currentChangeIndex - 1;
       setCurrentChangeIndex(newIndex);
-      setDiffChange(pendingChangesForFile[newIndex]);
+      if (changeViewMode === 'individual') {
+        setDiffChange(pendingChangesForFile[newIndex]);
+      }
     }
   };
 
@@ -385,17 +403,49 @@ const CodeEditorPage: React.FC = () => {
     if (currentChangeIndex < pendingChangesForFile.length - 1) {
       const newIndex = currentChangeIndex + 1;
       setCurrentChangeIndex(newIndex);
-      setDiffChange(pendingChangesForFile[newIndex]);
+      if (changeViewMode === 'individual') {
+        setDiffChange(pendingChangesForFile[newIndex]);
+      }
     }
+  };
+  
+  const getCombinedChange = (): FileChange | null => {
+    if (pendingChangesForFile.length === 0) return null;
+    if (pendingChangesForFile.length === 1) return pendingChangesForFile[0];
+    
+    // Create a combined change showing all modifications
+    // Use the first change's old_content as original
+    // Use the last change's new_content as final (assuming chronological order)
+    const firstChange = pendingChangesForFile[0];
+    const lastChange = pendingChangesForFile[pendingChangesForFile.length - 1];
+    
+    return {
+      ...firstChange,
+      change_id: 'combined',
+      operation: 'update',
+      old_content: firstChange.old_content,
+      new_content: lastChange.new_content,
+    };
   };
 
   const handleApproveChange = async (changeId: string) => {
     try {
-      await api.post('/api/file-editor/approve', {
-        workflow_id: selectedWorkflow,
-        change_id: changeId,
-      });
-      enqueueSnackbar('Change approved and applied', { variant: 'success' });
+      // If in combined mode and changeId is 'combined', approve all changes
+      if (changeViewMode === 'combined' && changeId === 'combined') {
+        for (const change of pendingChangesForFile) {
+          await api.post('/api/file-editor/approve', {
+            workflow_id: selectedWorkflow,
+            change_id: change.change_id,
+          });
+        }
+        enqueueSnackbar(`All ${pendingChangesForFile.length} changes approved and applied`, { variant: 'success' });
+      } else {
+        await api.post('/api/file-editor/approve', {
+          workflow_id: selectedWorkflow,
+          change_id: changeId,
+        });
+        enqueueSnackbar('Change approved and applied', { variant: 'success' });
+      }
       loadChanges();
       if (selectedFile) {
         await loadFileContent(selectedFile.path);
@@ -407,11 +457,22 @@ const CodeEditorPage: React.FC = () => {
   
   const handleRejectChange = async (changeId: string) => {
     try {
-      await api.post('/api/file-editor/reject', {
-        workflow_id: selectedWorkflow,
-        change_id: changeId,
-      });
-      enqueueSnackbar('Change rejected', { variant: 'success' });
+      // If in combined mode and changeId is 'combined', reject all changes
+      if (changeViewMode === 'combined' && changeId === 'combined') {
+        for (const change of pendingChangesForFile) {
+          await api.post('/api/file-editor/reject', {
+            workflow_id: selectedWorkflow,
+            change_id: change.change_id,
+          });
+        }
+        enqueueSnackbar(`All ${pendingChangesForFile.length} changes rejected`, { variant: 'success' });
+      } else {
+        await api.post('/api/file-editor/reject', {
+          workflow_id: selectedWorkflow,
+          change_id: changeId,
+        });
+        enqueueSnackbar('Change rejected', { variant: 'success' });
+      }
       loadChanges();
     } catch (error: any) {
       enqueueSnackbar(error.response?.data?.detail || 'Failed to reject change', { variant: 'error' });
@@ -1088,7 +1149,9 @@ const CodeEditorPage: React.FC = () => {
                             <Box display="flex" alignItems="center" gap={1}>
                               <Edit sx={{ fontSize: 20 }} />
                               <Typography variant="body2" fontWeight="bold">
-                                AI Suggested Change
+                                {changeViewMode === 'combined' && pendingChangesForFile.length > 1
+                                  ? `AI Suggested Changes (${pendingChangesForFile.length})`
+                                  : 'AI Suggested Change'}
                               </Typography>
                               <Chip 
                                 label={diffChange.operation.toUpperCase()} 
@@ -1101,27 +1164,51 @@ const CodeEditorPage: React.FC = () => {
                               {pendingChangesForFile.length > 1 && (
                                 <>
                                   <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-                                  <Box display="flex" alignItems="center" gap={0.5}>
-                                    <IconButton
-                                      size="small"
-                                      onClick={handlePreviousChange}
-                                      disabled={currentChangeIndex === 0}
-                                      sx={{ p: 0.5 }}
-                                    >
-                                      <KeyboardArrowUp fontSize="small" />
-                                    </IconButton>
-                                    <Typography variant="caption" sx={{ minWidth: 45, textAlign: 'center' }}>
-                                      {currentChangeIndex + 1} of {pendingChangesForFile.length}
-                                    </Typography>
-                                    <IconButton
-                                      size="small"
-                                      onClick={handleNextChange}
-                                      disabled={currentChangeIndex === pendingChangesForFile.length - 1}
-                                      sx={{ p: 0.5 }}
-                                    >
-                                      <KeyboardArrowDown fontSize="small" />
-                                    </IconButton>
-                                  </Box>
+                                  <ToggleButtonGroup
+                                    value={changeViewMode}
+                                    exclusive
+                                    onChange={(_e: React.MouseEvent<HTMLElement>, newMode: 'individual' | 'combined' | null) => {
+                                      if (newMode !== null) {
+                                        setChangeViewMode(newMode);
+                                      }
+                                    }}
+                                    size="small"
+                                    sx={{ height: 28 }}
+                                  >
+                                    <ToggleButton value="individual">
+                                      <Tooltip title="Individual Changes">
+                                        <ViewAgenda sx={{ fontSize: 16 }} />
+                                      </Tooltip>
+                                    </ToggleButton>
+                                    <ToggleButton value="combined">
+                                      <Tooltip title="Combined View">
+                                        <CallMerge sx={{ fontSize: 16 }} />
+                                      </Tooltip>
+                                    </ToggleButton>
+                                  </ToggleButtonGroup>
+                                  {changeViewMode === 'individual' && (
+                                    <Box display="flex" alignItems="center" gap={0.5}>
+                                      <IconButton
+                                        size="small"
+                                        onClick={handlePreviousChange}
+                                        disabled={currentChangeIndex === 0}
+                                        sx={{ p: 0.5 }}
+                                      >
+                                        <KeyboardArrowUp fontSize="small" />
+                                      </IconButton>
+                                      <Typography variant="caption" sx={{ minWidth: 45, textAlign: 'center' }}>
+                                        {currentChangeIndex + 1} of {pendingChangesForFile.length}
+                                      </Typography>
+                                      <IconButton
+                                        size="small"
+                                        onClick={handleNextChange}
+                                        disabled={currentChangeIndex === pendingChangesForFile.length - 1}
+                                        sx={{ p: 0.5 }}
+                                      >
+                                        <KeyboardArrowDown fontSize="small" />
+                                      </IconButton>
+                                    </Box>
+                                  )}
                                 </>
                               )}
                             </Box>

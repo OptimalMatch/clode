@@ -13,34 +13,49 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
 - Red lines (deletions) and green lines (additions) clearly marked
 - No need to switch tabs or navigate away
 
-### 2. **Navigate Through Multiple Changes**
+### 2. **Individual vs Combined View Mode**
+- **Individual mode** (default): Navigate through changes one at a time
+  - See "2 of 5" counter with up/down arrows
+  - Review each AI request separately
+  - Accept/reject individual changes
+- **Combined mode**: See all changes merged into one diff
+  - Shows cumulative effect of all changes
+  - Accept/reject all changes at once
+  - Useful for reviewing multiple related modifications together
+- **Toggle button**: Switch between modes with one click
+
+### 3. **Navigate Through Multiple Changes** (Individual Mode)
 - **Change counter**: Shows "2 of 5" when multiple pending changes exist
 - **Up/Down buttons**: Navigate to previous/next change with arrow buttons
 - **Keyboard-friendly**: Up arrow goes to previous, down arrow to next
 - **Smart navigation**: Buttons disabled at first/last change
-- **Only shows when needed**: Navigation hidden if only one change
+- **Only shows when needed**: Navigation hidden if only one change or in combined mode
 
-### 3. **Toggle Between Inline and Side-by-Side Views**
+### 4. **Toggle Between Inline and Side-by-Side Views**
 - **View toggle buttons** in the action bar
 - **Inline view (≡)**: Unified diff with changes shown in context (default)
 - **Side-by-Side view (||)**: Split panes showing original and modified side by side
 - **One-click switching**: Instantly toggle between views
 - **Persistent preference**: Choice maintained during the session
 
-### 4. **Inline Accept/Reject**
+### 5. **Inline Accept/Reject**
 - **Accept** button: Approve and apply the change immediately
+  - In individual mode: Accepts current change
+  - In combined mode: Accepts all changes at once
 - **Reject** button: Discard the proposed change
+  - In individual mode: Rejects current change
+  - In combined mode: Rejects all changes at once
 - Action bar at the top with clear visual indicators
 - Changes apply instantly, editor returns to normal mode
 
-### 5. **Monaco DiffEditor**
+### 6. **Monaco DiffEditor**
 - Full syntax highlighting for modified code
 - Line-by-line change indicators (red/green with -/+ prefixes)
 - Inline or side-by-side view (user's choice)
 - Minimap shows change locations
 - Overview ruler for quick navigation to changes
 
-### 6. **Smart State Management**
+### 7. **Smart State Management**
 - Automatically detects pending changes for current file
 - Shows most recent pending change if multiple exist
 - Exits diff mode after accept/reject
@@ -63,38 +78,37 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
 └────────────────────────────────────────┘
 ```
 
-### Diff Mode (AI Suggested Change) - Inline View with Multiple Changes
+### Diff Mode - Individual View (2 of 5)
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│ ✏️ AI Change [UPDATE] | ↑ 2 of 5 ↓ | [≡][||] [Accept] [Reject] │
-├──────────────────────────────────────────────────────────────────┤
-│ 1  # My Project                                                  │
-│ 2  This is the description                                       │
-│ 3                                                                │
-│ 4  ## Features                                                   │
-│ 5 -Feature 1                              ← Red (deleted)        │
-│ 6 +Feature 1 - Enhanced                   ← Green (added)        │
-│ 7 -Feature 2                              ← Red (deleted)        │
-│ 8 +Feature 2 - Improved                   ← Green (added)        │
-│ 9 +Feature 3 - New                        ← Green (added)        │
-└──────────────────────────────────────────────────────────────────┘
-     Navigation ↑↑↑       Inline View (≡ selected)
+┌──────────────────────────────────────────────────────────────────────┐
+│ ✏️ AI Change [UPDATE] | [📋][🔀] ↑ 2 of 5 ↓ | [≡][||] [✓] [✗]     │
+├──────────────────────────────────────────────────────────────────────┤
+│ 1  # My Project                                                      │
+│ 2  This is the description                                           │
+│ 3                                                                    │
+│ 4  ## Features                                                       │
+│ 5 -Feature 1                              ← Red (deleted)            │
+│ 6 +Feature 1 - Enhanced                   ← Green (added)            │
+└──────────────────────────────────────────────────────────────────────┘
+     Individual mode (📋) - Shows change 2 of 5 separately
 
-### Diff Mode - Side-by-Side View
-┌──────────────────────────────────────────────────────────────────┐
-│ ✏️ AI Change [UPDATE] | ↑ 2 of 5 ↓ | [≡][||] [Accept] [Reject] │
-├──────────────────────────────────────────────────────────────────┤
-│     ORIGINAL          │      MODIFIED                            │
-├───────────────────────┼──────────────────────────────────────────┤
-│ 1  # My Project       │ 1  # My Project                          │
-│ 2  This is...         │ 2  This is...                            │
-│ 3                     │ 3                                        │
-│ 4  ## Features        │ 4  ## Features                           │
-│ 5 -Feature 1          │ 5 +Feature 1 - Enhanced                  │
-│ 6 -Feature 2          │ 6 +Feature 2 - Improved                  │
-│                       │ 7 +Feature 3 - New                       │
-└───────────────────────┴──────────────────────────────────────────┘
-     Side-by-Side View (|| selected) - Navigate with ↑↓ buttons
+### Diff Mode - Combined View (All Changes)
+┌──────────────────────────────────────────────────────────────────────┐
+│ ✏️ AI Changes (5) [UPDATE] | [📋][🔀] | [≡][||] [✓ All] [✗ All]    │
+├──────────────────────────────────────────────────────────────────────┤
+│ 1  # My Project                                                      │
+│ 2  This is the description                                           │
+│ 3                                                                    │
+│ 4  ## Features                                                       │
+│ 5 -Feature 1                              ← Red (from change 1)      │
+│ 6 +Feature 1 - Enhanced                   ← Green (from change 1)    │
+│ 7 -Feature 2                              ← Red (from change 2)      │
+│ 8 +Feature 2 - Improved                   ← Green (from change 2)    │
+│ 9 +Feature 3 - New                        ← Green (from change 3)    │
+│10 +Feature 4 - Added                      ← Green (from change 4)    │
+│11 +Feature 5 - Latest                     ← Green (from change 5)    │
+└──────────────────────────────────────────────────────────────────────┘
+     Combined mode (🔀) - All 5 changes merged into one view
 ```
 
 ## User Workflow
@@ -116,21 +130,33 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
    - Sees line-by-line comparisons inline
    - Red lines (- prefix) = removed, Green lines (+ prefix) = added
    
-6. **User can navigate through changes** (if multiple):
-   - See **"2 of 5"** counter showing current position
-   - Click **↑ button** to go to previous change (change 1)
-   - Click **↓ button** to go to next change (change 3)
-   - Review each change individually
+6. **User can choose how to review changes** (if multiple):
+   - **Option A - Individual Mode** (default):
+     - See **"2 of 5"** counter showing current position
+     - Click **↑ button** to go to previous change (change 1)
+     - Click **↓ button** to go to next change (change 3)
+     - Review each AI request separately
+   - **Option B - Combined Mode**:
+     - Click the **merge icon (🔀)** to switch to combined view
+     - See all changes merged into one diff
+     - Title shows "AI Suggested Changes (5)"
+     - Accept/Reject affects all changes at once
    
-7. **User can toggle view mode** (optional):
+7. **User can toggle diff view mode** (optional):
    - Click **≡ button** for inline/unified view
    - Click **|| button** for side-by-side view
    - View instantly switches without losing position
    - Choice is remembered for the session
 
 8. **User accepts or rejects**:
-   - **Click "Accept"**: Change applied, file updated, diff mode exits
-   - **Click "Reject"**: Change discarded, original content restored, diff mode exits
+   - **Individual mode**:
+     - Click "Accept": Current change applied
+     - Click "Reject": Current change discarded
+     - Other changes remain pending
+   - **Combined mode**:
+     - Click "Accept": All changes applied at once
+     - Click "Reject": All changes discarded together
+     - Snackbar shows "All 5 changes approved/rejected"
 
 9. **Editor returns to normal mode** with updated (or original) content
 
@@ -143,6 +169,7 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
 const [showDiff, setShowDiff] = useState(false);
 const [diffChange, setDiffChange] = useState<FileChange | null>(null);
 const [diffViewMode, setDiffViewMode] = useState<'inline' | 'sideBySide'>('inline');
+const [changeViewMode, setChangeViewMode] = useState<'individual' | 'combined'>('individual');
 const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
 const [pendingChangesForFile, setPendingChangesForFile] = useState<FileChange[]>([]);
 ```
@@ -152,6 +179,12 @@ const [pendingChangesForFile, setPendingChangesForFile] = useState<FileChange[]>
 - `'sideBySide'`: Shows split-pane comparison
 - Persists during the session (doesn't reset between files)
 - Controlled by ToggleButtonGroup in the action bar
+
+**changeViewMode State (NEW):**
+- `'individual'`: Navigate through changes one at a time (default)
+- `'combined'`: Show all changes merged into one diff
+- Only relevant when multiple changes exist
+- Toggle button appears in action bar when 2+ changes pending
 
 **Navigation State:**
 - `currentChangeIndex`: Index of the currently displayed change (0-based)
@@ -201,6 +234,58 @@ useEffect(() => {
 6. If changes found, sets `diffChange` and `showDiff = true`
 7. If none, sets `showDiff = false` (exit diff mode)
 
+### Combined Change Generator
+
+```typescript
+const getCombinedChange = (): FileChange | null => {
+  if (pendingChangesForFile.length === 0) return null;
+  if (pendingChangesForFile.length === 1) return pendingChangesForFile[0];
+  
+  // Create a combined change showing all modifications
+  // Use the first change's old_content as original
+  // Use the last change's new_content as final (assuming chronological order)
+  const firstChange = pendingChangesForFile[0];
+  const lastChange = pendingChangesForFile[pendingChangesForFile.length - 1];
+  
+  return {
+    ...firstChange,
+    change_id: 'combined',
+    operation: 'update',
+    old_content: firstChange.old_content,
+    new_content: lastChange.new_content,
+  };
+};
+```
+
+**How it works:**
+- Takes the **original content** from the first change (before any modifications)
+- Takes the **final content** from the last change (after all modifications)
+- Creates a virtual "combined" change showing the cumulative effect
+- `change_id: 'combined'` is a special ID detected by accept/reject handlers
+- When accepted/rejected, all individual changes are processed sequentially
+
+### Update Display Based on Mode
+
+```typescript
+useEffect(() => {
+  if (pendingChangesForFile.length === 0) {
+    setDiffChange(null);
+    return;
+  }
+  
+  if (changeViewMode === 'combined') {
+    setDiffChange(getCombinedChange());
+  } else {
+    setDiffChange(pendingChangesForFile[currentChangeIndex]);
+  }
+}, [changeViewMode, currentChangeIndex, pendingChangesForFile]);
+```
+
+**Features:**
+- Watches for changes to view mode, index, or changes list
+- Automatically updates displayed diff when user toggles modes
+- Seamless transition between individual and combined views
+
 ### Navigation Handlers
 
 ```typescript
@@ -208,7 +293,9 @@ const handlePreviousChange = () => {
   if (currentChangeIndex > 0) {
     const newIndex = currentChangeIndex - 1;
     setCurrentChangeIndex(newIndex);
-    setDiffChange(pendingChangesForFile[newIndex]);
+    if (changeViewMode === 'individual') {
+      setDiffChange(pendingChangesForFile[newIndex]);
+    }
   }
 };
 
@@ -216,13 +303,16 @@ const handleNextChange = () => {
   if (currentChangeIndex < pendingChangesForFile.length - 1) {
     const newIndex = currentChangeIndex + 1;
     setCurrentChangeIndex(newIndex);
-    setDiffChange(pendingChangesForFile[newIndex]);
+    if (changeViewMode === 'individual') {
+      setDiffChange(pendingChangesForFile[newIndex]);
+    }
   }
 };
 ```
 
 **Features:**
 - **Boundary checks**: Won't go below 0 or above array length
+- **Mode-aware**: Only updates diffChange in individual mode
 - **Instant navigation**: Updates diffChange immediately
 - **No reload**: Change content switches without re-rendering editor
 - **Disabled states**: Buttons disabled at boundaries (handled in UI)
@@ -672,14 +762,22 @@ const handleRejectChange = async (changeId: string) => {
 The Code Editor now provides a **Cursor/Windsurf-like inline diff experience**:
 
 ✅ **Auto-detection** - Changes appear instantly when AI modifies current file  
-✅ **Navigate changes** - Up/Down buttons with "2 of 5" counter for multiple changes  
+✅ **Individual/Combined modes** - View changes separately or merged together  
+✅ **Navigate changes** - Up/Down buttons with "2 of 5" counter in individual mode  
 ✅ **Flexible viewing** - Toggle between inline and side-by-side diff views  
 ✅ **Monaco DiffEditor** - Full syntax highlighting and professional diff rendering  
-✅ **One-click actions** - Accept/Reject buttons right in the editor  
+✅ **Smart actions** - Accept/Reject individual changes or all at once  
+✅ **Batch operations** - Combined mode approves/rejects all changes together  
 ✅ **Smart state** - Automatically enters/exits diff mode  
-✅ **User choice** - Pick the diff view that works best for you  
+✅ **User choice** - Pick the workflow that works best for your scenario  
 ✅ **Professional UX** - Familiar workflow for modern developers  
 ✅ **Seamless integration** - Works with all existing features  
 
-Developers can now **review and apply AI changes without leaving the editor**, with the ability to navigate through multiple pending changes, choose between inline (unified, Git-style) or side-by-side (split-pane) diff views, and accept/reject each change individually, creating a smooth, efficient workflow that feels native and professional! 🎉
+Developers can now **review and apply AI changes without leaving the editor**, with the flexibility to:
+- **Review individually**: Navigate through each AI request separately (individual mode)
+- **Review collectively**: See all changes merged into one diff (combined mode)
+- **Choose diff style**: Inline (unified, Git-style) or side-by-side (split-pane)
+- **Accept/reject flexibly**: One at a time or all together
+
+This creates a smooth, efficient workflow that handles both simple single-change scenarios and complex multi-change situations with equal elegance! 🎉
 
