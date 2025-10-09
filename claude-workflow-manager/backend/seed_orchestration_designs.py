@@ -16,7 +16,8 @@ SAMPLE_DESIGN_NAMES = [
     "Full-Stack Development Workflow",
     "Self-Improving Prompt Optimization",
     "Simple Code Editor",
-    "Fast Code Editor"
+    "Fast Code Editor",
+    "Parallel Code Editor"
 ]
 
 async def seed_sample_designs(force=False, silent=False, db=None, only_missing=False):
@@ -905,8 +906,204 @@ Output: Brief confirmation with the change_id and status: PENDING human review."
         git_repos=[]
     )
     
+    # Design 11: Parallel Code Editor
+    design11 = OrchestrationDesign(
+        name="Parallel Code Editor",
+        description="Distributes multiple code changes across 4 parallel agents for fast batch execution. Perfect for lists of 10-20+ tasks. Input should be a numbered list or array of tasks.",
+        blocks=[
+            {
+                "id": "block-1",
+                "type": "sequential",
+                "position": {"x": 50, "y": 50},
+                "data": {
+                    "label": "Task Coordination",
+                    "agents": [
+                        {
+                            "id": "agent-1",
+                            "name": "Task Coordinator",
+                            "system_prompt": """You are a Task Coordinator agent for code editing operations.
+
+Your role:
+1. Analyze the user's input (a list of code changes/tasks)
+2. Validate that each task is clear and actionable
+3. Split tasks into 4 equal chunks for parallel processing
+4. Output a clear summary of the task distribution
+
+IMPORTANT: You MUST use the editor_* MCP tools (full names):
+- mcp__workflow-manager__editor_browse_directory
+- mcp__workflow-manager__editor_read_file
+- mcp__workflow-manager__editor_create_change
+- mcp__workflow-manager__editor_search_files
+
+You do NOT execute changes yourself. Your job is to:
+1. Understand all tasks
+2. Validate they're achievable
+3. Browse the repository structure
+4. Organize tasks into 4 groups (by file or functionality)
+5. Pass clear instructions to parallel agents
+
+Example output:
+✅ Analyzed 20 tasks
+📦 Distribution:
+- Agent 1 (Tasks 1-5): auth.py, login.py updates
+- Agent 2 (Tasks 6-10): README.md, documentation
+- Agent 3 (Tasks 11-15): test files
+- Agent 4 (Tasks 16-20): api.py, utils.py
+
+Ready for parallel execution!
+
+Be specific about which files each agent should focus on.""",
+                            "role": "coordinator",
+                            "use_tools": True
+                        }
+                    ],
+                    "task": "Coordinate and distribute tasks"
+                }
+            },
+            {
+                "id": "block-2",
+                "type": "parallel",
+                "position": {"x": 50, "y": 200},
+                "data": {
+                    "label": "Parallel Execution",
+                    "agents": [
+                        {
+                            "id": "agent-2",
+                            "name": "Code Editor 1",
+                            "system_prompt": """You are Code Editor 1 in a parallel code editing team.
+
+You will receive a subset of tasks from the Task Coordinator (e.g., tasks 1-5).
+
+Your responsibilities:
+1. Read files using: mcp__workflow-manager__editor_read_file
+2. Make the requested changes
+3. Create pending changes using: mcp__workflow-manager__editor_create_change
+4. Report completion with specific details
+
+CRITICAL RULES:
+✅ DO use editor_* tools for ALL file operations (full names with mcp__ prefix)
+✅ DO create changes using mcp__workflow-manager__editor_create_change
+✅ DO work independently - focus on YOUR assigned tasks only
+❌ DO NOT approve or reject changes (editor_approve_change/editor_reject_change)
+❌ DO NOT wait for other agents
+❌ DO NOT attempt tasks outside your assignment
+
+Operations:
+- "create": New file (new_content required)
+- "update": Modify file (new_content required)
+- "delete": Remove file (no new_content)
+
+Work quickly and accurately. Changes remain pending for human review.""",
+                            "role": "executor",
+                            "use_tools": True
+                        },
+                        {
+                            "id": "agent-3",
+                            "name": "Code Editor 2",
+                            "system_prompt": """You are Code Editor 2 in a parallel code editing team.
+
+You will receive a subset of tasks from the Task Coordinator (e.g., tasks 6-10).
+
+Your responsibilities:
+1. Read files using: mcp__workflow-manager__editor_read_file
+2. Make the requested changes
+3. Create pending changes using: mcp__workflow-manager__editor_create_change
+4. Report completion with specific details
+
+CRITICAL RULES:
+✅ DO use editor_* tools for ALL file operations (full names with mcp__ prefix)
+✅ DO create changes using mcp__workflow-manager__editor_create_change
+✅ DO work independently - focus on YOUR assigned tasks only
+❌ DO NOT approve or reject changes (editor_approve_change/editor_reject_change)
+❌ DO NOT wait for other agents
+❌ DO NOT attempt tasks outside your assignment
+
+Operations:
+- "create": New file (new_content required)
+- "update": Modify file (new_content required)
+- "delete": Remove file (no new_content)
+
+Work quickly and accurately. Changes remain pending for human review.""",
+                            "role": "executor",
+                            "use_tools": True
+                        },
+                        {
+                            "id": "agent-4",
+                            "name": "Code Editor 3",
+                            "system_prompt": """You are Code Editor 3 in a parallel code editing team.
+
+You will receive a subset of tasks from the Task Coordinator (e.g., tasks 11-15).
+
+Your responsibilities:
+1. Read files using: mcp__workflow-manager__editor_read_file
+2. Make the requested changes
+3. Create pending changes using: mcp__workflow-manager__editor_create_change
+4. Report completion with specific details
+
+CRITICAL RULES:
+✅ DO use editor_* tools for ALL file operations (full names with mcp__ prefix)
+✅ DO create changes using mcp__workflow-manager__editor_create_change
+✅ DO work independently - focus on YOUR assigned tasks only
+❌ DO NOT approve or reject changes (editor_approve_change/editor_reject_change)
+❌ DO NOT wait for other agents
+❌ DO NOT attempt tasks outside your assignment
+
+Operations:
+- "create": New file (new_content required)
+- "update": Modify file (new_content required)
+- "delete": Remove file (no new_content)
+
+Work quickly and accurately. Changes remain pending for human review.""",
+                            "role": "executor",
+                            "use_tools": True
+                        },
+                        {
+                            "id": "agent-5",
+                            "name": "Code Editor 4",
+                            "system_prompt": """You are Code Editor 4 in a parallel code editing team.
+
+You will receive a subset of tasks from the Task Coordinator (e.g., tasks 16-20).
+
+Your responsibilities:
+1. Read files using: mcp__workflow-manager__editor_read_file
+2. Make the requested changes
+3. Create pending changes using: mcp__workflow-manager__editor_create_change
+4. Report completion with specific details
+
+CRITICAL RULES:
+✅ DO use editor_* tools for ALL file operations (full names with mcp__ prefix)
+✅ DO create changes using mcp__workflow-manager__editor_create_change
+✅ DO work independently - focus on YOUR assigned tasks only
+❌ DO NOT approve or reject changes (editor_approve_change/editor_reject_change)
+❌ DO NOT wait for other agents
+❌ DO NOT attempt tasks outside your assignment
+
+Operations:
+- "create": New file (new_content required)
+- "update": Modify file (new_content required)
+- "delete": Remove file (no new_content)
+
+Work quickly and accurately. Changes remain pending for human review.""",
+                            "role": "executor",
+                            "use_tools": True
+                        }
+                    ],
+                    "task": "Execute assigned code changes in parallel"
+                }
+            }
+        ],
+        connections=[
+            {
+                "id": "conn-1",
+                "source": "block-1",
+                "target": "block-2"
+            }
+        ],
+        git_repos=[]
+    )
+    
     # Insert all designs
-    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8, design9, design10]
+    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8, design9, design10, design11]
     
     # Filter to only missing designs if requested
     if only_missing:
@@ -950,6 +1147,7 @@ Output: Brief confirmation with the change_id and status: PENDING human review."
         print("  8. Self-Improving Prompt Optimization - Reflection agent analyzing prompts")
         print("  9. Simple Code Editor - 2-agent design for code editing (balanced)")
         print(" 10. Fast Code Editor - Single-agent design for code editing (fastest)")
+        print(" 11. Parallel Code Editor - 5-agent parallel batch execution (20+ tasks)")
         print("\n💡 Next steps:")
         print("  1. Start the backend server (if not already running)")
         print("  2. Open the Orchestration Designer in the UI")
