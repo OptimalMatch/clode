@@ -924,10 +924,9 @@ const CodeEditorPage: React.FC = () => {
                 currentAgent: event.agent,
                 progress: event.data,
               });
-              // Refresh changes list when each agent completes
+              // Log agent completion (polling will continue until overall 'complete')
               if (event.data === 'completed') {
-                console.log(`[Code Editor] Agent ${event.agent} completed, refreshing changes`);
-                loadChanges();
+                console.log(`[Code Editor] Agent ${event.agent} completed`);
               }
             } else if (event.type === 'chunk' && event.data) {
               // Add agent message chunk
@@ -1021,10 +1020,9 @@ const CodeEditorPage: React.FC = () => {
                 currentAgent: event.agent,
                 progress: event.data,
               });
-              // Refresh changes list when each agent completes
+              // Log agent completion (polling will continue until overall 'complete')
               if (event.data === 'completed') {
-                console.log(`[Code Editor] Agent ${event.agent} completed, refreshing changes`);
-                loadChanges();
+                console.log(`[Code Editor] Agent ${event.agent} completed`);
               }
             } else if (event.type === 'chunk' && event.data) {
               setChatMessages(prev => {
@@ -1115,10 +1113,9 @@ const CodeEditorPage: React.FC = () => {
                 currentAgent: event.agent,
                 progress: event.data,
               });
-              // Refresh changes list when each agent completes
+              // Log agent completion (polling will continue until overall 'complete')
               if (event.data === 'completed') {
-                console.log(`[Code Editor] Agent ${event.agent} completed, refreshing changes`);
-                loadChanges();
+                console.log(`[Code Editor] Agent ${event.agent} completed`);
               }
             } else if (event.type === 'chunk' && event.data) {
               setChatMessages(prev => {
@@ -1182,13 +1179,21 @@ const CodeEditorPage: React.FC = () => {
     console.log('[Code Editor] Starting changes polling (every 3s)');
     
     // Poll immediately
-    loadChanges();
+    loadChanges().catch(err => {
+      console.warn('[Code Editor] Initial changes poll failed:', err);
+    });
     
-    // Then poll every 3 seconds
+    // Then poll every 3 seconds (with error handling to ensure interval continues)
     changesPollingIntervalRef.current = setInterval(() => {
-      console.log('[Code Editor] Polling for changes...');
-      loadChanges();
+      const pollTime = new Date().toISOString();
+      console.log(`[Code Editor] Polling for changes... (${pollTime})`);
+      loadChanges().catch(err => {
+        console.warn('[Code Editor] Changes poll failed:', err);
+        // Don't stop polling on error - just log and continue
+      });
     }, 3000);
+    
+    console.log('[Code Editor] Polling interval started:', changesPollingIntervalRef.current);
   };
   
   // Stop polling for changes
