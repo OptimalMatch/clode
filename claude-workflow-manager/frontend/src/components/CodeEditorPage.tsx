@@ -187,6 +187,7 @@ const CodeEditorPage: React.FC = () => {
   const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
   const [pendingChangesForFile, setPendingChangesForFile] = useState<FileChange[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const changesPollingIntervalRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
   // Dialogs
@@ -202,6 +203,11 @@ const CodeEditorPage: React.FC = () => {
   useEffect(() => {
     loadWorkflows();
     loadOrchestrationDesigns();
+    
+    // Cleanup polling on unmount
+    return () => {
+      stopChangesPolling();
+    };
   }, []);
   
   // Auto-scroll chat to bottom
@@ -648,6 +654,9 @@ const CodeEditorPage: React.FC = () => {
     // Create abort controller for this execution
     abortControllerRef.current = new AbortController();
     
+    // Start polling for changes during execution
+    startChangesPolling();
+    
     try {
       const design = orchestrationDesigns.find(d => d.id === selectedDesign);
       if (!design) {
@@ -700,6 +709,7 @@ const CodeEditorPage: React.FC = () => {
     } finally {
       setExecutionStatus({ executing: false });
       abortControllerRef.current = null;
+      stopChangesPolling();
     }
   };
   
@@ -951,8 +961,9 @@ const CodeEditorPage: React.FC = () => {
                 timestamp: new Date(),
               };
               setChatMessages(prev => [...prev, completeMessage]);
-              // Reload changes to show any new pending changes created by agents
+              // Final refresh and stop polling
               loadChanges();
+              stopChangesPolling();
             } else if (event.type === 'error') {
               throw new Error(event.error || 'Execution failed');
             }
@@ -1044,8 +1055,9 @@ const CodeEditorPage: React.FC = () => {
                 timestamp: new Date(),
               };
               setChatMessages(prev => [...prev, completeMessage]);
-              // Reload changes to show any new pending changes created by agents
+              // Final refresh and stop polling
               loadChanges();
+              stopChangesPolling();
             } else if (event.type === 'error') {
               throw new Error(event.error || 'Execution failed');
             }
@@ -1137,8 +1149,9 @@ const CodeEditorPage: React.FC = () => {
                 timestamp: new Date(),
               };
               setChatMessages(prev => [...prev, completeMessage]);
-              // Reload changes to show any new pending changes created by agents
+              // Final refresh and stop polling
               loadChanges();
+              stopChangesPolling();
             } else if (event.type === 'error') {
               throw new Error(event.error || 'Execution failed');
             }
@@ -1154,10 +1167,37 @@ const CodeEditorPage: React.FC = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
+    stopChangesPolling();
   };
   
   const handleClearChat = () => {
     setChatMessages([]);
+  };
+  
+  // Start polling for changes during execution (refreshes every 3 seconds)
+  const startChangesPolling = () => {
+    // Clear any existing interval
+    stopChangesPolling();
+    
+    console.log('[Code Editor] Starting changes polling (every 3s)');
+    
+    // Poll immediately
+    loadChanges();
+    
+    // Then poll every 3 seconds
+    changesPollingIntervalRef.current = setInterval(() => {
+      console.log('[Code Editor] Polling for changes...');
+      loadChanges();
+    }, 3000);
+  };
+  
+  // Stop polling for changes
+  const stopChangesPolling = () => {
+    if (changesPollingIntervalRef.current) {
+      console.log('[Code Editor] Stopping changes polling');
+      clearInterval(changesPollingIntervalRef.current);
+      changesPollingIntervalRef.current = null;
+    }
   };
   
   const pendingChanges = changes.filter(c => c.status === 'pending');
