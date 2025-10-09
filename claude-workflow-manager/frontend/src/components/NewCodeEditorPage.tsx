@@ -349,6 +349,23 @@ const NewCodeEditorPage: React.FC = () => {
     }
   };
   
+  const handleFolderExpand = async (folderPath: string): Promise<FileItem[]> => {
+    if (!selectedWorkflow) return [];
+    
+    try {
+      const response = await api.post('/api/file-editor/browse', {
+        workflow_id: selectedWorkflow,
+        path: folderPath,
+        include_hidden: false,
+      });
+      return response.data.items || [];
+    } catch (error: any) {
+      console.error('Failed to load folder contents:', error);
+      enqueueSnackbar(error.response?.data?.detail || 'Failed to load folder', { variant: 'error' });
+      return [];
+    }
+  };
+  
   const loadChanges = async () => {
     if (!selectedWorkflow) return;
     
@@ -952,6 +969,7 @@ const NewCodeEditorPage: React.FC = () => {
                         <EnhancedFileTree
                           items={items}
                           onItemClick={(item, _isDoubleClick) => handleItemClick(item)}
+                          onFolderExpand={handleFolderExpand}
                           selectedPath={selectedFile?.path}
                           openTabs={openTabs.map(tab => tab.path)}
                           pendingChanges={pendingChanges}

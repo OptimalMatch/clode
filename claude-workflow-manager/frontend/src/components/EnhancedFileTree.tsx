@@ -16,16 +16,22 @@ import {
 import {
   ChevronRight as ChevronRightIcon,
   ExpandMore as ExpandMoreIcon,
-  InsertDriveFile as FileIcon,
+  InsertDriveFile,
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
-  Description as DescriptionIcon,
-  Code as CodeIcon,
-  DataObject as JsonIcon,
+  Description,
+  Code,
+  DataObject,
   Edit as EditIcon,
   Delete as DeleteIcon,
   CreateNewFolder as CreateNewFolderIcon,
   NoteAdd as NoteAddIcon,
+  Image,
+  Terminal,
+  Storage,
+  Archive,
+  Settings,
+  SourceOutlined,
 } from '@mui/icons-material';
 
 interface FileItem {
@@ -40,6 +46,7 @@ interface FileItem {
 interface EnhancedFileTreeProps {
   items: FileItem[];
   onItemClick: (item: FileItem, isDoubleClick: boolean) => void;
+  onFolderExpand?: (folderPath: string) => Promise<FileItem[]>;
   onRename?: (oldPath: string, newName: string) => void;
   onDelete?: (path: string) => void;
   onCreateFile?: (parentPath: string, fileName: string) => void;
@@ -50,54 +57,105 @@ interface EnhancedFileTreeProps {
   currentPath?: string;
 }
 
-// Helper to get file icon based on extension
+// Helper to get file icon based on extension (VSCode-style icons)
 const getFileIcon = (filename: string, size: 'small' | 'inherit' = 'small') => {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
   const iconProps = { fontSize: size, sx: { mr: 0.5 } };
   
   // Special filenames first
   if (filename === 'package.json' || filename === 'package-lock.json') {
-    return <JsonIcon {...iconProps} sx={{ ...iconProps.sx, color: '#cb3837' }} />;
+    return <DataObject {...iconProps} sx={{ ...iconProps.sx, color: '#e8274b' }} />;
   }
-  if (filename === 'tsconfig.json') {
-    return <JsonIcon {...iconProps} sx={{ ...iconProps.sx, color: '#3178c6' }} />;
+  if (filename === 'tsconfig.json' || filename === 'jsconfig.json') {
+    return <DataObject {...iconProps} sx={{ ...iconProps.sx, color: '#007acc' }} />;
   }
-  if (filename.toLowerCase().includes('readme')) {
-    return <DescriptionIcon {...iconProps} sx={{ ...iconProps.sx, color: '#519aba' }} />;
+  if (filename.toLowerCase() === 'readme.md' || filename.toLowerCase() === 'readme') {
+    return <Description {...iconProps} sx={{ ...iconProps.sx, color: '#519aba' }} />;
+  }
+  if (filename === '.gitignore' || filename === '.gitattributes') {
+    return <SourceOutlined {...iconProps} sx={{ ...iconProps.sx, color: '#f34f29' }} />;
+  }
+  if (filename === 'dockerfile' || filename.toLowerCase().includes('docker')) {
+    return <Description {...iconProps} sx={{ ...iconProps.sx, color: '#2496ed' }} />;
+  }
+  if (filename === '.env' || filename.startsWith('.env.')) {
+    return <Settings {...iconProps} sx={{ ...iconProps.sx, color: '#faf594' }} />;
   }
   
   // Language-specific icons by extension
   switch (ext) {
     case 'js':
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#f7df1e' }} />;
     case 'jsx':
-      return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#f7df1e' }} />;
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#61dafb' }} />;
     case 'ts':
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#007acc' }} />;
     case 'tsx':
-      return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#3178c6' }} />;
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#61dafb' }} />;
     case 'json':
-      return <JsonIcon {...iconProps} sx={{ ...iconProps.sx, color: '#f7df1e' }} />;
+      return <DataObject {...iconProps} sx={{ ...iconProps.sx, color: '#f7df1e' }} />;
     case 'py':
-      return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#3776ab' }} />;
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#3776ab' }} />;
+    case 'java':
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#ea2d2e' }} />;
+    case 'go':
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#00add8' }} />;
+    case 'rs':
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#dea584' }} />;
+    case 'php':
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#777bb3' }} />;
+    case 'rb':
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#cc342d' }} />;
     case 'html':
     case 'htm':
-      return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#e34f26' }} />;
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#e34f26' }} />;
     case 'css':
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#1572b6' }} />;
     case 'scss':
     case 'sass':
-      return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#1572b6' }} />;
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#cc6699' }} />;
+    case 'less':
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#1d365d' }} />;
     case 'md':
-      return <DescriptionIcon {...iconProps} sx={{ ...iconProps.sx, color: '#519aba' }} />;
+    case 'markdown':
+      return <Description {...iconProps} sx={{ ...iconProps.sx, color: '#519aba' }} />;
     case 'yaml':
     case 'yml':
-      return <DescriptionIcon {...iconProps} sx={{ ...iconProps.sx, color: '#cb171e' }} />;
+      return <Settings {...iconProps} sx={{ ...iconProps.sx, color: '#cb171e' }} />;
+    case 'xml':
+      return <Code {...iconProps} sx={{ ...iconProps.sx, color: '#e37933' }} />;
+    case 'svg':
+      return <Image {...iconProps} sx={{ ...iconProps.sx, color: '#ffb13b' }} />;
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'gif':
+    case 'webp':
+      return <Image {...iconProps} sx={{ ...iconProps.sx, color: '#a074c4' }} />;
+    case 'sh':
+    case 'bash':
+    case 'zsh':
+      return <Terminal {...iconProps} sx={{ ...iconProps.sx, color: '#89e051' }} />;
+    case 'sql':
+      return <Storage {...iconProps} sx={{ ...iconProps.sx, color: '#e38c00' }} />;
+    case 'txt':
+      return <Description {...iconProps} sx={{ ...iconProps.sx, color: '#a0a0a0' }} />;
+    case 'pdf':
+      return <Description {...iconProps} sx={{ ...iconProps.sx, color: '#ff2116' }} />;
+    case 'zip':
+    case 'tar':
+    case 'gz':
+    case 'rar':
+      return <Archive {...iconProps} sx={{ ...iconProps.sx, color: '#ffe000' }} />;
     default:
-      return <FileIcon {...iconProps} sx={{ ...iconProps.sx, color: '#a0a0a0' }} />;
+      return <InsertDriveFile {...iconProps} sx={{ ...iconProps.sx, color: '#a0a0a0' }} />;
   }
 };
 
 const EnhancedFileTreeItem: React.FC<{
   item: FileItem;
   onItemClick: (item: FileItem, isDoubleClick: boolean) => void;
+  onFolderExpand?: (folderPath: string) => Promise<FileItem[]>;
   onRename?: (oldPath: string, newName: string) => void;
   onDelete?: (path: string) => void;
   selectedPath?: string;
@@ -105,11 +163,13 @@ const EnhancedFileTreeItem: React.FC<{
   pendingChanges?: Array<{ file_path: string }>;
   currentPath?: string;
   level: number;
-}> = ({ item, onItemClick, onRename, onDelete, selectedPath, openTabs, pendingChanges, currentPath, level }) => {
+}> = ({ item, onItemClick, onFolderExpand, onRename, onDelete, selectedPath, openTabs, pendingChanges, currentPath, level }) => {
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(item.name);
+  const [children, setChildren] = useState<FileItem[]>(item.children || []);
+  const [loading, setLoading] = useState(false);
   
   const isDirectory = item.type === 'directory';
   const isSelected = selectedPath === item.path;
@@ -128,10 +188,24 @@ const EnhancedFileTreeItem: React.FC<{
       : normalizedChangePath === normalizedItemPath;
   });
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isDirectory) {
-      setExpanded(!expanded);
+      const willExpand = !expanded;
+      setExpanded(willExpand);
+      
+      // Load children if expanding and not already loaded
+      if (willExpand && children.length === 0 && onFolderExpand) {
+        setLoading(true);
+        try {
+          const loadedChildren = await onFolderExpand(item.path);
+          setChildren(loadedChildren);
+        } catch (error) {
+          console.error('Failed to load folder contents:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
     } else {
       onItemClick(item, false);
     }
@@ -291,22 +365,37 @@ const EnhancedFileTreeItem: React.FC<{
       </ListItemButton>
 
       {/* Render children if directory is expanded */}
-      {isDirectory && item.children && expanded && (
+      {isDirectory && expanded && (
         <Box>
-          {item.children.map((child) => (
-            <EnhancedFileTreeItem
-              key={child.path}
-              item={child}
-              onItemClick={onItemClick}
-              onRename={onRename}
-              onDelete={onDelete}
-              selectedPath={selectedPath}
-              openTabs={openTabs}
-              pendingChanges={pendingChanges}
-              currentPath={currentPath}
-              level={level + 1}
-            />
-          ))}
+          {loading ? (
+            <Box sx={{ pl: (level + 1) * 1.5 + 1, py: 0.5 }}>
+              <Typography variant="caption" sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.5)' }}>
+                Loading...
+              </Typography>
+            </Box>
+          ) : children.length > 0 ? (
+            children.map((child) => (
+              <EnhancedFileTreeItem
+                key={child.path}
+                item={child}
+                onItemClick={onItemClick}
+                onFolderExpand={onFolderExpand}
+                onRename={onRename}
+                onDelete={onDelete}
+                selectedPath={selectedPath}
+                openTabs={openTabs}
+                pendingChanges={pendingChanges}
+                currentPath={currentPath}
+                level={level + 1}
+              />
+            ))
+          ) : (
+            <Box sx={{ pl: (level + 1) * 1.5 + 1, py: 0.5 }}>
+              <Typography variant="caption" sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.5)' }}>
+                Empty folder
+              </Typography>
+            </Box>
+          )}
         </Box>
       )}
     </>
@@ -316,6 +405,7 @@ const EnhancedFileTreeItem: React.FC<{
 const EnhancedFileTree: React.FC<EnhancedFileTreeProps> = ({
   items,
   onItemClick,
+  onFolderExpand,
   onRename,
   onDelete,
   onCreateFile,
@@ -422,6 +512,7 @@ const EnhancedFileTree: React.FC<EnhancedFileTreeProps> = ({
             key={item.path}
             item={item}
             onItemClick={onItemClick}
+            onFolderExpand={onFolderExpand}
             onRename={onRename}
             onDelete={onDelete}
             selectedPath={selectedPath}
