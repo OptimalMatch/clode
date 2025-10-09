@@ -187,7 +187,7 @@ const CodeEditorPage: React.FC = () => {
   const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
   const [pendingChangesForFile, setPendingChangesForFile] = useState<FileChange[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const changesPollingIntervalRef = useRef<number | null>(null);
+  const changesPollingIntervalRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
   // Dialogs
