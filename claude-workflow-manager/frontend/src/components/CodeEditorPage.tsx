@@ -914,6 +914,11 @@ const CodeEditorPage: React.FC = () => {
                 currentAgent: event.agent,
                 progress: event.data,
               });
+              // Refresh changes list when each agent completes
+              if (event.data === 'completed') {
+                console.log(`[Code Editor] Agent ${event.agent} completed, refreshing changes`);
+                loadChanges();
+              }
             } else if (event.type === 'chunk' && event.data) {
               // Add agent message chunk
               setChatMessages(prev => {
@@ -1005,6 +1010,11 @@ const CodeEditorPage: React.FC = () => {
                 currentAgent: event.agent,
                 progress: event.data,
               });
+              // Refresh changes list when each agent completes
+              if (event.data === 'completed') {
+                console.log(`[Code Editor] Agent ${event.agent} completed, refreshing changes`);
+                loadChanges();
+              }
             } else if (event.type === 'chunk' && event.data) {
               setChatMessages(prev => {
                 const lastMsg = prev[prev.length - 1];
@@ -1093,6 +1103,11 @@ const CodeEditorPage: React.FC = () => {
                 currentAgent: event.agent,
                 progress: event.data,
               });
+              // Refresh changes list when each agent completes
+              if (event.data === 'completed') {
+                console.log(`[Code Editor] Agent ${event.agent} completed, refreshing changes`);
+                loadChanges();
+              }
             } else if (event.type === 'chunk' && event.data) {
               setChatMessages(prev => {
                 const lastMsg = prev[prev.length - 1];
