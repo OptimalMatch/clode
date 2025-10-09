@@ -199,6 +199,7 @@ const NewCodeEditorPage: React.FC = () => {
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
   const [splitViewEnabled, setSplitViewEnabled] = useState(false);
   const [moreActionsAnchor, setMoreActionsAnchor] = useState<null | HTMLElement>(null);
+  const [moreActionsPaneId, setMoreActionsPaneId] = useState<'single' | 'left' | 'right'>('single');
   
   // Split view state - separate tabs for each pane
   const [leftPaneTabs, setLeftPaneTabs] = useState<EditorTab[]>([]);
@@ -639,44 +640,161 @@ const NewCodeEditorPage: React.FC = () => {
   };
 
   const handleCloseAllTabs = () => {
-    const modifiedTabs = openTabs.filter(tab => tab.isModified);
-    if (modifiedTabs.length > 0) {
-      const tabNames = modifiedTabs.map(t => t.name).join(', ');
-      if (!window.confirm(`${modifiedTabs.length} file(s) have unsaved changes (${tabNames}). Close all anyway?`)) {
-        return;
+    if (splitViewEnabled) {
+      // In split view, close the pane that triggered this action
+      if (moreActionsPaneId === 'left') {
+        // Close left pane, keep right pane tabs and switch to single view
+        const modifiedTabs = leftPaneTabs.filter(tab => tab.isModified);
+        if (modifiedTabs.length > 0) {
+          const tabNames = modifiedTabs.map(t => t.name).join(', ');
+          if (!window.confirm(`${modifiedTabs.length} file(s) in left pane have unsaved changes (${tabNames}). Close pane anyway?`)) {
+            setMoreActionsAnchor(null);
+            return;
+          }
+        }
+        // Transfer right pane tabs to single view
+        setOpenTabs(rightPaneTabs);
+        setActiveTabIndex(rightActiveIndex >= 0 ? rightActiveIndex : 0);
+        if (rightActiveIndex >= 0 && rightPaneTabs[rightActiveIndex]) {
+          setFileContent(rightPaneTabs[rightActiveIndex].content);
+          setOriginalContent(rightPaneTabs[rightActiveIndex].originalContent);
+          setSelectedFile({ name: rightPaneTabs[rightActiveIndex].name, path: rightPaneTabs[rightActiveIndex].path, type: 'file' });
+        }
+        setLeftPaneTabs([]);
+        setLeftActiveIndex(-1);
+        setSplitViewEnabled(false);
+      } else if (moreActionsPaneId === 'right') {
+        // Close right pane, keep left pane tabs and switch to single view
+        const modifiedTabs = rightPaneTabs.filter(tab => tab.isModified);
+        if (modifiedTabs.length > 0) {
+          const tabNames = modifiedTabs.map(t => t.name).join(', ');
+          if (!window.confirm(`${modifiedTabs.length} file(s) in right pane have unsaved changes (${tabNames}). Close pane anyway?`)) {
+            setMoreActionsAnchor(null);
+            return;
+          }
+        }
+        // Transfer left pane tabs to single view
+        setOpenTabs(leftPaneTabs);
+        setActiveTabIndex(leftActiveIndex >= 0 ? leftActiveIndex : 0);
+        if (leftActiveIndex >= 0 && leftPaneTabs[leftActiveIndex]) {
+          setFileContent(leftPaneTabs[leftActiveIndex].content);
+          setOriginalContent(leftPaneTabs[leftActiveIndex].originalContent);
+          setSelectedFile({ name: leftPaneTabs[leftActiveIndex].name, path: leftPaneTabs[leftActiveIndex].path, type: 'file' });
+        }
+        setRightPaneTabs([]);
+        setRightActiveIndex(-1);
+        setSplitViewEnabled(false);
       }
+    } else {
+      // Single view - close all tabs
+      const modifiedTabs = openTabs.filter(tab => tab.isModified);
+      if (modifiedTabs.length > 0) {
+        const tabNames = modifiedTabs.map(t => t.name).join(', ');
+        if (!window.confirm(`${modifiedTabs.length} file(s) have unsaved changes (${tabNames}). Close all anyway?`)) {
+          setMoreActionsAnchor(null);
+          return;
+        }
+      }
+      setOpenTabs([]);
+      setActiveTabIndex(-1);
+      setSelectedFile(null);
+      setFileContent('');
+      setOriginalContent('');
     }
-    setOpenTabs([]);
-    setActiveTabIndex(-1);
-    setSelectedFile(null);
-    setFileContent('');
-    setOriginalContent('');
     setMoreActionsAnchor(null);
   };
 
   const handleCloseSavedTabs = () => {
-    const savedTabs = openTabs.filter(tab => !tab.isModified);
-    if (savedTabs.length === 0) {
-      enqueueSnackbar('No saved tabs to close', { variant: 'info' });
-      setMoreActionsAnchor(null);
-      return;
-    }
+    if (splitViewEnabled) {
+      // In split view, close saved tabs in the pane that triggered this action
+      if (moreActionsPaneId === 'left') {
+        const savedTabs = leftPaneTabs.filter(tab => !tab.isModified);
+        if (savedTabs.length === 0) {
+          enqueueSnackbar('No saved tabs to close in left pane', { variant: 'info' });
+          setMoreActionsAnchor(null);
+          return;
+        }
+        const newTabs = leftPaneTabs.filter(tab => tab.isModified);
+        setLeftPaneTabs(newTabs);
+        
+        // If all tabs were saved, close the pane
+        if (newTabs.length === 0) {
+          setOpenTabs(rightPaneTabs);
+          setActiveTabIndex(rightActiveIndex >= 0 ? rightActiveIndex : 0);
+          if (rightActiveIndex >= 0 && rightPaneTabs[rightActiveIndex]) {
+            setFileContent(rightPaneTabs[rightActiveIndex].content);
+            setOriginalContent(rightPaneTabs[rightActiveIndex].originalContent);
+            setSelectedFile({ name: rightPaneTabs[rightActiveIndex].name, path: rightPaneTabs[rightActiveIndex].path, type: 'file' });
+          }
+          setSplitViewEnabled(false);
+        } else {
+          // Adjust active tab if needed
+          if (leftActiveIndex >= 0 && leftPaneTabs[leftActiveIndex] && !leftPaneTabs[leftActiveIndex].isModified) {
+            setLeftActiveIndex(0);
+            if (activePaneId === 'left') {
+              setFileContent(newTabs[0].content);
+              setOriginalContent(newTabs[0].originalContent);
+              setSelectedFile({ name: newTabs[0].name, path: newTabs[0].path, type: 'file' });
+            }
+          }
+        }
+      } else if (moreActionsPaneId === 'right') {
+        const savedTabs = rightPaneTabs.filter(tab => !tab.isModified);
+        if (savedTabs.length === 0) {
+          enqueueSnackbar('No saved tabs to close in right pane', { variant: 'info' });
+          setMoreActionsAnchor(null);
+          return;
+        }
+        const newTabs = rightPaneTabs.filter(tab => tab.isModified);
+        setRightPaneTabs(newTabs);
+        
+        // If all tabs were saved, close the pane
+        if (newTabs.length === 0) {
+          setOpenTabs(leftPaneTabs);
+          setActiveTabIndex(leftActiveIndex >= 0 ? leftActiveIndex : 0);
+          if (leftActiveIndex >= 0 && leftPaneTabs[leftActiveIndex]) {
+            setFileContent(leftPaneTabs[leftActiveIndex].content);
+            setOriginalContent(leftPaneTabs[leftActiveIndex].originalContent);
+            setSelectedFile({ name: leftPaneTabs[leftActiveIndex].name, path: leftPaneTabs[leftActiveIndex].path, type: 'file' });
+          }
+          setSplitViewEnabled(false);
+        } else {
+          // Adjust active tab if needed
+          if (rightActiveIndex >= 0 && rightPaneTabs[rightActiveIndex] && !rightPaneTabs[rightActiveIndex].isModified) {
+            setRightActiveIndex(0);
+            if (activePaneId === 'right') {
+              setFileContent(newTabs[0].content);
+              setOriginalContent(newTabs[0].originalContent);
+              setSelectedFile({ name: newTabs[0].name, path: newTabs[0].path, type: 'file' });
+            }
+          }
+        }
+      }
+    } else {
+      // Single view - close saved tabs
+      const savedTabs = openTabs.filter(tab => !tab.isModified);
+      if (savedTabs.length === 0) {
+        enqueueSnackbar('No saved tabs to close', { variant: 'info' });
+        setMoreActionsAnchor(null);
+        return;
+      }
 
-    const newTabs = openTabs.filter(tab => tab.isModified);
-    setOpenTabs(newTabs);
+      const newTabs = openTabs.filter(tab => tab.isModified);
+      setOpenTabs(newTabs);
 
-    // Adjust active tab if needed
-    if (activeTabIndex >= 0 && openTabs[activeTabIndex] && !openTabs[activeTabIndex].isModified) {
-      if (newTabs.length > 0) {
-        setActiveTabIndex(0);
-        setFileContent(newTabs[0].content);
-        setOriginalContent(newTabs[0].originalContent);
-        setSelectedFile({ name: newTabs[0].name, path: newTabs[0].path, type: 'file' });
-      } else {
-        setActiveTabIndex(-1);
-        setSelectedFile(null);
-        setFileContent('');
-        setOriginalContent('');
+      // Adjust active tab if needed
+      if (activeTabIndex >= 0 && openTabs[activeTabIndex] && !openTabs[activeTabIndex].isModified) {
+        if (newTabs.length > 0) {
+          setActiveTabIndex(0);
+          setFileContent(newTabs[0].content);
+          setOriginalContent(newTabs[0].originalContent);
+          setSelectedFile({ name: newTabs[0].name, path: newTabs[0].path, type: 'file' });
+        } else {
+          setActiveTabIndex(-1);
+          setSelectedFile(null);
+          setFileContent('');
+          setOriginalContent('');
+        }
       }
     }
     setMoreActionsAnchor(null);
@@ -1724,7 +1842,7 @@ const NewCodeEditorPage: React.FC = () => {
                     <Tooltip title="More Actions">
                       <IconButton
                         size="small"
-                        onClick={(e) => setMoreActionsAnchor(e.currentTarget)}
+                        onClick={(e) => { setMoreActionsAnchor(e.currentTarget); setMoreActionsPaneId('single'); }}
                         sx={{
                           p: 0.5,
                           color: 'rgba(255, 255, 255, 0.6)',
@@ -2032,7 +2150,7 @@ const NewCodeEditorPage: React.FC = () => {
                                   <Tooltip title="More Actions">
                                     <IconButton
                                       size="small"
-                                      onClick={(e) => { e.stopPropagation(); setMoreActionsAnchor(e.currentTarget); }}
+                                      onClick={(e) => { e.stopPropagation(); setMoreActionsAnchor(e.currentTarget); setMoreActionsPaneId('left'); }}
                                       sx={{
                                         p: 0.5,
                                         color: 'rgba(255, 255, 255, 0.6)',
@@ -2203,7 +2321,7 @@ const NewCodeEditorPage: React.FC = () => {
                                   <Tooltip title="More Actions">
                                     <IconButton
                                       size="small"
-                                      onClick={(e) => { e.stopPropagation(); setMoreActionsAnchor(e.currentTarget); }}
+                                      onClick={(e) => { e.stopPropagation(); setMoreActionsAnchor(e.currentTarget); setMoreActionsPaneId('right'); }}
                                       sx={{
                                         p: 0.5,
                                         color: 'rgba(255, 255, 255, 0.6)',
