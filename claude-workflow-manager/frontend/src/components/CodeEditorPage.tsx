@@ -1407,6 +1407,7 @@ const CodeEditorPage: React.FC = () => {
                   onItemClick={handleItemClick}
                   selectedPath={selectedFile?.path}
                   pendingChanges={pendingChanges}
+                  currentPath={currentPath}
                 />
               </Box>
               
