@@ -825,115 +825,6 @@ const CodeEditorPage: React.FC = () => {
       
       {selectedWorkflow && (
         <Grid container spacing={2}>
-          {showChat && (
-            <Grid item xs={12} md={3}>
-              <Paper sx={{ p: 2, height: 'calc(100vh - 280px)', display: 'flex', flexDirection: 'column' }}>
-                <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-                  <Typography variant="h6">AI Assistant</Typography>
-                  <Button size="small" onClick={handleClearChat}>Clear</Button>
-                </Box>
-                
-                <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                  <InputLabel>Orchestration Design</InputLabel>
-                  <Select
-                    value={selectedDesign}
-                    onChange={(e) => setSelectedDesign(e.target.value)}
-                    label="Orchestration Design"
-                  >
-                    {orchestrationDesigns.map((design) => (
-                      <MenuItem key={design.id} value={design.id}>
-                        {design.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                
-                <Box sx={{ flexGrow: 1, overflow: 'auto', mb: 2, bgcolor: 'background.default', borderRadius: 1, p: 1 }}>
-                  {chatMessages.map((msg) => (
-                    <Box
-                      key={msg.id}
-                      sx={{
-                        mb: 2,
-                        display: 'flex',
-                        flexDirection: msg.type === 'user' ? 'row-reverse' : 'row',
-                        gap: 1,
-                      }}
-                    >
-                      <Avatar
-                        sx={{
-                          bgcolor: msg.type === 'user' ? 'primary.main' : 
-                                   msg.type === 'agent' ? 'secondary.main' : 'grey.500',
-                          width: 32,
-                          height: 32,
-                        }}
-                      >
-                        {msg.type === 'user' ? <Person sx={{ fontSize: 20 }} /> : 
-                         msg.type === 'agent' ? <SmartToy sx={{ fontSize: 20 }} /> : 'S'}
-                      </Avatar>
-                      <Paper
-                        sx={{
-                          p: 1.5,
-                          maxWidth: '80%',
-                          bgcolor: msg.type === 'user' ? 'primary.dark' : 
-                                   msg.type === 'system' ? 'grey.800' : 'background.paper',
-                        }}
-                      >
-                        {msg.agent && (
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            {msg.agent}
-                          </Typography>
-                        )}
-                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                          {msg.content}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
-                          {msg.timestamp.toLocaleTimeString()}
-                        </Typography>
-                      </Paper>
-                    </Box>
-                  ))}
-                  <div ref={chatEndRef} />
-                </Box>
-                
-                {executionStatus.executing && (
-                  <Box mb={2}>
-                    <LinearProgress />
-                    <Typography variant="caption" color="text.secondary">
-                      {executionStatus.currentAgent && `${executionStatus.currentAgent}: ${executionStatus.progress || 'Processing...'}`}
-                    </Typography>
-                  </Box>
-                )}
-                
-                <Box display="flex" gap={1}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder="Type your request..."
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                    disabled={executionStatus.executing || !selectedDesign}
-                    multiline
-                    maxRows={3}
-                  />
-                  {executionStatus.executing ? (
-                    <IconButton onClick={handleStopExecution} color="error">
-                      <Stop />
-                    </IconButton>
-                  ) : (
-                    <IconButton 
-                      onClick={handleSendMessage} 
-                      color="primary"
-                      disabled={!chatInput.trim() || !selectedDesign}
-                    >
-                      <Send />
-                    </IconButton>
-                  )}
-                </Box>
-              </Paper>
-            </Grid>
-          )}
-          
           {showExplorer && (
             <Grid item xs={12} md={showChat ? 2 : 2.5}>
               <Paper 
@@ -1282,6 +1173,115 @@ const CodeEditorPage: React.FC = () => {
               </Box>
             </Paper>
           </Grid>
+          
+          {showChat && (
+            <Grid item xs={12} md={3}>
+              <Paper sx={{ p: 2, height: 'calc(100vh - 280px)', display: 'flex', flexDirection: 'column' }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+                  <Typography variant="h6">AI Assistant</Typography>
+                  <Button size="small" onClick={handleClearChat}>Clear</Button>
+                </Box>
+                
+                <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                  <InputLabel>Orchestration Design</InputLabel>
+                  <Select
+                    value={selectedDesign}
+                    onChange={(e) => setSelectedDesign(e.target.value)}
+                    label="Orchestration Design"
+                  >
+                    {orchestrationDesigns.map((design) => (
+                      <MenuItem key={design.id} value={design.id}>
+                        {design.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                
+                <Box sx={{ flexGrow: 1, overflow: 'auto', mb: 2, bgcolor: 'background.default', borderRadius: 1, p: 1 }}>
+                  {chatMessages.map((msg) => (
+                    <Box
+                      key={msg.id}
+                      sx={{
+                        mb: 2,
+                        display: 'flex',
+                        flexDirection: msg.type === 'user' ? 'row-reverse' : 'row',
+                        gap: 1,
+                      }}
+                    >
+                      <Avatar
+                        sx={{
+                          bgcolor: msg.type === 'user' ? 'primary.main' : 
+                                   msg.type === 'agent' ? 'secondary.main' : 'grey.500',
+                          width: 32,
+                          height: 32,
+                        }}
+                      >
+                        {msg.type === 'user' ? <Person sx={{ fontSize: 20 }} /> : 
+                         msg.type === 'agent' ? <SmartToy sx={{ fontSize: 20 }} /> : 'S'}
+                      </Avatar>
+                      <Paper
+                        sx={{
+                          p: 1.5,
+                          maxWidth: '80%',
+                          bgcolor: msg.type === 'user' ? 'primary.dark' : 
+                                   msg.type === 'system' ? 'grey.800' : 'background.paper',
+                        }}
+                      >
+                        {msg.agent && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {msg.agent}
+                          </Typography>
+                        )}
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                          {msg.content}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+                          {msg.timestamp.toLocaleTimeString()}
+                        </Typography>
+                      </Paper>
+                    </Box>
+                  ))}
+                  <div ref={chatEndRef} />
+                </Box>
+                
+                {executionStatus.executing && (
+                  <Box mb={2}>
+                    <LinearProgress />
+                    <Typography variant="caption" color="text.secondary">
+                      {executionStatus.currentAgent && `${executionStatus.currentAgent}: ${executionStatus.progress || 'Processing...'}`}
+                    </Typography>
+                  </Box>
+                )}
+                
+                <Box display="flex" gap={1}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Type your request..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                    disabled={executionStatus.executing || !selectedDesign}
+                    multiline
+                    maxRows={3}
+                  />
+                  {executionStatus.executing ? (
+                    <IconButton onClick={handleStopExecution} color="error">
+                      <Stop />
+                    </IconButton>
+                  ) : (
+                    <IconButton 
+                      onClick={handleSendMessage} 
+                      color="primary"
+                      disabled={!chatInput.trim() || !selectedDesign}
+                    >
+                      <Send />
+                    </IconButton>
+                  )}
+                </Box>
+              </Paper>
+            </Grid>
+          )}
         </Grid>
       )}
       
