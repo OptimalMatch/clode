@@ -51,7 +51,7 @@ interface VSCodeFileTreeProps {
 }
 
 // Helper to get file icon based on extension
-const getFileIcon = (filename: string, size: number = 16) => {
+const getFileIcon = (filename: string, size: number = 16): React.ReactNode => {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
   const iconStyle = { marginRight: 8, flexShrink: 0 };
   
