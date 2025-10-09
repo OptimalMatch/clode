@@ -191,8 +191,9 @@ const NewCodeEditorPage: React.FC = () => {
   const [changes, setChanges] = useState<FileChange[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<string>('vs-dark');
-  const [activityBarView, setActivityBarView] = useState<'explorer' | 'search' | 'changes' | 'chat'>('explorer');
+  const [activityBarView, setActivityBarView] = useState<'explorer' | 'search' | 'changes'>('explorer');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [rightPanelOpen, setRightPanelOpen] = useState(false); // For AI Assistant
   
   // Tab system state
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
@@ -1346,6 +1347,18 @@ const NewCodeEditorPage: React.FC = () => {
             <CreateNewFolder sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
+        <Tooltip title="AI Assistant">
+          <IconButton 
+            size="small"
+            onClick={() => setRightPanelOpen(!rightPanelOpen)}
+            sx={{ 
+              color: rightPanelOpen ? '#6495ed' : 'rgba(255, 255, 255, 0.7)', 
+              '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' } 
+            }}
+          >
+            <SmartToy sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Settings">
           <IconButton 
             size="small"
@@ -1460,29 +1473,6 @@ const NewCodeEditorPage: React.FC = () => {
             </Badge>
           </Tooltip>
           
-          <Tooltip title="AI Assistant" placement="right">
-            <IconButton
-              size="small"
-              onClick={() => {
-                if (activityBarView === 'chat' && !sidebarCollapsed) {
-                  setSidebarCollapsed(true);
-                } else {
-                  setActivityBarView('chat');
-                  setSidebarCollapsed(false);
-                }
-              }}
-              sx={{ 
-                color: activityBarView === 'chat' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
-                borderLeft: activityBarView === 'chat' ? '2px solid #6495ed' : '2px solid transparent',
-                borderRadius: 0,
-                width: '100%',
-                py: 1.5,
-                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
-              }}
-            >
-              <SmartToy sx={{ fontSize: 24 }} />
-            </IconButton>
-          </Tooltip>
         </Box>
         
         {/* Resizable Panels */}
@@ -1517,7 +1507,6 @@ const NewCodeEditorPage: React.FC = () => {
                     {activityBarView === 'explorer' && 'Explorer'}
                     {activityBarView === 'search' && 'Search'}
                     {activityBarView === 'changes' && `Changes (${pendingChanges.length})`}
-                    {activityBarView === 'chat' && 'AI Assistant'}
                   </Typography>
                   <Tooltip title="Collapse Sidebar">
                     <IconButton
@@ -1718,129 +1707,6 @@ const NewCodeEditorPage: React.FC = () => {
                   )}
                   
                   {/* CHAT VIEW */}
-                  {activityBarView === 'chat' && (
-                    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                      {/* Design Selector */}
-                      <Box sx={{ p: 2, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                        <FormControl fullWidth size="small">
-                          <Select
-                            value={selectedDesign}
-                            onChange={(e) => setSelectedDesign(e.target.value)}
-                            displayEmpty
-                            sx={{ fontSize: 11 }}
-                          >
-                            <MenuItem value="" disabled sx={{ fontSize: 11 }}>
-                              <em>Select Design</em>
-                            </MenuItem>
-                            {orchestrationDesigns.map((design) => (
-                              <MenuItem key={design.id} value={design.id} sx={{ fontSize: 11 }}>
-                                {design.name}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Box>
-                      
-                      {/* Chat Messages */}
-                      <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
-                        {chatMessages.length === 0 ? (
-                          <Box textAlign="center" py={4}>
-                            <SmartToy sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)', mb: 1 }} />
-                            <Typography sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.4)' }}>
-                              Start a conversation with AI
-                            </Typography>
-                          </Box>
-                        ) : (
-                          chatMessages.map((msg) => (
-                            <Box
-                              key={msg.id}
-                              sx={{
-                                mb: 1,
-                                display: 'flex',
-                                flexDirection: msg.type === 'user' ? 'row-reverse' : 'row',
-                                gap: 0.5,
-                              }}
-                            >
-                              <Avatar
-                                sx={{
-                                  bgcolor: msg.type === 'user' ? 'primary.main' : 
-                                           msg.type === 'agent' ? 'secondary.main' : 'grey.500',
-                                  width: 24,
-                                  height: 24,
-                                }}
-                              >
-                                {msg.type === 'user' ? <Person sx={{ fontSize: 14 }} /> : 
-                                 msg.type === 'agent' ? <SmartToy sx={{ fontSize: 14 }} /> : 'S'}
-                              </Avatar>
-                              <Paper
-                                sx={{
-                                  p: 1,
-                                  maxWidth: '85%',
-                                  bgcolor: msg.type === 'user' ? 'primary.dark' : 
-                                           msg.type === 'system' ? 'grey.800' : 'background.paper',
-                                }}
-                              >
-                                {msg.agent && (
-                                  <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: 9 }}>
-                                    {msg.agent}
-                                  </Typography>
-                                )}
-                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontSize: 10 }}>
-                                  {msg.content}
-                                </Typography>
-                              </Paper>
-                            </Box>
-                          ))
-                        )}
-                        <div ref={chatEndRef} />
-                      </Box>
-                      
-                      {/* Execution Status */}
-                      {executionStatus.executing && (
-                        <Box sx={{ px: 2, pb: 1 }}>
-                          <LinearProgress />
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 9 }}>
-                            {executionStatus.currentAgent || 'Processing...'}
-                          </Typography>
-                        </Box>
-                      )}
-                      
-                      {/* Chat Input */}
-                      <Box sx={{ p: 1.5, borderTop: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', gap: 0.5 }}>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          placeholder="Ask AI..."
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                          disabled={executionStatus.executing || !selectedDesign}
-                          multiline
-                          maxRows={2}
-                          sx={{
-                            '& .MuiOutlinedInput-root': {
-                              bgcolor: 'rgba(255, 255, 255, 0.05)',
-                              fontSize: 11,
-                            },
-                          }}
-                        />
-                        {executionStatus.executing ? (
-                          <IconButton onClick={handleStopExecution} color="error" size="small">
-                            <Stop sx={{ fontSize: 18 }} />
-                          </IconButton>
-                        ) : (
-                          <IconButton 
-                            onClick={handleSendMessage} 
-                            color="primary"
-                            disabled={!chatInput.trim() || !selectedDesign}
-                            size="small"
-                          >
-                            <Send sx={{ fontSize: 18 }} />
-                          </IconButton>
-                        )}
-                      </Box>
-                    </Box>
-                  )}
                 </Box>
               </Box>
                 </Panel>
@@ -2721,6 +2587,174 @@ const NewCodeEditorPage: React.FC = () => {
                 </Box>
               </Box>
             </Panel>
+            
+            {/* Right Panel for AI Assistant */}
+            {rightPanelOpen && (
+              <>
+                <PanelResizeHandle style={resizeHandleStyles} />
+                <Panel defaultSize={25} minSize={20} maxSize={40}>
+                  <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#252526', borderLeft: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                    {/* AI Assistant Header */}
+                    <Box 
+                      sx={{ 
+                        p: 1.5,
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Typography 
+                        variant="subtitle2" 
+                        sx={{ 
+                          fontWeight: 600,
+                          fontSize: 11,
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.8,
+                          color: 'rgba(255, 255, 255, 0.7)',
+                        }}
+                      >
+                        AI Assistant
+                      </Typography>
+                      <Tooltip title="Close">
+                        <IconButton
+                          onClick={() => setRightPanelOpen(false)}
+                          size="small"
+                          sx={{ 
+                            p: 0.5, 
+                            color: 'rgba(255, 255, 255, 0.6)',
+                            '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+                          }}
+                        >
+                          <Close sx={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                    
+                    {/* Design Selector */}
+                    <Box sx={{ p: 2, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                      <FormControl fullWidth size="small">
+                        <Select
+                          value={selectedDesign}
+                          onChange={(e) => setSelectedDesign(e.target.value)}
+                          displayEmpty
+                          sx={{ fontSize: 11 }}
+                        >
+                          <MenuItem value="" disabled sx={{ fontSize: 11 }}>
+                            <em>Select Design</em>
+                          </MenuItem>
+                          {orchestrationDesigns.map((design) => (
+                            <MenuItem key={design.id} value={design.id} sx={{ fontSize: 11 }}>
+                              {design.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Box>
+                    
+                    {/* Chat Messages */}
+                    <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
+                      {chatMessages.length === 0 ? (
+                        <Box textAlign="center" py={4}>
+                          <SmartToy sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)', mb: 1 }} />
+                          <Typography sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.4)' }}>
+                            Start a conversation with AI
+                          </Typography>
+                        </Box>
+                      ) : (
+                        chatMessages.map((msg) => (
+                          <Box
+                            key={msg.id}
+                            sx={{
+                              mb: 1,
+                              display: 'flex',
+                              flexDirection: msg.type === 'user' ? 'row-reverse' : 'row',
+                              gap: 0.5,
+                            }}
+                          >
+                            <Avatar
+                              sx={{
+                                bgcolor: msg.type === 'user' ? 'primary.main' : 
+                                         msg.type === 'agent' ? 'secondary.main' : 'grey.500',
+                                width: 24,
+                                height: 24,
+                              }}
+                            >
+                              {msg.type === 'user' ? <Person sx={{ fontSize: 14 }} /> : 
+                               msg.type === 'agent' ? <SmartToy sx={{ fontSize: 14 }} /> : 'S'}
+                            </Avatar>
+                            <Paper
+                              sx={{
+                                p: 1,
+                                maxWidth: '85%',
+                                bgcolor: msg.type === 'user' ? 'primary.dark' : 
+                                         msg.type === 'system' ? 'grey.800' : 'background.paper',
+                              }}
+                            >
+                              {msg.agent && (
+                                <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: 9 }}>
+                                  {msg.agent}
+                                </Typography>
+                              )}
+                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontSize: 10 }}>
+                                {msg.content}
+                              </Typography>
+                            </Paper>
+                          </Box>
+                        ))
+                      )}
+                      <div ref={chatEndRef} />
+                    </Box>
+                    
+                    {/* Execution Status */}
+                    {executionStatus.executing && (
+                      <Box sx={{ px: 2, pb: 1 }}>
+                        <LinearProgress />
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 9 }}>
+                          {executionStatus.currentAgent || 'Processing...'}
+                        </Typography>
+                      </Box>
+                    )}
+                    
+                    {/* Chat Input */}
+                    <Box sx={{ p: 1.5, borderTop: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', gap: 0.5 }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        placeholder="Ask AI..."
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                        disabled={executionStatus.executing || !selectedDesign}
+                        multiline
+                        maxRows={2}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            bgcolor: 'rgba(255, 255, 255, 0.05)',
+                            fontSize: 11,
+                          },
+                        }}
+                      />
+                      {executionStatus.executing ? (
+                        <IconButton onClick={handleStopExecution} color="error" size="small">
+                          <Stop sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      ) : (
+                        <IconButton 
+                          onClick={handleSendMessage} 
+                          color="primary"
+                          disabled={!chatInput.trim() || !selectedDesign}
+                          size="small"
+                        >
+                          <Send sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      )}
+                    </Box>
+                  </Box>
+                </Panel>
+              </>
+            )}
           </PanelGroup>
         ) : (
           // No Workflow Selected
