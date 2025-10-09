@@ -1791,31 +1791,103 @@ const NewCodeEditorPage: React.FC = () => {
                       </Box>
                     ) : (
                       // Regular Editor Mode
-                      <Editor
-                        height="100%"
-                        language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
-                        value={fileContent}
-                        onChange={(value) => handleContentChange(value || '')}
-                        theme={selectedTheme}
-                        options={{
-                          readOnly: !selectedFile || fileContent === '[Binary file]',
-                          minimap: { enabled: true },
-                          fontSize: 13,
-                          lineNumbers: 'on',
-                          renderWhitespace: 'selection',
-                          scrollBeyondLastLine: false,
-                          automaticLayout: true,
-                          tabSize: 2,
-                          wordWrap: 'on',
-                          folding: true,
-                          bracketPairColorization: { enabled: true },
-                        }}
-                        loading={
-                          <Box display="flex" alignItems="center" justifyContent="center" height="100%">
-                            <CircularProgress />
-                          </Box>
-                        }
-                      />
+                      splitViewEnabled ? (
+                        // Split View with two editors
+                        <PanelGroup direction="horizontal">
+                          {/* Left Editor */}
+                          <Panel defaultSize={50} minSize={20}>
+                            <Editor
+                              height="100%"
+                              language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
+                              value={fileContent}
+                              onChange={(value) => handleContentChange(value || '')}
+                              theme={selectedTheme}
+                              options={{
+                                readOnly: !selectedFile || fileContent === '[Binary file]',
+                                minimap: { enabled: true },
+                                fontSize: 13,
+                                lineNumbers: 'on',
+                                renderWhitespace: 'selection',
+                                scrollBeyondLastLine: false,
+                                automaticLayout: true,
+                                tabSize: 2,
+                                wordWrap: 'on',
+                                folding: true,
+                                bracketPairColorization: { enabled: true },
+                              }}
+                              loading={
+                                <Box display="flex" alignItems="center" justifyContent="center" height="100%">
+                                  <CircularProgress />
+                                </Box>
+                              }
+                            />
+                          </Panel>
+                          
+                          {/* Resize Handle */}
+                          <PanelResizeHandle style={{
+                            width: '4px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                            cursor: 'col-resize',
+                            transition: 'background-color 0.2s',
+                          }} />
+                          
+                          {/* Right Editor */}
+                          <Panel defaultSize={50} minSize={20}>
+                            <Editor
+                              height="100%"
+                              language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
+                              value={fileContent}
+                              onChange={(value) => handleContentChange(value || '')}
+                              theme={selectedTheme}
+                              options={{
+                                readOnly: !selectedFile || fileContent === '[Binary file]',
+                                minimap: { enabled: true },
+                                fontSize: 13,
+                                lineNumbers: 'on',
+                                renderWhitespace: 'selection',
+                                scrollBeyondLastLine: false,
+                                automaticLayout: true,
+                                tabSize: 2,
+                                wordWrap: 'on',
+                                folding: true,
+                                bracketPairColorization: { enabled: true },
+                              }}
+                              loading={
+                                <Box display="flex" alignItems="center" justifyContent="center" height="100%">
+                                  <CircularProgress />
+                                </Box>
+                              }
+                            />
+                          </Panel>
+                        </PanelGroup>
+                      ) : (
+                        // Single View
+                        <Editor
+                          height="100%"
+                          language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
+                          value={fileContent}
+                          onChange={(value) => handleContentChange(value || '')}
+                          theme={selectedTheme}
+                          options={{
+                            readOnly: !selectedFile || fileContent === '[Binary file]',
+                            minimap: { enabled: true },
+                            fontSize: 13,
+                            lineNumbers: 'on',
+                            renderWhitespace: 'selection',
+                            scrollBeyondLastLine: false,
+                            automaticLayout: true,
+                            tabSize: 2,
+                            wordWrap: 'on',
+                            folding: true,
+                            bracketPairColorization: { enabled: true },
+                          }}
+                          loading={
+                            <Box display="flex" alignItems="center" justifyContent="center" height="100%">
+                              <CircularProgress />
+                            </Box>
+                          }
+                        />
+                      )
                     )
                   ) : (
                     <Box 
