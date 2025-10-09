@@ -200,6 +200,13 @@ const NewCodeEditorPage: React.FC = () => {
   const [splitViewEnabled, setSplitViewEnabled] = useState(false);
   const [moreActionsAnchor, setMoreActionsAnchor] = useState<null | HTMLElement>(null);
   
+  // Split view state - separate tabs for each pane
+  const [leftPaneTabs, setLeftPaneTabs] = useState<EditorTab[]>([]);
+  const [rightPaneTabs, setRightPaneTabs] = useState<EditorTab[]>([]);
+  const [leftActiveIndex, setLeftActiveIndex] = useState<number>(-1);
+  const [rightActiveIndex, setRightActiveIndex] = useState<number>(-1);
+  const [activePaneId, setActivePaneId] = useState<'left' | 'right'>('left');
+  
   // Chat & Orchestration state
   const [orchestrationDesigns, setOrchestrationDesigns] = useState<OrchestrationDesign[]>([]);
   const [selectedDesign, setSelectedDesign] = useState<string>('');
@@ -423,47 +430,163 @@ const NewCodeEditorPage: React.FC = () => {
     const content = await loadFileContentForTab(item.path);
     if (content === null) return; // Failed to load
     
-    const existingTabIndex = openTabs.findIndex(tab => tab.path === item.path);
-    
-    if (existingTabIndex !== -1) {
-      // Tab already exists
-      if (isDoubleClick) {
-        // Make it permanent
-        const updatedTabs = [...openTabs];
-        updatedTabs[existingTabIndex] = { ...updatedTabs[existingTabIndex], isPermanent: true };
-        setOpenTabs(updatedTabs);
-      }
-      setActiveTabIndex(existingTabIndex);
-      setSelectedFile(item);
-      setFileContent(openTabs[existingTabIndex].content);
-      setOriginalContent(openTabs[existingTabIndex].originalContent);
-    } else {
-      // Create new tab
-      const newTab: EditorTab = {
-        path: item.path,
-        name: item.name,
-        content,
-        originalContent: content,
-        isPermanent: isDoubleClick,
-        isModified: false,
-      };
+    if (splitViewEnabled) {
+      // Handle split view - open in active pane
+      const tabs = activePaneId === 'left' ? leftPaneTabs : rightPaneTabs;
+      const setTabs = activePaneId === 'left' ? setLeftPaneTabs : setRightPaneTabs;
+      const setActiveIndex = activePaneId === 'left' ? setLeftActiveIndex : setRightActiveIndex;
       
-      // Remove any preview tabs if this is a single click
-      if (!isDoubleClick) {
-        const permanentTabs = openTabs.filter(tab => tab.isPermanent);
-        setOpenTabs([...permanentTabs, newTab]);
-        setActiveTabIndex(permanentTabs.length);
+      const existingTabIndex = tabs.findIndex(tab => tab.path === item.path);
+      
+      if (existingTabIndex !== -1) {
+        // Tab already exists in this pane
+        if (isDoubleClick) {
+          const updatedTabs = [...tabs];
+          updatedTabs[existingTabIndex] = { ...updatedTabs[existingTabIndex], isPermanent: true };
+          setTabs(updatedTabs);
+        }
+        setActiveIndex(existingTabIndex);
       } else {
-        setOpenTabs([...openTabs, newTab]);
-        setActiveTabIndex(openTabs.length);
+        // Create new tab in active pane
+        const newTab: EditorTab = {
+          path: item.path,
+          name: item.name,
+          content,
+          originalContent: content,
+          isPermanent: isDoubleClick,
+          isModified: false,
+        };
+        
+        if (!isDoubleClick) {
+          const permanentTabs = tabs.filter(tab => tab.isPermanent);
+          setTabs([...permanentTabs, newTab]);
+          setActiveIndex(permanentTabs.length);
+        } else {
+          setTabs([...tabs, newTab]);
+          setActiveIndex(tabs.length);
+        }
       }
       
       setSelectedFile(item);
       setFileContent(content);
       setOriginalContent(content);
+    } else {
+      // Handle single view - use original tab logic
+      const existingTabIndex = openTabs.findIndex(tab => tab.path === item.path);
+      
+      if (existingTabIndex !== -1) {
+        // Tab already exists
+        if (isDoubleClick) {
+          // Make it permanent
+          const updatedTabs = [...openTabs];
+          updatedTabs[existingTabIndex] = { ...updatedTabs[existingTabIndex], isPermanent: true };
+          setOpenTabs(updatedTabs);
+        }
+        setActiveTabIndex(existingTabIndex);
+        setSelectedFile(item);
+        setFileContent(openTabs[existingTabIndex].content);
+        setOriginalContent(openTabs[existingTabIndex].originalContent);
+      } else {
+        // Create new tab
+        const newTab: EditorTab = {
+          path: item.path,
+          name: item.name,
+          content,
+          originalContent: content,
+          isPermanent: isDoubleClick,
+          isModified: false,
+        };
+        
+        // Remove any preview tabs if this is a single click
+        if (!isDoubleClick) {
+          const permanentTabs = openTabs.filter(tab => tab.isPermanent);
+          setOpenTabs([...permanentTabs, newTab]);
+          setActiveTabIndex(permanentTabs.length);
+        } else {
+          setOpenTabs([...openTabs, newTab]);
+          setActiveTabIndex(openTabs.length);
+        }
+        
+        setSelectedFile(item);
+        setFileContent(content);
+        setOriginalContent(content);
+      }
     }
   };
   
+  // Helper functions for split pane tab management
+  const handleSplitPaneTabClick = (paneId: 'left' | 'right', index: number) => {
+    const tabs = paneId === 'left' ? leftPaneTabs : rightPaneTabs;
+    const setActiveIndex = paneId === 'left' ? setLeftActiveIndex : setRightActiveIndex;
+    
+    setActivePaneId(paneId);
+    setActiveIndex(index);
+    const tab = tabs[index];
+    setFileContent(tab.content);
+    setOriginalContent(tab.originalContent);
+    setSelectedFile({ name: tab.name, path: tab.path, type: 'file' });
+  };
+
+  const handleSplitPaneTabClose = (paneId: 'left' | 'right', index: number) => {
+    const tabs = paneId === 'left' ? leftPaneTabs : rightPaneTabs;
+    const setTabs = paneId === 'left' ? setLeftPaneTabs : setRightPaneTabs;
+    const activeIndex = paneId === 'left' ? leftActiveIndex : rightActiveIndex;
+    const setActiveIndex = paneId === 'left' ? setLeftActiveIndex : setRightActiveIndex;
+    
+    const tab = tabs[index];
+    
+    if (tab.isModified) {
+      if (!window.confirm(`${tab.name} has unsaved changes. Close anyway?`)) {
+        return;
+      }
+    }
+    
+    const newTabs = tabs.filter((_, i) => i !== index);
+    setTabs(newTabs);
+    
+    if (activeIndex === index) {
+      if (newTabs.length > 0) {
+        const newIndex = Math.min(index, newTabs.length - 1);
+        setActiveIndex(newIndex);
+        if (activePaneId === paneId) {
+          setFileContent(newTabs[newIndex].content);
+          setOriginalContent(newTabs[newIndex].originalContent);
+          setSelectedFile({ name: newTabs[newIndex].name, path: newTabs[newIndex].path, type: 'file' });
+        }
+      } else {
+        setActiveIndex(-1);
+        if (activePaneId === paneId) {
+          setSelectedFile(null);
+          setFileContent('');
+          setOriginalContent('');
+        }
+      }
+    } else if (activeIndex > index) {
+      setActiveIndex(activeIndex - 1);
+    }
+  };
+
+  const handleSplitPaneContentChange = (paneId: 'left' | 'right', value: string) => {
+    const tabs = paneId === 'left' ? leftPaneTabs : rightPaneTabs;
+    const setTabs = paneId === 'left' ? setLeftPaneTabs : setRightPaneTabs;
+    const activeIndex = paneId === 'left' ? leftActiveIndex : rightActiveIndex;
+    
+    if (activeIndex >= 0 && activeIndex < tabs.length) {
+      const updatedTabs = [...tabs];
+      const tab = updatedTabs[activeIndex];
+      updatedTabs[activeIndex] = {
+        ...tab,
+        content: value,
+        isModified: value !== tab.originalContent,
+      };
+      setTabs(updatedTabs);
+      
+      if (activePaneId === paneId) {
+        setFileContent(value);
+      }
+    }
+  };
+
   const loadFileContentForTab = async (filePath: string): Promise<string | null> => {
     if (!selectedWorkflow) return null;
     
@@ -1792,35 +1915,132 @@ const NewCodeEditorPage: React.FC = () => {
                     ) : (
                       // Regular Editor Mode
                       splitViewEnabled ? (
-                        // Split View with two editors
+                        // Split View with two editors and separate tab bars
                         <PanelGroup direction="horizontal">
-                          {/* Left Editor */}
+                          {/* Left Pane */}
                           <Panel defaultSize={50} minSize={20}>
-                            <Editor
-                              height="100%"
-                              language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
-                              value={fileContent}
-                              onChange={(value) => handleContentChange(value || '')}
-                              theme={selectedTheme}
-                              options={{
-                                readOnly: !selectedFile || fileContent === '[Binary file]',
-                                minimap: { enabled: true },
-                                fontSize: 13,
-                                lineNumbers: 'on',
-                                renderWhitespace: 'selection',
-                                scrollBeyondLastLine: false,
-                                automaticLayout: true,
-                                tabSize: 2,
-                                wordWrap: 'on',
-                                folding: true,
-                                bracketPairColorization: { enabled: true },
+                            <Box 
+                              sx={{ 
+                                height: '100%', 
+                                display: 'flex', 
+                                flexDirection: 'column',
+                                border: activePaneId === 'left' ? '1px solid #007acc' : '1px solid transparent',
                               }}
-                              loading={
-                                <Box display="flex" alignItems="center" justifyContent="center" height="100%">
-                                  <CircularProgress />
+                              onClick={() => setActivePaneId('left')}
+                            >
+                              {/* Left Tab Bar */}
+                              <Box sx={{ 
+                                display: 'flex',
+                                alignItems: 'center',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                                bgcolor: '#252526',
+                                minHeight: '35px',
+                              }}>
+                                <Box sx={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center',
+                                  flex: 1,
+                                  overflowX: 'auto',
+                                  overflowY: 'hidden',
+                                }}>
+                                  {leftPaneTabs.length > 0 ? (
+                                    leftPaneTabs.map((tab, index) => (
+                                      <Box
+                                        key={tab.path}
+                                        onClick={(e) => { e.stopPropagation(); handleSplitPaneTabClick('left', index); }}
+                                        sx={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 0.5,
+                                          px: 1.5,
+                                          py: 0.75,
+                                          borderRight: '1px solid rgba(255, 255, 255, 0.05)',
+                                          bgcolor: leftActiveIndex === index && activePaneId === 'left' ? '#1e1e1e' : 'transparent',
+                                          cursor: 'pointer',
+                                          minWidth: 120,
+                                          maxWidth: 200,
+                                          '&:hover': {
+                                            bgcolor: leftActiveIndex === index && activePaneId === 'left' ? '#1e1e1e' : 'rgba(255, 255, 255, 0.05)',
+                                          },
+                                        }}
+                                      >
+                                        {getFileIcon(tab.name, 'inherit')}
+                                        <Typography
+                                          variant="body2"
+                                          sx={{
+                                            fontSize: 12,
+                                            fontStyle: tab.isPermanent ? 'normal' : 'italic',
+                                            color: tab.isModified ? '#ff9800' : 'rgba(255, 255, 255, 0.9)',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                            flex: 1,
+                                          }}
+                                        >
+                                          {tab.name}
+                                          {tab.isModified && ' •'}
+                                        </Typography>
+                                        <IconButton
+                                          size="small"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSplitPaneTabClose('left', index);
+                                          }}
+                                          sx={{
+                                            p: 0.25,
+                                            ml: 0.5,
+                                            color: 'rgba(255, 255, 255, 0.6)',
+                                            '&:hover': { 
+                                              color: 'rgba(255, 255, 255, 1)',
+                                              bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                            },
+                                          }}
+                                        >
+                                          <Close sx={{ fontSize: 14 }} />
+                                        </IconButton>
+                                      </Box>
+                                    ))
+                                  ) : (
+                                    <Typography variant="body2" sx={{ px: 2, fontSize: 12, color: 'rgba(255, 255, 255, 0.5)' }}>
+                                      No files open
+                                    </Typography>
+                                  )}
                                 </Box>
-                              }
-                            />
+                              </Box>
+                              
+                              {/* Left Editor */}
+                              <Box sx={{ flex: 1 }}>
+                                {leftActiveIndex >= 0 && leftPaneTabs[leftActiveIndex] ? (
+                                  <Editor
+                                    height="100%"
+                                    language={getLanguageFromFilename(leftPaneTabs[leftActiveIndex].name)}
+                                    value={leftPaneTabs[leftActiveIndex].content}
+                                    onChange={(value) => handleSplitPaneContentChange('left', value || '')}
+                                    theme={selectedTheme}
+                                    options={{
+                                      readOnly: leftPaneTabs[leftActiveIndex].content === '[Binary file]',
+                                      minimap: { enabled: true },
+                                      fontSize: 13,
+                                      lineNumbers: 'on',
+                                      renderWhitespace: 'selection',
+                                      scrollBeyondLastLine: false,
+                                      automaticLayout: true,
+                                      tabSize: 2,
+                                      wordWrap: 'on',
+                                      folding: true,
+                                      bracketPairColorization: { enabled: true },
+                                    }}
+                                  />
+                                ) : (
+                                  <Box display="flex" alignItems="center" justifyContent="center" height="100%" flexDirection="column" gap={2}>
+                                    <Code sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)' }} />
+                                    <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: 12 }}>
+                                      Left Pane
+                                    </Typography>
+                                  </Box>
+                                )}
+                              </Box>
+                            </Box>
                           </Panel>
                           
                           {/* Resize Handle */}
@@ -1831,33 +2051,130 @@ const NewCodeEditorPage: React.FC = () => {
                             transition: 'background-color 0.2s',
                           }} />
                           
-                          {/* Right Editor */}
+                          {/* Right Pane */}
                           <Panel defaultSize={50} minSize={20}>
-                            <Editor
-                              height="100%"
-                              language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
-                              value={fileContent}
-                              onChange={(value) => handleContentChange(value || '')}
-                              theme={selectedTheme}
-                              options={{
-                                readOnly: !selectedFile || fileContent === '[Binary file]',
-                                minimap: { enabled: true },
-                                fontSize: 13,
-                                lineNumbers: 'on',
-                                renderWhitespace: 'selection',
-                                scrollBeyondLastLine: false,
-                                automaticLayout: true,
-                                tabSize: 2,
-                                wordWrap: 'on',
-                                folding: true,
-                                bracketPairColorization: { enabled: true },
+                            <Box 
+                              sx={{ 
+                                height: '100%', 
+                                display: 'flex', 
+                                flexDirection: 'column',
+                                border: activePaneId === 'right' ? '1px solid #007acc' : '1px solid transparent',
                               }}
-                              loading={
-                                <Box display="flex" alignItems="center" justifyContent="center" height="100%">
-                                  <CircularProgress />
+                              onClick={() => setActivePaneId('right')}
+                            >
+                              {/* Right Tab Bar */}
+                              <Box sx={{ 
+                                display: 'flex',
+                                alignItems: 'center',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                                bgcolor: '#252526',
+                                minHeight: '35px',
+                              }}>
+                                <Box sx={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center',
+                                  flex: 1,
+                                  overflowX: 'auto',
+                                  overflowY: 'hidden',
+                                }}>
+                                  {rightPaneTabs.length > 0 ? (
+                                    rightPaneTabs.map((tab, index) => (
+                                      <Box
+                                        key={tab.path}
+                                        onClick={(e) => { e.stopPropagation(); handleSplitPaneTabClick('right', index); }}
+                                        sx={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 0.5,
+                                          px: 1.5,
+                                          py: 0.75,
+                                          borderRight: '1px solid rgba(255, 255, 255, 0.05)',
+                                          bgcolor: rightActiveIndex === index && activePaneId === 'right' ? '#1e1e1e' : 'transparent',
+                                          cursor: 'pointer',
+                                          minWidth: 120,
+                                          maxWidth: 200,
+                                          '&:hover': {
+                                            bgcolor: rightActiveIndex === index && activePaneId === 'right' ? '#1e1e1e' : 'rgba(255, 255, 255, 0.05)',
+                                          },
+                                        }}
+                                      >
+                                        {getFileIcon(tab.name, 'inherit')}
+                                        <Typography
+                                          variant="body2"
+                                          sx={{
+                                            fontSize: 12,
+                                            fontStyle: tab.isPermanent ? 'normal' : 'italic',
+                                            color: tab.isModified ? '#ff9800' : 'rgba(255, 255, 255, 0.9)',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                            flex: 1,
+                                          }}
+                                        >
+                                          {tab.name}
+                                          {tab.isModified && ' •'}
+                                        </Typography>
+                                        <IconButton
+                                          size="small"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSplitPaneTabClose('right', index);
+                                          }}
+                                          sx={{
+                                            p: 0.25,
+                                            ml: 0.5,
+                                            color: 'rgba(255, 255, 255, 0.6)',
+                                            '&:hover': { 
+                                              color: 'rgba(255, 255, 255, 1)',
+                                              bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                            },
+                                          }}
+                                        >
+                                          <Close sx={{ fontSize: 14 }} />
+                                        </IconButton>
+                                      </Box>
+                                    ))
+                                  ) : (
+                                    <Typography variant="body2" sx={{ px: 2, fontSize: 12, color: 'rgba(255, 255, 255, 0.5)' }}>
+                                      No files open
+                                    </Typography>
+                                  )}
                                 </Box>
-                              }
-                            />
+                              </Box>
+                              
+                              {/* Right Editor */}
+                              <Box sx={{ flex: 1 }}>
+                                {rightActiveIndex >= 0 && rightPaneTabs[rightActiveIndex] ? (
+                                  <Editor
+                                    height="100%"
+                                    language={getLanguageFromFilename(rightPaneTabs[rightActiveIndex].name)}
+                                    value={rightPaneTabs[rightActiveIndex].content}
+                                    onChange={(value) => handleSplitPaneContentChange('right', value || '')}
+                                    theme={selectedTheme}
+                                    options={{
+                                      readOnly: rightPaneTabs[rightActiveIndex].content === '[Binary file]',
+                                      minimap: { enabled: true },
+                                      fontSize: 13,
+                                      lineNumbers: 'on',
+                                      renderWhitespace: 'selection',
+                                      scrollBeyondLastLine: false,
+                                      automaticLayout: true,
+                                      tabSize: 2,
+                                      wordWrap: 'on',
+                                      folding: true,
+                                      bracketPairColorization: { enabled: true },
+                                    }}
+                                  />
+                                ) : (
+                                  <Box display="flex" alignItems="center" justifyContent="center" height="100%" flexDirection="column" gap={2}>
+                                    <Code sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)' }} />
+                                    <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: 12 }}>
+                                      Right Pane
+                                    </Typography>
+                                  </Box>
+                                )}
+                              </Box>
+                            </Box>
                           </Panel>
                         </PanelGroup>
                       ) : (
