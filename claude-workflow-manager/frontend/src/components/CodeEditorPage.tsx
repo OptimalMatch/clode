@@ -738,7 +738,7 @@ const CodeEditorPage: React.FC = () => {
         : contextualTask;
       
       // Update agent system prompts to include editor tool instructions
-      const contextualAgents = block.data.agents.map(agent => ({
+      const contextualAgents = block.data.agents.map((agent: any) => ({
         ...agent,
         system_prompt: `${agent.system_prompt}\n\nCRITICAL: Always use editor_* tools with workflow_id="${selectedWorkflow}":\n- editor_browse_directory(workflow_id, path) - Browse directory\n- editor_read_file(workflow_id, file_path) - Read file\n- editor_create_change(workflow_id, file_path, operation, new_content) - Create/update/delete file\n- editor_get_changes(workflow_id) - List pending changes\n- editor_search_files(workflow_id, query) - Search files\n\nNEVER use generic file tools. ALWAYS use editor_* tools.`
       }));
