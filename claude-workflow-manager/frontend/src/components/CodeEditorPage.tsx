@@ -233,10 +233,16 @@ const CodeEditorPage: React.FC = () => {
       return;
     }
     
+    // Construct full path from repo root for change comparison
+    // When navigating into subdirectories, selectedFile.path is relative to currentPath
+    const fullFilePath = currentPath ? `${currentPath}/${selectedFile.path}` : selectedFile.path;
+    const normalizedFilePath = fullFilePath.replace(/\\/g, '/');
+    
     // Find pending changes for the current file
-    const fileChanges = changes.filter(
-      (c: FileChange) => c.file_path === selectedFile.path && c.status === 'pending'
-    );
+    const fileChanges = changes.filter((c: FileChange) => {
+      const normalizedChangePath = c.file_path.replace(/\\/g, '/');
+      return normalizedChangePath === normalizedFilePath && c.status === 'pending';
+    });
     
     // Remove duplicates based on change_id
     let uniqueChanges = Array.from(
@@ -262,7 +268,9 @@ const CodeEditorPage: React.FC = () => {
     uniqueChanges = Array.from(contentMap.values());
     
     console.log('[Code Editor] Pending changes for file:', {
-      filePath: selectedFile.path,
+      selectedFilePath: selectedFile.path,
+      fullFilePath: normalizedFilePath,
+      currentPath,
       totalChanges: changes.length,
       fileChanges: fileChanges.length,
       uniqueChangesById: Array.from(new Map(fileChanges.map((c: FileChange) => [c.change_id, c])).values()).length,
@@ -283,7 +291,7 @@ const CodeEditorPage: React.FC = () => {
       setDiffChange(null);
       setCurrentChangeIndex(0);
     }
-  }, [changes, selectedFile, selectedWorkflow]);
+  }, [changes, selectedFile, selectedWorkflow, currentPath]);
   
   // Update displayed change based on view mode
   useEffect(() => {
