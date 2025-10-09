@@ -1856,42 +1856,51 @@ const NewCodeEditorPage: React.FC = () => {
                     </Tooltip>
                   </Box>
 
-                  {/* More Actions Menu */}
-                  <Menu
-                    anchorEl={moreActionsAnchor}
-                    open={Boolean(moreActionsAnchor)}
-                    onClose={() => setMoreActionsAnchor(null)}
-                    PaperProps={{
-                      sx: {
-                        bgcolor: '#252526',
-                        color: 'rgba(255, 255, 255, 0.9)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                      },
-                    }}
-                  >
-                    <MenuItem
-                      onClick={handleCloseAllTabs}
-                      disabled={openTabs.length === 0}
-                      sx={{
-                        fontSize: 13,
-                        '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
-                      }}
-                    >
-                      Close All
-                    </MenuItem>
-                    <MenuItem
-                      onClick={handleCloseSavedTabs}
-                      disabled={openTabs.length === 0 || openTabs.every(t => t.isModified)}
-                      sx={{
-                        fontSize: 13,
-                        '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
-                      }}
-                    >
-                      Close Saved
-                    </MenuItem>
-                  </Menu>
                 </Box>
                 )}
+                
+                {/* More Actions Menu - Shared across all views */}
+                <Menu
+                  anchorEl={moreActionsAnchor}
+                  open={Boolean(moreActionsAnchor)}
+                  onClose={() => setMoreActionsAnchor(null)}
+                  PaperProps={{
+                    sx: {
+                      bgcolor: '#252526',
+                      color: 'rgba(255, 255, 255, 0.9)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                    },
+                  }}
+                >
+                  <MenuItem
+                    onClick={handleCloseAllTabs}
+                    disabled={
+                      moreActionsPaneId === 'left' ? leftPaneTabs.length === 0 :
+                      moreActionsPaneId === 'right' ? rightPaneTabs.length === 0 :
+                      openTabs.length === 0
+                    }
+                    sx={{
+                      fontSize: 13,
+                      '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+                    }}
+                  >
+                    Close All
+                  </MenuItem>
+                  <MenuItem
+                    onClick={handleCloseSavedTabs}
+                    disabled={
+                      moreActionsPaneId === 'left' ? (leftPaneTabs.length === 0 || leftPaneTabs.every(t => t.isModified)) :
+                      moreActionsPaneId === 'right' ? (rightPaneTabs.length === 0 || rightPaneTabs.every(t => t.isModified)) :
+                      (openTabs.length === 0 || openTabs.every(t => t.isModified))
+                    }
+                    sx={{
+                      fontSize: 13,
+                      '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+                    }}
+                  >
+                    Close Saved
+                  </MenuItem>
+                </Menu>
                 
                 {/* Editor Area */}
                 <Box sx={{ flex: 1, overflow: 'hidden' }}>
