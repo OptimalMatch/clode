@@ -13,27 +13,34 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
 - Red lines (deletions) and green lines (additions) clearly marked
 - No need to switch tabs or navigate away
 
-### 2. **Toggle Between Inline and Side-by-Side Views**
+### 2. **Navigate Through Multiple Changes**
+- **Change counter**: Shows "2 of 5" when multiple pending changes exist
+- **Up/Down buttons**: Navigate to previous/next change with arrow buttons
+- **Keyboard-friendly**: Up arrow goes to previous, down arrow to next
+- **Smart navigation**: Buttons disabled at first/last change
+- **Only shows when needed**: Navigation hidden if only one change
+
+### 3. **Toggle Between Inline and Side-by-Side Views**
 - **View toggle buttons** in the action bar
 - **Inline view (≡)**: Unified diff with changes shown in context (default)
 - **Side-by-Side view (||)**: Split panes showing original and modified side by side
 - **One-click switching**: Instantly toggle between views
 - **Persistent preference**: Choice maintained during the session
 
-### 3. **Inline Accept/Reject**
+### 4. **Inline Accept/Reject**
 - **Accept** button: Approve and apply the change immediately
 - **Reject** button: Discard the proposed change
 - Action bar at the top with clear visual indicators
 - Changes apply instantly, editor returns to normal mode
 
-### 4. **Monaco DiffEditor**
+### 5. **Monaco DiffEditor**
 - Full syntax highlighting for modified code
 - Line-by-line change indicators (red/green with -/+ prefixes)
 - Inline or side-by-side view (user's choice)
 - Minimap shows change locations
 - Overview ruler for quick navigation to changes
 
-### 5. **Smart State Management**
+### 6. **Smart State Management**
 - Automatically detects pending changes for current file
 - Shows most recent pending change if multiple exist
 - Exits diff mode after accept/reject
@@ -56,38 +63,38 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
 └────────────────────────────────────────┘
 ```
 
-### Diff Mode (AI Suggested Change) - Inline View
+### Diff Mode (AI Suggested Change) - Inline View with Multiple Changes
 ```
-┌────────────────────────────────────────────────────────────┐
-│ ✏️ AI Suggested Change [UPDATE] [≡][||] [Accept] [Reject] │
-├────────────────────────────────────────────────────────────┤
-│ 1  # My Project                                            │
-│ 2  This is the description                                 │
-│ 3                                                          │
-│ 4  ## Features                                             │
-│ 5 -Feature 1                              ← Red (deleted)  │
-│ 6 +Feature 1 - Enhanced                   ← Green (added)  │
-│ 7 -Feature 2                              ← Red (deleted)  │
-│ 8 +Feature 2 - Improved                   ← Green (added)  │
-│ 9 +Feature 3 - New                        ← Green (added)  │
-└────────────────────────────────────────────────────────────┘
-     Inline View (≡ button selected) - Changes in context
+┌──────────────────────────────────────────────────────────────────┐
+│ ✏️ AI Change [UPDATE] | ↑ 2 of 5 ↓ | [≡][||] [Accept] [Reject] │
+├──────────────────────────────────────────────────────────────────┤
+│ 1  # My Project                                                  │
+│ 2  This is the description                                       │
+│ 3                                                                │
+│ 4  ## Features                                                   │
+│ 5 -Feature 1                              ← Red (deleted)        │
+│ 6 +Feature 1 - Enhanced                   ← Green (added)        │
+│ 7 -Feature 2                              ← Red (deleted)        │
+│ 8 +Feature 2 - Improved                   ← Green (added)        │
+│ 9 +Feature 3 - New                        ← Green (added)        │
+└──────────────────────────────────────────────────────────────────┘
+     Navigation ↑↑↑       Inline View (≡ selected)
 
 ### Diff Mode - Side-by-Side View
-┌────────────────────────────────────────────────────────────┐
-│ ✏️ AI Suggested Change [UPDATE] [≡][||] [Accept] [Reject] │
-├────────────────────────────────────────────────────────────┤
-│     ORIGINAL          │      MODIFIED                      │
-├───────────────────────┼────────────────────────────────────┤
-│ 1  # My Project       │ 1  # My Project                    │
-│ 2  This is...         │ 2  This is...                      │
-│ 3                     │ 3                                  │
-│ 4  ## Features        │ 4  ## Features                     │
-│ 5 -Feature 1          │ 5 +Feature 1 - Enhanced            │
-│ 6 -Feature 2          │ 6 +Feature 2 - Improved            │
-│                       │ 7 +Feature 3 - New                 │
-└───────────────────────┴────────────────────────────────────┘
-     Side-by-Side View (|| button selected) - Split panes
+┌──────────────────────────────────────────────────────────────────┐
+│ ✏️ AI Change [UPDATE] | ↑ 2 of 5 ↓ | [≡][||] [Accept] [Reject] │
+├──────────────────────────────────────────────────────────────────┤
+│     ORIGINAL          │      MODIFIED                            │
+├───────────────────────┼──────────────────────────────────────────┤
+│ 1  # My Project       │ 1  # My Project                          │
+│ 2  This is...         │ 2  This is...                            │
+│ 3                     │ 3                                        │
+│ 4  ## Features        │ 4  ## Features                           │
+│ 5 -Feature 1          │ 5 +Feature 1 - Enhanced                  │
+│ 6 -Feature 2          │ 6 +Feature 2 - Improved                  │
+│                       │ 7 +Feature 3 - New                       │
+└───────────────────────┴──────────────────────────────────────────┘
+     Side-by-Side View (|| selected) - Navigate with ↑↓ buttons
 ```
 
 ## User Workflow
@@ -109,17 +116,23 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
    - Sees line-by-line comparisons inline
    - Red lines (- prefix) = removed, Green lines (+ prefix) = added
    
-6. **User can toggle view mode** (optional):
+6. **User can navigate through changes** (if multiple):
+   - See **"2 of 5"** counter showing current position
+   - Click **↑ button** to go to previous change (change 1)
+   - Click **↓ button** to go to next change (change 3)
+   - Review each change individually
+   
+7. **User can toggle view mode** (optional):
    - Click **≡ button** for inline/unified view
    - Click **|| button** for side-by-side view
    - View instantly switches without losing position
    - Choice is remembered for the session
 
-7. **User accepts or rejects**:
+8. **User accepts or rejects**:
    - **Click "Accept"**: Change applied, file updated, diff mode exits
    - **Click "Reject"**: Change discarded, original content restored, diff mode exits
 
-8. **Editor returns to normal mode** with updated (or original) content
+9. **Editor returns to normal mode** with updated (or original) content
 
 ## Technical Implementation
 
@@ -130,6 +143,8 @@ The Code Editor now automatically displays **AI-suggested changes inline** using
 const [showDiff, setShowDiff] = useState(false);
 const [diffChange, setDiffChange] = useState<FileChange | null>(null);
 const [diffViewMode, setDiffViewMode] = useState<'inline' | 'sideBySide'>('inline');
+const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
+const [pendingChangesForFile, setPendingChangesForFile] = useState<FileChange[]>([]);
 ```
 
 **diffViewMode State:**
@@ -138,29 +153,41 @@ const [diffViewMode, setDiffViewMode] = useState<'inline' | 'sideBySide'>('inlin
 - Persists during the session (doesn't reset between files)
 - Controlled by ToggleButtonGroup in the action bar
 
+**Navigation State:**
+- `currentChangeIndex`: Index of the currently displayed change (0-based)
+- `pendingChangesForFile`: Array of all pending changes for the current file
+- Used to track position when navigating through multiple changes
+- Resets to 0 when file changes or when all changes are approved/rejected
+
 #### Auto-Detection useEffect
 ```typescript
 useEffect(() => {
   if (!selectedFile || !selectedWorkflow) {
     setShowDiff(false);
     setDiffChange(null);
+    setPendingChangesForFile([]);
+    setCurrentChangeIndex(0);
     return;
   }
   
   // Find pending changes for the current file
-  const pendingChangesForFile = changes.filter(
+  const fileChanges = changes.filter(
     (c: FileChange) => c.file_path === selectedFile.path && c.status === 'pending'
   );
   
-  if (pendingChangesForFile.length > 0) {
-    // Show the most recent pending change
-    const latestChange = pendingChangesForFile[pendingChangesForFile.length - 1];
-    setDiffChange(latestChange);
+  setPendingChangesForFile(fileChanges);
+  
+  if (fileChanges.length > 0) {
+    // Reset to first change if the list changed
+    const newIndex = currentChangeIndex >= fileChanges.length ? 0 : currentChangeIndex;
+    setCurrentChangeIndex(newIndex);
+    setDiffChange(fileChanges[newIndex]);
     setShowDiff(true);
   } else {
     // No pending changes, exit diff mode
     setShowDiff(false);
     setDiffChange(null);
+    setCurrentChangeIndex(0);
   }
 }, [changes, selectedFile, selectedWorkflow]);
 ```
@@ -169,8 +196,36 @@ useEffect(() => {
 1. Watches `changes`, `selectedFile`, `selectedWorkflow`
 2. When `changes` updates (AI creates a change), effect runs
 3. Filters changes for current file path and "pending" status
-4. If found, sets `diffChange` and `showDiff = true`
-5. If none, sets `showDiff = false` (exit diff mode)
+4. Stores all pending changes in `pendingChangesForFile`
+5. Sets `currentChangeIndex` to show the appropriate change (preserves position or resets to 0)
+6. If changes found, sets `diffChange` and `showDiff = true`
+7. If none, sets `showDiff = false` (exit diff mode)
+
+### Navigation Handlers
+
+```typescript
+const handlePreviousChange = () => {
+  if (currentChangeIndex > 0) {
+    const newIndex = currentChangeIndex - 1;
+    setCurrentChangeIndex(newIndex);
+    setDiffChange(pendingChangesForFile[newIndex]);
+  }
+};
+
+const handleNextChange = () => {
+  if (currentChangeIndex < pendingChangesForFile.length - 1) {
+    const newIndex = currentChangeIndex + 1;
+    setCurrentChangeIndex(newIndex);
+    setDiffChange(pendingChangesForFile[newIndex]);
+  }
+};
+```
+
+**Features:**
+- **Boundary checks**: Won't go below 0 or above array length
+- **Instant navigation**: Updates diffChange immediately
+- **No reload**: Change content switches without re-rendering editor
+- **Disabled states**: Buttons disabled at boundaries (handled in UI)
 
 ### Conditional Rendering
 
@@ -302,6 +357,47 @@ const handleRejectChange = async (changeId: string) => {
 6. Editor returns to regular mode
 
 ## UI Elements
+
+### Change Navigation Controls
+
+```tsx
+{pendingChangesForFile.length > 1 && (
+  <>
+    <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+    <Box display="flex" alignItems="center" gap={0.5}>
+      <IconButton
+        size="small"
+        onClick={handlePreviousChange}
+        disabled={currentChangeIndex === 0}
+        sx={{ p: 0.5 }}
+      >
+        <KeyboardArrowUp fontSize="small" />
+      </IconButton>
+      <Typography variant="caption" sx={{ minWidth: 45, textAlign: 'center' }}>
+        {currentChangeIndex + 1} of {pendingChangesForFile.length}
+      </Typography>
+      <IconButton
+        size="small"
+        onClick={handleNextChange}
+        disabled={currentChangeIndex === pendingChangesForFile.length - 1}
+        sx={{ p: 0.5 }}
+      >
+        <KeyboardArrowDown fontSize="small" />
+      </IconButton>
+    </Box>
+  </>
+)}
+```
+
+**Features:**
+- **Conditional rendering**: Only shows when multiple changes exist
+- **Change counter**: Displays "2 of 5" format (1-based indexing for users)
+- **Up/Down buttons**: `KeyboardArrowUp` and `KeyboardArrowDown` icons
+- **Disabled states**: 
+  - Up button disabled when at first change (`currentChangeIndex === 0`)
+  - Down button disabled when at last change (`currentChangeIndex === length - 1`)
+- **Compact layout**: Minimal spacing, fits in action bar
+- **Divider**: Visual separation from other controls
 
 ### View Toggle Buttons
 
@@ -576,6 +672,7 @@ const handleRejectChange = async (changeId: string) => {
 The Code Editor now provides a **Cursor/Windsurf-like inline diff experience**:
 
 ✅ **Auto-detection** - Changes appear instantly when AI modifies current file  
+✅ **Navigate changes** - Up/Down buttons with "2 of 5" counter for multiple changes  
 ✅ **Flexible viewing** - Toggle between inline and side-by-side diff views  
 ✅ **Monaco DiffEditor** - Full syntax highlighting and professional diff rendering  
 ✅ **One-click actions** - Accept/Reject buttons right in the editor  
@@ -584,5 +681,5 @@ The Code Editor now provides a **Cursor/Windsurf-like inline diff experience**:
 ✅ **Professional UX** - Familiar workflow for modern developers  
 ✅ **Seamless integration** - Works with all existing features  
 
-Developers can now **review and apply AI changes without leaving the editor**, with the flexibility to choose between inline (unified, Git-style) or side-by-side (split-pane) diff views, creating a smooth, efficient workflow that feels native and professional! 🎉
+Developers can now **review and apply AI changes without leaving the editor**, with the ability to navigate through multiple pending changes, choose between inline (unified, Git-style) or side-by-side (split-pane) diff views, and accept/reject each change individually, creating a smooth, efficient workflow that feels native and professional! 🎉
 
