@@ -63,6 +63,7 @@ import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../ser
 import api from '../services/api';
 import InlineDiffViewer from './InlineDiffViewer';
 import Editor from '@monaco-editor/react';
+import VSCodeFileTree from './VSCodeFileTree';
 
 interface FileItem {
   name: string;
@@ -931,79 +932,118 @@ const CodeEditorPage: React.FC = () => {
           )}
           
           <Grid item xs={12} md={showChat ? 3 : 4}>
-            <Paper sx={{ p: 2, height: 'calc(100vh - 280px)', overflow: 'auto' }}>
-              <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-                <Typography variant="h6">File Explorer</Typography>
+            <Paper 
+              elevation={0}
+              sx={{ 
+                height: 'calc(100vh - 280px)', 
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: '#1e1e1e',
+                borderRadius: 0,
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+              }}
+            >
+              {/* Header */}
+              <Box 
+                sx={{ 
+                  p: 1.5,
+                  px: 2,
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                }}
+              >
+                <Typography 
+                  variant="subtitle2" 
+                  sx={{ 
+                    fontWeight: 600,
+                    fontSize: 11,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                    color: 'rgba(255, 255, 255, 0.7)',
+                  }}
+                >
+                  Explorer
+                </Typography>
                 <IconButton
                   onClick={handleNavigateUp}
                   disabled={!currentPath}
                   size="small"
+                  sx={{ 
+                    p: 0.5,
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    },
+                  }}
                 >
-                  <ArrowBack />
+                  <ArrowBack sx={{ fontSize: 18 }} />
                 </IconButton>
               </Box>
               
-              <Breadcrumbs sx={{ mb: 2 }}>
-                {getBreadcrumbs().map((crumb, index) => (
-                  <Link
-                    key={index}
-                    component="button"
-                    variant="body2"
-                    onClick={() => setCurrentPath(crumb.path)}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    {crumb.name}
-                  </Link>
-                ))}
-              </Breadcrumbs>
+              {/* Breadcrumbs */}
+              <Box 
+                sx={{ 
+                  px: 2,
+                  py: 1,
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                }}
+              >
+                <Breadcrumbs 
+                  separator="›" 
+                  sx={{ 
+                    fontSize: 12,
+                    '& .MuiBreadcrumbs-separator': {
+                      color: 'rgba(255, 255, 255, 0.4)',
+                    },
+                  }}
+                >
+                  {getBreadcrumbs().map((crumb, index) => (
+                    <Link
+                      key={index}
+                      component="button"
+                      variant="body2"
+                      onClick={() => setCurrentPath(crumb.path)}
+                      sx={{ 
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        color: index === getBreadcrumbs().length - 1 
+                          ? 'rgba(255, 255, 255, 0.9)' 
+                          : 'rgba(255, 255, 255, 0.6)',
+                        '&:hover': {
+                          color: 'rgba(255, 255, 255, 1)',
+                          textDecoration: 'underline',
+                        },
+                      }}
+                    >
+                      {crumb.name}
+                    </Link>
+                  ))}
+                </Breadcrumbs>
+              </Box>
               
-              <List dense>
-                {items.map((item) => {
-                  // Check if this file has pending changes
-                  const fileHasChanges = pendingChanges.some(
-                    change => change.file_path === item.path || change.file_path.endsWith(item.name)
-                  );
-                  const changeCount = pendingChanges.filter(
-                    change => change.file_path === item.path || change.file_path.endsWith(item.name)
-                  ).length;
-                  
-                  return (
-                    <ListItem key={item.path} disablePadding>
-                      <ListItemButton onClick={() => handleItemClick(item)}>
-                        <ListItemIcon>
-                          <Badge 
-                            badgeContent={fileHasChanges ? changeCount : 0}
-                            color="warning"
-                            overlap="circular"
-                          >
-                            {item.type === 'directory' ? <FolderIcon color="primary" /> : <FileIcon />}
-                          </Badge>
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <Box display="flex" alignItems="center" gap={1}>
-                              <span>{item.name}</span>
-                              {fileHasChanges && (
-                                <Chip 
-                                  label="Modified" 
-                                  size="small" 
-                                  color="warning" 
-                                  sx={{ height: 20, fontSize: '0.7rem' }}
-                                />
-                              )}
-                            </Box>
-                          }
-                          secondary={item.type === 'file' ? `${(item.size || 0)} bytes` : ''}
-                        />
-                      </ListItemButton>
-                    </ListItem>
-                  );
-                })}
-              </List>
+              {/* File Tree */}
+              <Box sx={{ overflow: 'auto', flexGrow: 1, py: 0.5 }}>
+                <VSCodeFileTree
+                  items={items}
+                  onItemClick={handleItemClick}
+                  selectedPath={selectedFile?.path}
+                  pendingChanges={pendingChanges}
+                />
+              </Box>
               
+              {/* Empty State */}
               {items.length === 0 && !loading && (
                 <Box textAlign="center" py={4}>
-                  <Typography color="text.secondary">
+                  <Typography 
+                    sx={{ 
+                      fontSize: 12,
+                      color: 'rgba(255, 255, 255, 0.4)',
+                    }}
+                  >
                     Empty directory
                   </Typography>
                 </Box>
