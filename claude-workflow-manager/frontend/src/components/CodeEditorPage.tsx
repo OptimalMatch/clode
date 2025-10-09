@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { keyframes } from '@mui/system';
 import {
   Box,
   Typography,
@@ -157,6 +158,25 @@ const getLanguageFromFilename = (filename: string): string => {
   return languageMap[ext] || 'plaintext';
 };
 
+// Keyframe animations for changes count
+const pulseAndFlip = keyframes`
+  0% {
+    transform: scale(1) rotateY(0deg);
+  }
+  25% {
+    transform: scale(1.3) rotateY(180deg);
+  }
+  50% {
+    transform: scale(1) rotateY(360deg);
+  }
+  75% {
+    transform: scale(1.2) rotateY(180deg);
+  }
+  100% {
+    transform: scale(1) rotateY(0deg);
+  }
+`;
+
 const CodeEditorPage: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
   
@@ -186,6 +206,8 @@ const CodeEditorPage: React.FC = () => {
   const [changeViewMode, setChangeViewMode] = useState<'individual' | 'combined'>('combined');
   const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
   const [pendingChangesForFile, setPendingChangesForFile] = useState<FileChange[]>([]);
+  const [animateChangesCount, setAnimateChangesCount] = useState(false);
+  const prevChangesCountRef = useRef(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const changesPollingIntervalRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -222,6 +244,17 @@ const CodeEditorPage: React.FC = () => {
       loadChanges();
     }
   }, [selectedWorkflow, currentPath]);
+  
+  // Animate changes count when it changes
+  useEffect(() => {
+    const pendingCount = changes.filter((c: any) => c.status === 'pending').length;
+    if (prevChangesCountRef.current !== pendingCount && prevChangesCountRef.current !== 0) {
+      setAnimateChangesCount(true);
+      const timer = setTimeout(() => setAnimateChangesCount(false), 600);
+      return () => clearTimeout(timer);
+    }
+    prevChangesCountRef.current = pendingCount;
+  }, [changes]);
   
   // Watch for new changes on currently open file and show in diff mode
   useEffect(() => {
@@ -1272,7 +1305,17 @@ const CodeEditorPage: React.FC = () => {
               >
                 Search
               </Button>
-              <Badge badgeContent={pendingChanges.length} color="primary">
+              <Badge 
+                badgeContent={pendingChanges.length} 
+                sx={{
+                  '& .MuiBadge-badge': {
+                    backgroundColor: '#ff9800',
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    animation: animateChangesCount ? `${pulseAndFlip} 0.6s ease-in-out` : 'none',
+                  }
+                }}
+              >
                 <Button
                   startIcon={<History />}
                   onClick={() => setTabValue(2)}
@@ -1453,7 +1496,31 @@ const CodeEditorPage: React.FC = () => {
                 <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ flexGrow: 1 }}>
                   <Tab label="Editor" />
                   <Tab label="Preview" />
-                  <Tab label={`Changes (${pendingChanges.length})`} />
+                  <Tab 
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <span>Changes</span>
+                        <Box
+                          component="span"
+                          sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minWidth: 24,
+                            height: 24,
+                            borderRadius: '50%',
+                            backgroundColor: '#ff9800',
+                            color: '#fff',
+                            fontSize: 12,
+                            fontWeight: 'bold',
+                            animation: animateChangesCount ? `${pulseAndFlip} 0.6s ease-in-out` : 'none',
+                          }}
+                        >
+                          {pendingChanges.length}
+                        </Box>
+                      </Box>
+                    }
+                  />
                 </Tabs>
               </Box>
               
