@@ -232,11 +232,24 @@ const CodeEditorPage: React.FC = () => {
       (c: FileChange) => c.file_path === selectedFile.path && c.status === 'pending'
     );
     
-    setPendingChangesForFile(fileChanges);
+    // Remove duplicates based on change_id
+    const uniqueChanges = Array.from(
+      new Map(fileChanges.map((c: FileChange) => [c.change_id, c])).values()
+    ) as FileChange[];
     
-    if (fileChanges.length > 0) {
+    console.log('[Code Editor] Pending changes for file:', {
+      filePath: selectedFile.path,
+      totalChanges: changes.length,
+      fileChanges: fileChanges.length,
+      uniqueChanges: uniqueChanges.length,
+      changeIds: uniqueChanges.map((c: FileChange) => c.change_id),
+    });
+    
+    setPendingChangesForFile(uniqueChanges);
+    
+    if (uniqueChanges.length > 0) {
       // Reset to first change if the list changed
-      const newIndex = currentChangeIndex >= fileChanges.length ? 0 : currentChangeIndex;
+      const newIndex = currentChangeIndex >= uniqueChanges.length ? 0 : currentChangeIndex;
       setCurrentChangeIndex(newIndex);
       setShowDiff(true);
     } else {
@@ -255,8 +268,23 @@ const CodeEditorPage: React.FC = () => {
     }
     
     if (changeViewMode === 'combined') {
-      setDiffChange(getCombinedChange());
+      const combined = getCombinedChange();
+      console.log('[Code Editor] Combined change:', {
+        changeCount: pendingChangesForFile.length,
+        combined: combined ? {
+          change_id: combined.change_id,
+          operation: combined.operation,
+          old_content_length: combined.old_content?.length,
+          new_content_length: combined.new_content?.length,
+        } : null,
+      });
+      setDiffChange(combined);
     } else {
+      console.log('[Code Editor] Individual change:', {
+        index: currentChangeIndex,
+        total: pendingChangesForFile.length,
+        change_id: pendingChangesForFile[currentChangeIndex]?.change_id,
+      });
       setDiffChange(pendingChangesForFile[currentChangeIndex]);
     }
   }, [changeViewMode, currentChangeIndex, pendingChangesForFile]);
@@ -414,25 +442,62 @@ const CodeEditorPage: React.FC = () => {
     if (pendingChangesForFile.length === 1) return pendingChangesForFile[0];
     
     // Create a combined change showing all modifications
-    // Use the first change's old_content as original
-    // Use the last change's new_content as final (assuming chronological order)
-    const firstChange = pendingChangesForFile[0];
-    const lastChange = pendingChangesForFile[pendingChangesForFile.length - 1];
+    // Sort by timestamp to ensure chronological order
+    const sortedChanges = [...pendingChangesForFile].sort((a, b) => {
+      try {
+        const timeA = new Date(a.timestamp).getTime();
+        const timeB = new Date(b.timestamp).getTime();
+        return timeA - timeB;
+      } catch (e) {
+        console.warn('[Code Editor] Failed to parse timestamp:', e);
+        return 0;
+      }
+    });
     
+    const firstChange = sortedChanges[0];
+    const lastChange = sortedChanges[sortedChanges.length - 1];
+    
+    console.log('[Code Editor] Creating combined change:', {
+      totalChanges: sortedChanges.length,
+      firstChangeId: firstChange.change_id,
+      lastChangeId: lastChange.change_id,
+      firstOldContentLength: firstChange.old_content?.length || 0,
+      lastNewContentLength: lastChange.new_content?.length || 0,
+    });
+    
+    // Use the original content from the first change
+    // and the final content from the last change
+    // If old_content is null on first change, it means it's a new file
+    // If new_content is null on last change, it means it's a deletion
     return {
       ...firstChange,
       change_id: 'combined',
-      operation: 'update',
-      old_content: firstChange.old_content,
-      new_content: lastChange.new_content,
+      operation: firstChange.operation === 'create' && lastChange.operation === 'delete' ? 'update' : 
+                 lastChange.operation === 'delete' ? 'delete' : 
+                 firstChange.operation === 'create' ? 'create' : 'update',
+      old_content: firstChange.old_content || '',
+      new_content: lastChange.new_content || '',
     };
   };
 
   const handleApproveChange = async (changeId: string) => {
     try {
-      // If in combined mode and changeId is 'combined', approve all changes
+      // If in combined mode and changeId is 'combined', approve all changes in chronological order
       if (changeViewMode === 'combined' && changeId === 'combined') {
-        for (const change of pendingChangesForFile) {
+        // Sort changes by timestamp to apply them in order
+        const sortedChanges = [...pendingChangesForFile].sort((a, b) => {
+          try {
+            const timeA = new Date(a.timestamp).getTime();
+            const timeB = new Date(b.timestamp).getTime();
+            return timeA - timeB;
+          } catch (e) {
+            return 0;
+          }
+        });
+        
+        console.log('[Code Editor] Approving changes in order:', sortedChanges.map((c: FileChange) => c.change_id));
+        
+        for (const change of sortedChanges) {
           await api.post('/api/file-editor/approve', {
             workflow_id: selectedWorkflow,
             change_id: change.change_id,
@@ -459,6 +524,8 @@ const CodeEditorPage: React.FC = () => {
     try {
       // If in combined mode and changeId is 'combined', reject all changes
       if (changeViewMode === 'combined' && changeId === 'combined') {
+        console.log('[Code Editor] Rejecting all changes:', pendingChangesForFile.map((c: FileChange) => c.change_id));
+        
         for (const change of pendingChangesForFile) {
           await api.post('/api/file-editor/reject', {
             workflow_id: selectedWorkflow,
