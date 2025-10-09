@@ -14,12 +14,9 @@ import {
   InsertDriveFile as FileIcon,
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
-  JavaScript as JavaScriptIcon,
   Description as DescriptionIcon,
   Code as CodeIcon,
   DataObject as JsonIcon,
-  Html as HtmlIcon,
-  Css as CssIcon,
 } from '@mui/icons-material';
 
 interface FileItem {
@@ -62,7 +59,7 @@ const getFileIcon = (filename: string) => {
   switch (ext) {
     case 'js':
     case 'jsx':
-      return <JavaScriptIcon {...iconProps} sx={{ ...iconProps.sx, color: '#f7df1e' }} />;
+      return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#f7df1e' }} />;
     case 'ts':
     case 'tsx':
       return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#3178c6' }} />;
@@ -72,12 +69,12 @@ const getFileIcon = (filename: string) => {
       return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#3776ab' }} />;
     case 'html':
     case 'htm':
-      return <HtmlIcon {...iconProps} sx={{ ...iconProps.sx, color: '#e34f26' }} />;
+      return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#e34f26' }} />;
     case 'css':
     case 'scss':
     case 'sass':
     case 'less':
-      return <CssIcon {...iconProps} sx={{ ...iconProps.sx, color: '#1572b6' }} />;
+      return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#1572b6' }} />;
     case 'md':
       return <DescriptionIcon {...iconProps} sx={{ ...iconProps.sx, color: '#519aba' }} />;
     case 'yaml':
