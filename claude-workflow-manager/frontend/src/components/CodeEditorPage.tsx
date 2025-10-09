@@ -781,6 +781,15 @@ const CodeEditorPage: React.FC = () => {
     }
     
     console.log(`[Code Editor] All blocks completed`);
+    
+    // Add final completion message
+    const finalMessage: ChatMessage = {
+      id: `msg-${Date.now()}-final`,
+      type: 'system',
+      content: `✅ All ${executionOrder.length} blocks completed successfully!`,
+      timestamp: new Date(),
+    };
+    setChatMessages(prev => [...prev, finalMessage]);
   };
   
   // Build execution order using topological sort (adapted from Designer)
@@ -960,9 +969,9 @@ const CodeEditorPage: React.FC = () => {
                 timestamp: new Date(),
               };
               setChatMessages(prev => [...prev, completeMessage]);
-              // Final refresh and stop polling
+              // Refresh but DON'T stop polling - multi-block execution may continue
+              console.log('[Code Editor] Block completed, continuing polling');
               loadChanges();
-              stopChangesPolling();
             } else if (event.type === 'error') {
               throw new Error(event.error || 'Execution failed');
             }
@@ -1053,9 +1062,9 @@ const CodeEditorPage: React.FC = () => {
                 timestamp: new Date(),
               };
               setChatMessages(prev => [...prev, completeMessage]);
-              // Final refresh and stop polling
+              // Refresh but DON'T stop polling - multi-block execution may continue
+              console.log('[Code Editor] Block completed, continuing polling');
               loadChanges();
-              stopChangesPolling();
             } else if (event.type === 'error') {
               throw new Error(event.error || 'Execution failed');
             }
@@ -1146,9 +1155,9 @@ const CodeEditorPage: React.FC = () => {
                 timestamp: new Date(),
               };
               setChatMessages(prev => [...prev, completeMessage]);
-              // Final refresh and stop polling
+              // Refresh but DON'T stop polling - multi-block execution may continue
+              console.log('[Code Editor] Block completed, continuing polling');
               loadChanges();
-              stopChangesPolling();
             } else if (event.type === 'error') {
               throw new Error(event.error || 'Execution failed');
             }
