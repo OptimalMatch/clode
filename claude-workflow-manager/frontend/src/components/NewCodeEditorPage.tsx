@@ -840,10 +840,12 @@ const NewCodeEditorPage: React.FC = () => {
         </Box>
         
         {/* Resizable Panels */}
-        {selectedWorkflow && !sidebarCollapsed ? (
+        {selectedWorkflow ? (
           <PanelGroup direction="horizontal" style={{ flex: 1 }}>
-            {/* Sidebar Panel */}
-            <Panel defaultSize={20} minSize={15} maxSize={35}>
+            {/* Sidebar Panel - Only show when not collapsed */}
+            {!sidebarCollapsed && (
+              <>
+                <Panel defaultSize={20} minSize={15} maxSize={35}>
               <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#252526' }}>
                 {/* Sidebar Header */}
                 <Box 
@@ -1189,13 +1191,15 @@ const NewCodeEditorPage: React.FC = () => {
                   )}
                 </Box>
               </Box>
-            </Panel>
+                </Panel>
+                
+                {/* Resize Handle */}
+                <PanelResizeHandle style={resizeHandleStyles} />
+              </>
+            )}
             
-            {/* Resize Handle */}
-            <PanelResizeHandle style={resizeHandleStyles} />
-            
-            {/* Main Editor Panel */}
-            <Panel defaultSize={80} minSize={50}>
+            {/* Main Editor Panel - Always show when workflow is selected */}
+            <Panel defaultSize={sidebarCollapsed ? 100 : 80} minSize={50}>
               <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#1e1e1e' }}>
                 {/* Editor Tabs/Header */}
                 <Box 
@@ -1433,18 +1437,6 @@ const NewCodeEditorPage: React.FC = () => {
               </Box>
             </Panel>
           </PanelGroup>
-        ) : sidebarCollapsed && selectedWorkflow ? (
-          // Sidebar Collapsed - Show Expand Button
-          <Box sx={{ flex: 1, display: 'flex', alignItems: 'flex-start', p: 1 }}>
-            <Tooltip title="Expand Sidebar">
-              <IconButton
-                onClick={() => setSidebarCollapsed(false)}
-                sx={{ color: 'rgba(255, 255, 255, 0.7)' }}
-              >
-                <MenuIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
         ) : (
           // No Workflow Selected
           <Box 
