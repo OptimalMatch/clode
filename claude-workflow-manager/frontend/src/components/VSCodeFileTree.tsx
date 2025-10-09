@@ -56,7 +56,7 @@ const getFileIcon = (filename: string, size: number = 16) => {
   const iconProps = { size, style: { marginRight: 8, flexShrink: 0 } };
   
   // Language-specific icons
-  const iconMap: { [key: string]: JSX.Element } = {
+  const iconMap: { [key: string]: React.ReactNode } = {
     'js': <SiJavascript {...iconProps} color="#f7df1e" />,
     'jsx': <SiReact {...iconProps} color="#61dafb" />,
     'ts': <SiTypescript {...iconProps} color="#3178c6" />,
