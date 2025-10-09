@@ -11,27 +11,16 @@ import {
 import {
   ChevronRight as ChevronRightIcon,
   ExpandMore as ExpandMoreIcon,
+  InsertDriveFile as FileIcon,
+  Folder as FolderIcon,
+  FolderOpen as FolderOpenIcon,
+  JavaScript as JavaScriptIcon,
+  Description as DescriptionIcon,
+  Code as CodeIcon,
+  DataObject as JsonIcon,
+  Html as HtmlIcon,
+  Css as CssIcon,
 } from '@mui/icons-material';
-import {
-  VscFile,
-  VscFolder,
-  VscFolderOpened,
-  VscJson,
-  VscCode,
-  VscMarkdown,
-  VscFileCode,
-} from 'react-icons/vsc';
-import {
-  SiJavascript,
-  SiTypescript,
-  SiReact,
-  SiPython,
-  SiHtml5,
-  SiCss3,
-  SiDocker,
-  SiYaml,
-  SiGit,
-} from 'react-icons/si';
 
 interface FileItem {
   name: string;
@@ -51,60 +40,51 @@ interface VSCodeFileTreeProps {
 }
 
 // Helper to get file icon based on extension
-const getFileIcon = (filename: string, size: number = 16): React.ReactNode => {
+const getFileIcon = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
-  const iconStyle = { marginRight: 8, flexShrink: 0 };
+  const iconProps = { fontSize: 'small' as const, sx: { mr: 1 } };
   
   // Special filenames first
   if (filename === 'package.json' || filename === 'package-lock.json') {
-    return <VscJson size={size} style={iconStyle} color="#cb3837" />;
+    return <JsonIcon {...iconProps} sx={{ ...iconProps.sx, color: '#cb3837' }} />;
   }
   if (filename === 'tsconfig.json') {
-    return <SiTypescript size={size} style={iconStyle} color="#3178c6" />;
+    return <JsonIcon {...iconProps} sx={{ ...iconProps.sx, color: '#3178c6' }} />;
   }
   if (filename.toLowerCase().includes('readme')) {
-    return <VscMarkdown size={size} style={iconStyle} color="#519aba" />;
+    return <DescriptionIcon {...iconProps} sx={{ ...iconProps.sx, color: '#519aba' }} />;
   }
   if (filename.toLowerCase().includes('docker')) {
-    return <SiDocker size={size} style={iconStyle} color="#2496ed" />;
+    return <DescriptionIcon {...iconProps} sx={{ ...iconProps.sx, color: '#2496ed' }} />;
   }
   
   // Language-specific icons by extension
   switch (ext) {
     case 'js':
-      return <SiJavascript size={size} style={iconStyle} color="#f7df1e" />;
     case 'jsx':
-      return <SiReact size={size} style={iconStyle} color="#61dafb" />;
+      return <JavaScriptIcon {...iconProps} sx={{ ...iconProps.sx, color: '#f7df1e' }} />;
     case 'ts':
-      return <SiTypescript size={size} style={iconStyle} color="#3178c6" />;
     case 'tsx':
-      return <SiReact size={size} style={iconStyle} color="#61dafb" />;
+      return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#3178c6' }} />;
     case 'json':
-      return <VscJson size={size} style={iconStyle} color="#f7df1e" />;
+      return <JsonIcon {...iconProps} sx={{ ...iconProps.sx, color: '#f7df1e' }} />;
     case 'py':
-      return <SiPython size={size} style={iconStyle} color="#3776ab" />;
+      return <CodeIcon {...iconProps} sx={{ ...iconProps.sx, color: '#3776ab' }} />;
     case 'html':
     case 'htm':
-      return <SiHtml5 size={size} style={iconStyle} color="#e34f26" />;
+      return <HtmlIcon {...iconProps} sx={{ ...iconProps.sx, color: '#e34f26' }} />;
     case 'css':
-      return <SiCss3 size={size} style={iconStyle} color="#1572b6" />;
     case 'scss':
     case 'sass':
-      return <SiCss3 size={size} style={iconStyle} color="#c6538c" />;
     case 'less':
-      return <SiCss3 size={size} style={iconStyle} color="#1d365d" />;
+      return <CssIcon {...iconProps} sx={{ ...iconProps.sx, color: '#1572b6' }} />;
     case 'md':
-      return <VscMarkdown size={size} style={iconStyle} color="#519aba" />;
-    case 'dockerfile':
-      return <SiDocker size={size} style={iconStyle} color="#2496ed" />;
+      return <DescriptionIcon {...iconProps} sx={{ ...iconProps.sx, color: '#519aba' }} />;
     case 'yaml':
     case 'yml':
-      return <SiYaml size={size} style={iconStyle} color="#cb171e" />;
-    case 'gitignore':
-    case 'git':
-      return <SiGit size={size} style={iconStyle} color="#f05032" />;
+      return <DescriptionIcon {...iconProps} sx={{ ...iconProps.sx, color: '#cb171e' }} />;
     default:
-      return <VscFile size={size} style={iconStyle} color="#a0a0a0" />;
+      return <FileIcon {...iconProps} sx={{ ...iconProps.sx, color: '#a0a0a0' }} />;
   }
 };
 
@@ -193,9 +173,9 @@ const VSCodeFileTreeItem: React.FC<{
           >
             {isDirectory ? (
               expanded ? (
-                <VscFolderOpened size={16} color="#dcb67a" style={{ flexShrink: 0 }} />
+                <FolderOpenIcon fontSize="small" sx={{ color: '#dcb67a', flexShrink: 0 }} />
               ) : (
-                <VscFolder size={16} color="#dcb67a" style={{ flexShrink: 0 }} />
+                <FolderIcon fontSize="small" sx={{ color: '#dcb67a', flexShrink: 0 }} />
               )
             ) : (
               getFileIcon(item.name)
