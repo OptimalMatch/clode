@@ -199,14 +199,17 @@ const NewCodeEditorPage: React.FC = () => {
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
   const [splitViewEnabled, setSplitViewEnabled] = useState(false);
   const [moreActionsAnchor, setMoreActionsAnchor] = useState<null | HTMLElement>(null);
-  const [moreActionsPaneId, setMoreActionsPaneId] = useState<'single' | 'left' | 'right'>('single');
+  const [moreActionsPaneId, setMoreActionsPaneId] = useState<'single' | 'left' | 'middle' | 'right'>('single');
   
-  // Split view state - separate tabs for each pane
+  // Split view state - separate tabs for each pane (up to 3 panes)
   const [leftPaneTabs, setLeftPaneTabs] = useState<EditorTab[]>([]);
+  const [middlePaneTabs, setMiddlePaneTabs] = useState<EditorTab[]>([]);
   const [rightPaneTabs, setRightPaneTabs] = useState<EditorTab[]>([]);
   const [leftActiveIndex, setLeftActiveIndex] = useState<number>(-1);
+  const [middleActiveIndex, setMiddleActiveIndex] = useState<number>(-1);
   const [rightActiveIndex, setRightActiveIndex] = useState<number>(-1);
-  const [activePaneId, setActivePaneId] = useState<'left' | 'right'>('left');
+  const [activePaneId, setActivePaneId] = useState<'left' | 'middle' | 'right'>('left');
+  const [paneCount, setPaneCount] = useState<1 | 2 | 3>(1); // Track number of panes
   
   // Chat & Orchestration state
   const [orchestrationDesigns, setOrchestrationDesigns] = useState<OrchestrationDesign[]>([]);
@@ -433,9 +436,9 @@ const NewCodeEditorPage: React.FC = () => {
     
     if (splitViewEnabled) {
       // Handle split view - open in active pane
-      const tabs = activePaneId === 'left' ? leftPaneTabs : rightPaneTabs;
-      const setTabs = activePaneId === 'left' ? setLeftPaneTabs : setRightPaneTabs;
-      const setActiveIndex = activePaneId === 'left' ? setLeftActiveIndex : setRightActiveIndex;
+      const tabs = activePaneId === 'left' ? leftPaneTabs : activePaneId === 'middle' ? middlePaneTabs : rightPaneTabs;
+      const setTabs = activePaneId === 'left' ? setLeftPaneTabs : activePaneId === 'middle' ? setMiddlePaneTabs : setRightPaneTabs;
+      const setActiveIndex = activePaneId === 'left' ? setLeftActiveIndex : activePaneId === 'middle' ? setMiddleActiveIndex : setRightActiveIndex;
       
       const existingTabIndex = tabs.findIndex(tab => tab.path === item.path);
       
@@ -516,9 +519,28 @@ const NewCodeEditorPage: React.FC = () => {
   };
   
   // Helper functions for split pane tab management
-  const handleSplitPaneTabClick = (paneId: 'left' | 'right', index: number) => {
-    const tabs = paneId === 'left' ? leftPaneTabs : rightPaneTabs;
-    const setActiveIndex = paneId === 'left' ? setLeftActiveIndex : setRightActiveIndex;
+  const handleSplitPane = () => {
+    if (paneCount === 1) {
+      // Split single view into 2 panes
+      setLeftPaneTabs(openTabs);
+      setLeftActiveIndex(activeTabIndex);
+      setRightPaneTabs([]);
+      setRightActiveIndex(-1);
+      setSplitViewEnabled(true);
+      setPaneCount(2);
+      setActivePaneId('left');
+    } else if (paneCount === 2) {
+      // Add a third pane in the middle
+      setMiddlePaneTabs([]);
+      setMiddleActiveIndex(-1);
+      setPaneCount(3);
+    }
+    // paneCount === 3: do nothing, max reached
+  };
+
+  const handleSplitPaneTabClick = (paneId: 'left' | 'middle' | 'right', index: number) => {
+    const tabs = paneId === 'left' ? leftPaneTabs : paneId === 'middle' ? middlePaneTabs : rightPaneTabs;
+    const setActiveIndex = paneId === 'left' ? setLeftActiveIndex : paneId === 'middle' ? setMiddleActiveIndex : setRightActiveIndex;
     
     setActivePaneId(paneId);
     setActiveIndex(index);
@@ -528,11 +550,11 @@ const NewCodeEditorPage: React.FC = () => {
     setSelectedFile({ name: tab.name, path: tab.path, type: 'file' });
   };
 
-  const handleSplitPaneTabClose = (paneId: 'left' | 'right', index: number) => {
-    const tabs = paneId === 'left' ? leftPaneTabs : rightPaneTabs;
-    const setTabs = paneId === 'left' ? setLeftPaneTabs : setRightPaneTabs;
-    const activeIndex = paneId === 'left' ? leftActiveIndex : rightActiveIndex;
-    const setActiveIndex = paneId === 'left' ? setLeftActiveIndex : setRightActiveIndex;
+  const handleSplitPaneTabClose = (paneId: 'left' | 'middle' | 'right', index: number) => {
+    const tabs = paneId === 'left' ? leftPaneTabs : paneId === 'middle' ? middlePaneTabs : rightPaneTabs;
+    const setTabs = paneId === 'left' ? setLeftPaneTabs : paneId === 'middle' ? setMiddlePaneTabs : setRightPaneTabs;
+    const activeIndex = paneId === 'left' ? leftActiveIndex : paneId === 'middle' ? middleActiveIndex : rightActiveIndex;
+    const setActiveIndex = paneId === 'left' ? setLeftActiveIndex : paneId === 'middle' ? setMiddleActiveIndex : setRightActiveIndex;
     
     const tab = tabs[index];
     
@@ -567,10 +589,10 @@ const NewCodeEditorPage: React.FC = () => {
     }
   };
 
-  const handleSplitPaneContentChange = (paneId: 'left' | 'right', value: string) => {
-    const tabs = paneId === 'left' ? leftPaneTabs : rightPaneTabs;
-    const setTabs = paneId === 'left' ? setLeftPaneTabs : setRightPaneTabs;
-    const activeIndex = paneId === 'left' ? leftActiveIndex : rightActiveIndex;
+  const handleSplitPaneContentChange = (paneId: 'left' | 'middle' | 'right', value: string) => {
+    const tabs = paneId === 'left' ? leftPaneTabs : paneId === 'middle' ? middlePaneTabs : rightPaneTabs;
+    const setTabs = paneId === 'left' ? setLeftPaneTabs : paneId === 'middle' ? setMiddlePaneTabs : setRightPaneTabs;
+    const activeIndex = paneId === 'left' ? leftActiveIndex : paneId === 'middle' ? middleActiveIndex : rightActiveIndex;
     
     if (activeIndex >= 0 && activeIndex < tabs.length) {
       const updatedTabs = [...tabs];
@@ -1827,7 +1849,7 @@ const NewCodeEditorPage: React.FC = () => {
                     <Tooltip title="Split Editor">
                       <IconButton
                         size="small"
-                        onClick={() => setSplitViewEnabled(!splitViewEnabled)}
+                        onClick={handleSplitPane}
                         sx={{
                           p: 0.5,
                           color: splitViewEnabled ? '#007acc' : 'rgba(255, 255, 255, 0.6)',
@@ -1876,6 +1898,7 @@ const NewCodeEditorPage: React.FC = () => {
                     onClick={handleCloseAllTabs}
                     disabled={
                       moreActionsPaneId === 'left' ? leftPaneTabs.length === 0 :
+                      moreActionsPaneId === 'middle' ? middlePaneTabs.length === 0 :
                       moreActionsPaneId === 'right' ? rightPaneTabs.length === 0 :
                       openTabs.length === 0
                     }
@@ -1890,6 +1913,7 @@ const NewCodeEditorPage: React.FC = () => {
                     onClick={handleCloseSavedTabs}
                     disabled={
                       moreActionsPaneId === 'left' ? (leftPaneTabs.length === 0 || leftPaneTabs.every(t => t.isModified)) :
+                      moreActionsPaneId === 'middle' ? (middlePaneTabs.length === 0 || middlePaneTabs.every(t => t.isModified)) :
                       moreActionsPaneId === 'right' ? (rightPaneTabs.length === 0 || rightPaneTabs.every(t => t.isModified)) :
                       (openTabs.length === 0 || openTabs.every(t => t.isModified))
                     }
@@ -2141,13 +2165,14 @@ const NewCodeEditorPage: React.FC = () => {
                                 </Box>
                                 {/* Left Pane Action Buttons */}
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pr: 1 }}>
-                                  <Tooltip title="Split Editor">
+                                  <Tooltip title={paneCount < 3 ? "Split Editor" : "Max 3 panes"}>
                                     <IconButton
                                       size="small"
-                                      onClick={(e) => { e.stopPropagation(); setSplitViewEnabled(false); }}
+                                      onClick={(e) => { e.stopPropagation(); handleSplitPane(); }}
+                                      disabled={paneCount >= 3}
                                       sx={{
                                         p: 0.5,
-                                        color: '#007acc',
+                                        color: paneCount >= 3 ? 'rgba(255, 255, 255, 0.3)' : '#007acc',
                                         '&:hover': {
                                           bgcolor: 'rgba(255, 255, 255, 0.1)',
                                         },
@@ -2312,13 +2337,14 @@ const NewCodeEditorPage: React.FC = () => {
                                 </Box>
                                 {/* Right Pane Action Buttons */}
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pr: 1 }}>
-                                  <Tooltip title="Split Editor">
+                                  <Tooltip title={paneCount < 3 ? "Split Editor" : "Max 3 panes"}>
                                     <IconButton
                                       size="small"
-                                      onClick={(e) => { e.stopPropagation(); setSplitViewEnabled(false); }}
+                                      onClick={(e) => { e.stopPropagation(); handleSplitPane(); }}
+                                      disabled={paneCount >= 3}
                                       sx={{
                                         p: 0.5,
-                                        color: '#007acc',
+                                        color: paneCount >= 3 ? 'rgba(255, 255, 255, 0.3)' : '#007acc',
                                         '&:hover': {
                                           bgcolor: 'rgba(255, 255, 255, 0.1)',
                                         },
