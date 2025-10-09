@@ -2127,22 +2127,24 @@ const NewCodeEditorPage: React.FC = () => {
                                 </Box>
                                 {/* Left Pane Action Buttons */}
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pr: 1 }}>
-                                  <Tooltip title={paneCount < 3 ? "Split Editor" : "Max 3 panes"}>
-                                    <IconButton
-                                      size="small"
-                                      onClick={(e) => { e.stopPropagation(); handleSplitPane(); }}
-                                      disabled={paneCount >= 3}
-                                      sx={{
-                                        p: 0.5,
-                                        color: paneCount >= 3 ? 'rgba(255, 255, 255, 0.3)' : '#007acc',
-                                        '&:hover': {
-                                          bgcolor: 'rgba(255, 255, 255, 0.1)',
-                                        },
-                                      }}
-                                    >
-                                      <SplitEditorIcon sx={{ fontSize: 16 }} />
-                                    </IconButton>
-                                  </Tooltip>
+                                  {activePaneId === 'left' && (
+                                    <Tooltip title={paneCount < 3 ? "Split Editor" : "Max 3 panes"}>
+                                      <IconButton
+                                        size="small"
+                                        onClick={(e) => { e.stopPropagation(); handleSplitPane(); }}
+                                        disabled={paneCount >= 3}
+                                        sx={{
+                                          p: 0.5,
+                                          color: paneCount >= 3 ? 'rgba(255, 255, 255, 0.3)' : '#007acc',
+                                          '&:hover': {
+                                            bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                          },
+                                        }}
+                                      >
+                                        <SplitEditorIcon sx={{ fontSize: 16 }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
                                   <Tooltip title="More Actions">
                                     <IconButton
                                       size="small"
@@ -2301,18 +2303,20 @@ const NewCodeEditorPage: React.FC = () => {
                                     </Box>
                                     {/* Middle Pane Action Buttons */}
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pr: 1 }}>
-                                      <Tooltip title="Max 3 panes">
-                                        <IconButton
-                                          size="small"
-                                          disabled
-                                          sx={{
-                                            p: 0.5,
-                                            color: 'rgba(255, 255, 255, 0.3)',
-                                          }}
-                                        >
-                                          <SplitEditorIcon sx={{ fontSize: 16 }} />
-                                        </IconButton>
-                                      </Tooltip>
+                                      {activePaneId === 'middle' && (
+                                        <Tooltip title="Max 3 panes">
+                                          <IconButton
+                                            size="small"
+                                            disabled
+                                            sx={{
+                                              p: 0.5,
+                                              color: 'rgba(255, 255, 255, 0.3)',
+                                            }}
+                                          >
+                                            <SplitEditorIcon sx={{ fontSize: 16 }} />
+                                          </IconButton>
+                                        </Tooltip>
+                                      )}
                                       <Tooltip title="More Actions">
                                         <IconButton
                                           size="small"
@@ -2471,22 +2475,24 @@ const NewCodeEditorPage: React.FC = () => {
                                 </Box>
                                 {/* Right Pane Action Buttons */}
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pr: 1 }}>
-                                  <Tooltip title={paneCount < 3 ? "Split Editor" : "Max 3 panes"}>
-                                    <IconButton
-                                      size="small"
-                                      onClick={(e) => { e.stopPropagation(); handleSplitPane(); }}
-                                      disabled={paneCount >= 3}
-                                      sx={{
-                                        p: 0.5,
-                                        color: paneCount >= 3 ? 'rgba(255, 255, 255, 0.3)' : '#007acc',
-                                        '&:hover': {
-                                          bgcolor: 'rgba(255, 255, 255, 0.1)',
-                                        },
-                                      }}
-                                    >
-                                      <SplitEditorIcon sx={{ fontSize: 16 }} />
-                                    </IconButton>
-                                  </Tooltip>
+                                  {activePaneId === 'right' && (
+                                    <Tooltip title={paneCount < 3 ? "Split Editor" : "Max 3 panes"}>
+                                      <IconButton
+                                        size="small"
+                                        onClick={(e) => { e.stopPropagation(); handleSplitPane(); }}
+                                        disabled={paneCount >= 3}
+                                        sx={{
+                                          p: 0.5,
+                                          color: paneCount >= 3 ? 'rgba(255, 255, 255, 0.3)' : '#007acc',
+                                          '&:hover': {
+                                            bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                          },
+                                        }}
+                                      >
+                                        <SplitEditorIcon sx={{ fontSize: 16 }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
                                   <Tooltip title="More Actions">
                                     <IconButton
                                       size="small"
