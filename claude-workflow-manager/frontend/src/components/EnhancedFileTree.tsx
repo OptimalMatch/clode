@@ -17,13 +17,9 @@ import {
   ChevronRight as ChevronRightIcon,
   ExpandMore as ExpandMoreIcon,
   InsertDriveFile,
-  Folder as FolderIcon,
-  FolderOpen as FolderOpenIcon,
   Description,
   Code,
   DataObject,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
   Image,
   Terminal,
   Storage,
@@ -52,6 +48,38 @@ const NewFolderIcon: React.FC<SvgIconProps> = (props) => (
       d="M14.5 2H7.71l-.85-.85L6.51 1h-5l-.5.5v11l.5.5H7v-1H1.99V6h4.49l.35-.15.86-.86H14v1.5l-.001.51h1.011V2.5zm-.51 2h-6.5l-.35.15-.86.86H2v-3h4.29l.85.85.36.15H14zM13 16h-1v-3H9v-1h3V9h1v3h3v1h-3z" 
       clipRule="evenodd"
     />
+  </SvgIcon>
+);
+
+// VSCode-style "Pencil/Rename" icon from StackBlitz
+const PencilIcon: React.FC<SvgIconProps> = (props) => (
+  <SvgIcon {...props} viewBox="0 0 16 16">
+    <path d="M13.23 1h-1.46L3.52 9.25l-.16.22L1 13.59 2.41 15l4.12-2.36.22-.16L15 4.23V2.77zM2.41 13.59l1.51-3 1.45 1.45zm3.83-2.06L4.47 9.76l8-8 1.77 1.77z" />
+  </SvgIcon>
+);
+
+// VSCode-style "Trash/Delete" icon from StackBlitz
+const TrashIcon: React.FC<SvgIconProps> = (props) => (
+  <SvgIcon {...props} viewBox="0 0 16 16">
+    <path 
+      fillRule="evenodd" 
+      d="M10 3h3v1h-1v9l-1 1H4l-1-1V4H2V3h3V2a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1zM9 2H6v1h3zM4 13h7V4H4zm2-8H5v7h1zm1 0h1v7H7zm2 0h1v7H9z" 
+      clipRule="evenodd"
+    />
+  </SvgIcon>
+);
+
+// VSCode-style "Folder Closed" icon from StackBlitz
+const FolderIconVSCode: React.FC<SvgIconProps> = (props) => (
+  <SvgIcon {...props} viewBox="0 0 16 16">
+    <path d="M6.56 2.48H2.24c-.8 0-1.44.64-1.44 1.44v8.64c0 .79.65 1.44 1.44 1.44h11.52c.79 0 1.44-.65 1.44-1.44v-7.2c0-.8-.65-1.44-1.44-1.44H8z" />
+  </SvgIcon>
+);
+
+// VSCode-style "Folder Open" icon from StackBlitz
+const FolderOpenIconVSCode: React.FC<SvgIconProps> = (props) => (
+  <SvgIcon {...props} viewBox="0 0 16 16">
+    <path d="M13.66 12.46H2.34v-7h11.32zm.1-8.54H8L6.56 2.48H2.24c-.8 0-1.44.64-1.44 1.44v8.64c0 .8.64 1.44 1.44 1.44h11.52c.8 0 1.44-.64 1.44-1.44v-7.2c0-.8-.65-1.44-1.44-1.44" />
   </SvgIcon>
 );
 
@@ -303,9 +331,9 @@ const EnhancedFileTreeItem: React.FC<{
         <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}>
           {isDirectory ? (
             expanded ? (
-              <FolderOpenIcon sx={{ fontSize: 16, color: '#dcb67a', flexShrink: 0 }} />
+              <FolderOpenIconVSCode sx={{ fontSize: 16, color: '#dcb67a', flexShrink: 0 }} />
             ) : (
-              <FolderIcon sx={{ fontSize: 16, color: '#dcb67a', flexShrink: 0 }} />
+              <FolderIconVSCode sx={{ fontSize: 16, color: '#dcb67a', flexShrink: 0 }} />
             )
           ) : (
             getFileIcon(item.name, 'inherit')
@@ -366,7 +394,7 @@ const EnhancedFileTreeItem: React.FC<{
                   }}
                   sx={{ p: 0.25 }}
                 >
-                  <EditIcon sx={{ fontSize: 14 }} />
+                  <PencilIcon sx={{ fontSize: 14 }} />
                 </IconButton>
               </Tooltip>
             )}
@@ -377,7 +405,7 @@ const EnhancedFileTreeItem: React.FC<{
                   onClick={handleDelete}
                   sx={{ p: 0.25 }}
                 >
-                  <DeleteIcon sx={{ fontSize: 14 }} />
+                  <TrashIcon sx={{ fontSize: 14 }} />
                 </IconButton>
               </Tooltip>
             )}
