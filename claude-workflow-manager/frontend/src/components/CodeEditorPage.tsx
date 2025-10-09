@@ -63,6 +63,8 @@ import {
   Menu as MenuIcon,
   ViewColumn,
   ViewStream,
+  KeyboardArrowUp,
+  KeyboardArrowDown,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
@@ -179,6 +181,8 @@ const CodeEditorPage: React.FC = () => {
   const [showDiff, setShowDiff] = useState(false);
   const [diffChange, setDiffChange] = useState<FileChange | null>(null);
   const [diffViewMode, setDiffViewMode] = useState<'inline' | 'sideBySide'>('inline');
+  const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
+  const [pendingChangesForFile, setPendingChangesForFile] = useState<FileChange[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
@@ -215,23 +219,29 @@ const CodeEditorPage: React.FC = () => {
     if (!selectedFile || !selectedWorkflow) {
       setShowDiff(false);
       setDiffChange(null);
+      setPendingChangesForFile([]);
+      setCurrentChangeIndex(0);
       return;
     }
     
     // Find pending changes for the current file
-    const pendingChangesForFile = changes.filter(
+    const fileChanges = changes.filter(
       (c: FileChange) => c.file_path === selectedFile.path && c.status === 'pending'
     );
     
-    if (pendingChangesForFile.length > 0) {
-      // Show the most recent pending change
-      const latestChange = pendingChangesForFile[pendingChangesForFile.length - 1];
-      setDiffChange(latestChange);
+    setPendingChangesForFile(fileChanges);
+    
+    if (fileChanges.length > 0) {
+      // Reset to first change if the list changed
+      const newIndex = currentChangeIndex >= fileChanges.length ? 0 : currentChangeIndex;
+      setCurrentChangeIndex(newIndex);
+      setDiffChange(fileChanges[newIndex]);
       setShowDiff(true);
     } else {
       // No pending changes, exit diff mode
       setShowDiff(false);
       setDiffChange(null);
+      setCurrentChangeIndex(0);
     }
   }, [changes, selectedFile, selectedWorkflow]);
   
@@ -363,6 +373,22 @@ const CodeEditorPage: React.FC = () => {
     }
   };
   
+  const handlePreviousChange = () => {
+    if (currentChangeIndex > 0) {
+      const newIndex = currentChangeIndex - 1;
+      setCurrentChangeIndex(newIndex);
+      setDiffChange(pendingChangesForFile[newIndex]);
+    }
+  };
+
+  const handleNextChange = () => {
+    if (currentChangeIndex < pendingChangesForFile.length - 1) {
+      const newIndex = currentChangeIndex + 1;
+      setCurrentChangeIndex(newIndex);
+      setDiffChange(pendingChangesForFile[newIndex]);
+    }
+  };
+
   const handleApproveChange = async (changeId: string) => {
     try {
       await api.post('/api/file-editor/approve', {
@@ -1072,6 +1098,32 @@ const CodeEditorPage: React.FC = () => {
                                   diffChange.operation === 'delete' ? 'error' : 'info'
                                 }
                               />
+                              {pendingChangesForFile.length > 1 && (
+                                <>
+                                  <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                                  <Box display="flex" alignItems="center" gap={0.5}>
+                                    <IconButton
+                                      size="small"
+                                      onClick={handlePreviousChange}
+                                      disabled={currentChangeIndex === 0}
+                                      sx={{ p: 0.5 }}
+                                    >
+                                      <KeyboardArrowUp fontSize="small" />
+                                    </IconButton>
+                                    <Typography variant="caption" sx={{ minWidth: 45, textAlign: 'center' }}>
+                                      {currentChangeIndex + 1} of {pendingChangesForFile.length}
+                                    </Typography>
+                                    <IconButton
+                                      size="small"
+                                      onClick={handleNextChange}
+                                      disabled={currentChangeIndex === pendingChangesForFile.length - 1}
+                                      sx={{ p: 0.5 }}
+                                    >
+                                      <KeyboardArrowDown fontSize="small" />
+                                    </IconButton>
+                                  </Box>
+                                </>
+                              )}
                             </Box>
                             <Box display="flex" gap={1} alignItems="center">
                               <ToggleButtonGroup
