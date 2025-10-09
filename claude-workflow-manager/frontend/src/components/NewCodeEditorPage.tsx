@@ -949,10 +949,11 @@ const NewCodeEditorPage: React.FC = () => {
                       </Box>
                       {/* File Tree */}
                       <Box sx={{ flex: 1, overflow: 'auto' }}>
-                        <VSCodeFileTree
+                        <EnhancedFileTree
                           items={items}
-                          onItemClick={handleItemClick}
+                          onItemClick={(item, _isDoubleClick) => handleItemClick(item)}
                           selectedPath={selectedFile?.path}
+                          openTabs={openTabs.map(tab => tab.path)}
                           pendingChanges={pendingChanges}
                           currentPath={currentPath}
                         />
