@@ -794,47 +794,7 @@ const NewCodeEditorPage: React.FC = () => {
         setActivePaneId(targetPane);
       }
       
-      // Get the appropriate tabs and setters for the target pane
-      let tabs, setTabs, setActiveIndex, activeIndex;
-      
-      if (perfTestPaneCount === 1) {
-        // Single pane mode
-        tabs = openTabs;
-        setTabs = setOpenTabs;
-        setActiveIndex = setActiveTabIndex;
-        activeIndex = activeTabIndex;
-      } else {
-        // Multi-pane mode
-        if (targetPane === 'left') {
-          tabs = leftPaneTabs;
-          setTabs = setLeftPaneTabs;
-          setActiveIndex = setLeftActiveIndex;
-          activeIndex = leftActiveIndex;
-        } else if (targetPane === 'middle') {
-          tabs = middlePaneTabs;
-          setTabs = setMiddlePaneTabs;
-          setActiveIndex = setMiddleActiveIndex;
-          activeIndex = middleActiveIndex;
-        } else {
-          tabs = rightPaneTabs;
-          setTabs = setRightPaneTabs;
-          setActiveIndex = setRightActiveIndex;
-          activeIndex = rightActiveIndex;
-        }
-      }
-      
-      // Close previous tab in current pane if it exists
-      const prevTabPath = perfTestOpenTabPaths[targetPane];
-      let updatedTabs = [...tabs];
-      
-      if (prevTabPath) {
-        const tabIndex = updatedTabs.findIndex(tab => tab.path === prevTabPath);
-        if (tabIndex !== -1) {
-          updatedTabs = updatedTabs.filter((_, i) => i !== tabIndex);
-        }
-      }
-      
-      // Load file content
+      // Load file content first
       const content = await loadFileContentForTab(filePath);
       if (content === null) return;
       
@@ -848,12 +808,79 @@ const NewCodeEditorPage: React.FC = () => {
         isModified: false,
       };
       
-      // Add to appropriate pane
-      const newTabs = [...updatedTabs, newTab];
-      setTabs(newTabs);
-      setActiveIndex(updatedTabs.length);
+      // Get the previous tab path for this pane
+      const prevTabPath = perfTestOpenTabPaths[targetPane];
       
-      console.log(`[PerfTest] Added tab to ${targetPane} pane. Total tabs in pane: ${newTabs.length}`);
+      // Use functional updates to ensure we have the latest state
+      if (perfTestPaneCount === 1) {
+        // Single pane mode
+        setOpenTabs(currentTabs => {
+          let updatedTabs = [...currentTabs];
+          
+          // Remove previous perf test tab if it exists
+          if (prevTabPath) {
+            updatedTabs = updatedTabs.filter(tab => tab.path !== prevTabPath);
+          }
+          
+          // Add new tab
+          const newTabs = [...updatedTabs, newTab];
+          console.log(`[PerfTest] Added tab to single pane. Total tabs: ${newTabs.length}`);
+          return newTabs;
+        });
+        setActiveTabIndex(prev => {
+          const currentLength = openTabs.length;
+          const adjustment = prevTabPath ? 0 : 1;
+          return currentLength - adjustment;
+        });
+      } else {
+        // Multi-pane mode - update the specific pane
+        if (targetPane === 'left') {
+          setLeftPaneTabs(currentTabs => {
+            let updatedTabs = [...currentTabs];
+            if (prevTabPath) {
+              updatedTabs = updatedTabs.filter(tab => tab.path !== prevTabPath);
+            }
+            const newTabs = [...updatedTabs, newTab];
+            console.log(`[PerfTest] Added tab to LEFT pane. Total tabs in left pane: ${newTabs.length}`);
+            return newTabs;
+          });
+          setLeftActiveIndex(prev => {
+            const currentLength = leftPaneTabs.length;
+            const adjustment = prevTabPath ? 0 : 1;
+            return currentLength - adjustment;
+          });
+        } else if (targetPane === 'middle') {
+          setMiddlePaneTabs(currentTabs => {
+            let updatedTabs = [...currentTabs];
+            if (prevTabPath) {
+              updatedTabs = updatedTabs.filter(tab => tab.path !== prevTabPath);
+            }
+            const newTabs = [...updatedTabs, newTab];
+            console.log(`[PerfTest] Added tab to MIDDLE pane. Total tabs in middle pane: ${newTabs.length}`);
+            return newTabs;
+          });
+          setMiddleActiveIndex(prev => {
+            const currentLength = middlePaneTabs.length;
+            const adjustment = prevTabPath ? 0 : 1;
+            return currentLength - adjustment;
+          });
+        } else {
+          setRightPaneTabs(currentTabs => {
+            let updatedTabs = [...currentTabs];
+            if (prevTabPath) {
+              updatedTabs = updatedTabs.filter(tab => tab.path !== prevTabPath);
+            }
+            const newTabs = [...updatedTabs, newTab];
+            console.log(`[PerfTest] Added tab to RIGHT pane. Total tabs in right pane: ${newTabs.length}`);
+            return newTabs;
+          });
+          setRightActiveIndex(prev => {
+            const currentLength = rightPaneTabs.length;
+            const adjustment = prevTabPath ? 0 : 1;
+            return currentLength - adjustment;
+          });
+        }
+      }
       
       // Update file state
       setSelectedFile({ name: newTab.name, path: newTab.path, type: 'file' });
