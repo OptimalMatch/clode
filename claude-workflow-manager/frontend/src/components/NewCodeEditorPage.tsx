@@ -408,7 +408,10 @@ const NewCodeEditorPage: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const changesPollingIntervalRef = useRef<any>(null);
   const autoRefreshIntervalRef = useRef<any>(null);
-  const editorRef = useRef<any>(null); // Monaco editor instance for scrolling to lines
+  const editorRef = useRef<any>(null); // Monaco editor instance for scrolling to lines (single pane)
+  const leftEditorRef = useRef<any>(null); // Left pane editor
+  const middleEditorRef = useRef<any>(null); // Middle pane editor
+  const rightEditorRef = useRef<any>(null); // Right pane editor
   
   // Load workflows and designs on mount
   useEffect(() => {
@@ -786,15 +789,19 @@ const NewCodeEditorPage: React.FC = () => {
       if (perfTestPaneCount > 1 && !splitViewEnabled) {
         setSplitViewEnabled(true);
         setPaneCount(perfTestPaneCount);
+        // Small delay to allow split view to initialize
+        await new Promise(resolve => setTimeout(resolve, 50));
       } else if (perfTestPaneCount === 1 && splitViewEnabled) {
         setSplitViewEnabled(false);
         setPaneCount(1);
       } else if (perfTestPaneCount !== paneCount && splitViewEnabled) {
         setPaneCount(perfTestPaneCount);
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
       
       // Determine which pane to use
       const targetPane = perfTestCurrentPane;
+      console.log(`[PerfTest] Opening file in ${targetPane} pane (${perfTestPaneCount} panes total)`);
       
       // Get the appropriate tabs and setters for the target pane
       let tabs, setTabs, setActiveIndex, activeIndex;
@@ -827,14 +834,12 @@ const NewCodeEditorPage: React.FC = () => {
       
       // Close previous tab in current pane if it exists
       const prevTabPath = perfTestOpenTabPaths[targetPane];
+      let updatedTabs = [...tabs];
+      
       if (prevTabPath) {
-        const tabIndex = tabs.findIndex(tab => tab.path === prevTabPath);
+        const tabIndex = updatedTabs.findIndex(tab => tab.path === prevTabPath);
         if (tabIndex !== -1) {
-          const newTabs = tabs.filter((_, i) => i !== tabIndex);
-          setTabs(newTabs);
-          if (newTabs.length === 0) {
-            setActiveIndex(-1);
-          }
+          updatedTabs = updatedTabs.filter((_, i) => i !== tabIndex);
         }
       }
       
@@ -852,14 +857,10 @@ const NewCodeEditorPage: React.FC = () => {
         isModified: false,
       };
       
-      // Get current tabs after potential deletion
-      const currentTabs = perfTestPaneCount === 1 ? openTabs : 
-                         targetPane === 'left' ? leftPaneTabs :
-                         targetPane === 'middle' ? middlePaneTabs : rightPaneTabs;
-      
       // Add to appropriate pane
-      setTabs([...currentTabs, newTab]);
-      setActiveIndex(currentTabs.length);
+      const newTabs = [...updatedTabs, newTab];
+      setTabs(newTabs);
+      setActiveIndex(updatedTabs.length);
       
       // Update file state for single pane
       if (perfTestPaneCount === 1) {
@@ -867,8 +868,11 @@ const NewCodeEditorPage: React.FC = () => {
         setFileContent(content);
         setOriginalContent(content);
       } else {
-        // Set active pane for multi-pane
+        // Set active pane for multi-pane and update file content
         setActivePaneId(targetPane);
+        setSelectedFile({ name: newTab.name, path: newTab.path, type: 'file' });
+        setFileContent(content);
+        setOriginalContent(content);
       }
       
       // Track this tab as opened by performance test in this pane
@@ -889,11 +893,23 @@ const NewCodeEditorPage: React.FC = () => {
       
       // Scroll to line after a short delay to ensure editor is ready
       setTimeout(() => {
-        if (editorRef.current) {
-          editorRef.current.revealLineInCenter(lineNumber);
-          editorRef.current.setPosition({ lineNumber, column: 1 });
+        // Use the correct editor ref based on target pane
+        let currentEditorRef = editorRef;
+        if (perfTestPaneCount > 1) {
+          if (targetPane === 'left') {
+            currentEditorRef = leftEditorRef;
+          } else if (targetPane === 'middle') {
+            currentEditorRef = middleEditorRef;
+          } else {
+            currentEditorRef = rightEditorRef;
+          }
         }
-      }, 100);
+        
+        if (currentEditorRef.current) {
+          currentEditorRef.current.revealLineInCenter(lineNumber);
+          currentEditorRef.current.setPosition({ lineNumber, column: 1 });
+        }
+      }, 200); // Increased delay to ensure editor is mounted
       
     } catch (error: any) {
       console.error('Error opening file:', error);
@@ -3623,7 +3639,7 @@ const NewCodeEditorPage: React.FC = () => {
                                       language={getLanguageFromFilename(leftPaneTabs[leftActiveIndex].name)}
                                       value={leftPaneTabs[leftActiveIndex].content}
                                       onChange={(value) => handleSplitPaneContentChange('left', value || '')}
-                                      onMount={(editor) => { if (activePaneId === 'left') editorRef.current = editor; }}
+                                      onMount={(editor) => { leftEditorRef.current = editor; }}
                                       theme={selectedTheme}
                                       options={{
                                         readOnly: leftPaneTabs[leftActiveIndex].content === '[Binary file]',
@@ -3809,7 +3825,7 @@ const NewCodeEditorPage: React.FC = () => {
                                           language={getLanguageFromFilename(middlePaneTabs[middleActiveIndex].name)}
                                           value={middlePaneTabs[middleActiveIndex].content}
                                           onChange={(value) => handleSplitPaneContentChange('middle', value || '')}
-                                          onMount={(editor) => { if (activePaneId === 'middle') editorRef.current = editor; }}
+                                          onMount={(editor) => { middleEditorRef.current = editor; }}
                                           theme={selectedTheme}
                                           options={{
                                             readOnly: middlePaneTabs[middleActiveIndex].content === '[Binary file]',
@@ -3999,7 +4015,7 @@ const NewCodeEditorPage: React.FC = () => {
                                       language={getLanguageFromFilename(rightPaneTabs[rightActiveIndex].name)}
                                       value={rightPaneTabs[rightActiveIndex].content}
                                       onChange={(value) => handleSplitPaneContentChange('right', value || '')}
-                                      onMount={(editor) => { if (activePaneId === 'right') editorRef.current = editor; }}
+                                      onMount={(editor) => { rightEditorRef.current = editor; }}
                                       theme={selectedTheme}
                                       options={{
                                         readOnly: rightPaneTabs[rightActiveIndex].content === '[Binary file]',
