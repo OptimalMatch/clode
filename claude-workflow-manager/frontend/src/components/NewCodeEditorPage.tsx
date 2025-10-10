@@ -1436,12 +1436,23 @@ const NewCodeEditorPage: React.FC = () => {
               });
               if (event.data === 'completed') {
                 console.log(`[Code Editor] Agent ${event.agent} completed`);
+                // Mark the last message from this agent as completed
+                setChatMessages(prev => {
+                  const messages = [...prev];
+                  for (let i = messages.length - 1; i >= 0; i--) {
+                    if (messages[i].agent === event.agent && messages[i].type === 'agent') {
+                      messages[i] = { ...messages[i], completed: true };
+                      break;
+                    }
+                  }
+                  return messages;
+                });
               }
-            } else if (event.type === 'chunk' && event.data) {
+            } else if (event.type === 'chunk' && event.data && event.agent) {
               // Add agent message chunk
               setChatMessages(prev => {
                 const lastMsg = prev[prev.length - 1];
-                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === executionStatus.currentAgent) {
+                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === event.agent) {
                   // Append to existing message
                   return [
                     ...prev.slice(0, -1),
@@ -1455,7 +1466,7 @@ const NewCodeEditorPage: React.FC = () => {
                       id: `msg-${Date.now()}`,
                       type: 'agent',
                       content: event.data,
-                      agent: executionStatus.currentAgent,
+                      agent: event.agent,
                       timestamp: new Date(),
                     }
                   ];
@@ -1530,11 +1541,22 @@ const NewCodeEditorPage: React.FC = () => {
               });
               if (event.data === 'completed') {
                 console.log(`[Code Editor] Agent ${event.agent} completed`);
+                // Mark the last message from this agent as completed
+                setChatMessages(prev => {
+                  const messages = [...prev];
+                  for (let i = messages.length - 1; i >= 0; i--) {
+                    if (messages[i].agent === event.agent && messages[i].type === 'agent') {
+                      messages[i] = { ...messages[i], completed: true };
+                      break;
+                    }
+                  }
+                  return messages;
+                });
               }
-            } else if (event.type === 'chunk' && event.data) {
+            } else if (event.type === 'chunk' && event.data && event.agent) {
               setChatMessages(prev => {
                 const lastMsg = prev[prev.length - 1];
-                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === executionStatus.currentAgent) {
+                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === event.agent) {
                   return [
                     ...prev.slice(0, -1),
                     { ...lastMsg, content: lastMsg.content + event.data }
@@ -1546,7 +1568,7 @@ const NewCodeEditorPage: React.FC = () => {
                       id: `msg-${Date.now()}`,
                       type: 'agent',
                       content: event.data,
-                      agent: executionStatus.currentAgent,
+                      agent: event.agent,
                       timestamp: new Date(),
                     }
                   ];
@@ -1621,11 +1643,22 @@ const NewCodeEditorPage: React.FC = () => {
               });
               if (event.data === 'completed') {
                 console.log(`[Code Editor] Agent ${event.agent} completed`);
+                // Mark the last message from this agent as completed
+                setChatMessages(prev => {
+                  const messages = [...prev];
+                  for (let i = messages.length - 1; i >= 0; i--) {
+                    if (messages[i].agent === event.agent && messages[i].type === 'agent') {
+                      messages[i] = { ...messages[i], completed: true };
+                      break;
+                    }
+                  }
+                  return messages;
+                });
               }
-            } else if (event.type === 'chunk' && event.data) {
+            } else if (event.type === 'chunk' && event.data && event.agent) {
               setChatMessages(prev => {
                 const lastMsg = prev[prev.length - 1];
-                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === executionStatus.currentAgent) {
+                if (lastMsg && lastMsg.type === 'agent' && lastMsg.agent === event.agent) {
                   return [
                     ...prev.slice(0, -1),
                     { ...lastMsg, content: lastMsg.content + event.data }
@@ -1637,7 +1670,7 @@ const NewCodeEditorPage: React.FC = () => {
                       id: `msg-${Date.now()}`,
                       type: 'agent',
                       content: event.data,
-                      agent: executionStatus.currentAgent,
+                      agent: event.agent,
                       timestamp: new Date(),
                     }
                   ];
