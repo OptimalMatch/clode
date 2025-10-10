@@ -14,6 +14,14 @@ import {
   Refresh,
   SmartToy,
   MoreVert,
+  WorkOutline,
+  ViewModule,
+  Psychology,
+  CloudUpload,
+  DesignServices,
+  Description,
+  VpnKey,
+  AccountCircle,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import RunnerSprite from './RunnerSprite';
@@ -27,7 +35,7 @@ interface ModernLayoutProps {
   aiAssistantOpen?: boolean;
 }
 
-type PrimaryNavView = 'editor' | 'orchestration' | 'terminal' | 'settings';
+type PrimaryNavView = 'workflows' | 'multi-agent' | 'orchestration' | 'orchestration-designer' | 'deployments' | 'editor' | 'design' | 'prompts' | 'subagents' | 'claude-auth' | 'ssh-keys' | 'terminal' | 'settings';
 
 const ModernLayout: React.FC<ModernLayoutProps> = ({ 
   children,
@@ -42,22 +50,58 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
   
   const [primaryNavView, setPrimaryNavView] = useState<PrimaryNavView>(() => {
     // Set initial view based on current path
-    if (location.pathname.includes('/code-editor')) return 'editor';
+    if (location.pathname.includes('/workflows')) return 'workflows';
+    if (location.pathname.includes('/multi-agent')) return 'multi-agent';
+    if (location.pathname.includes('/orchestration-designer')) return 'orchestration-designer';
     if (location.pathname.includes('/orchestration')) return 'orchestration';
+    if (location.pathname.includes('/deployments')) return 'deployments';
+    if (location.pathname.includes('/code-editor')) return 'editor';
+    if (location.pathname.includes('/design')) return 'design';
+    if (location.pathname.includes('/prompts')) return 'prompts';
+    if (location.pathname.includes('/subagents')) return 'subagents';
+    if (location.pathname.includes('/claude-auth')) return 'claude-auth';
+    if (location.pathname.includes('/ssh-keys')) return 'ssh-keys';
     if (location.pathname.includes('/terminal')) return 'terminal';
     if (location.pathname.includes('/settings')) return 'settings';
-    return 'editor';
+    return 'workflows';
   });
 
   const handleNavClick = (view: PrimaryNavView) => {
     setPrimaryNavView(view);
     // Navigate to corresponding routes
     switch (view) {
+      case 'workflows':
+        navigate('/workflows');
+        break;
+      case 'multi-agent':
+        navigate('/multi-agent');
+        break;
+      case 'orchestration':
+        navigate('/orchestration');
+        break;
+      case 'orchestration-designer':
+        navigate('/orchestration-designer');
+        break;
+      case 'deployments':
+        navigate('/deployments');
+        break;
       case 'editor':
         navigate('/code-editor');
         break;
-      case 'orchestration':
-        navigate('/orchestration-designer');
+      case 'design':
+        navigate('/design');
+        break;
+      case 'prompts':
+        navigate('/prompts');
+        break;
+      case 'subagents':
+        navigate('/subagents');
+        break;
+      case 'claude-auth':
+        navigate('/claude-auth');
+        break;
+      case 'ssh-keys':
+        navigate('/ssh-keys');
         break;
       case 'terminal':
         navigate('/terminal');
@@ -92,16 +136,29 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
         
         {/* Primary Navigation Icons - Centered */}
         <Box sx={{ display: 'flex', gap: 0.5, mx: 'auto' }}>
-          <Tooltip title="Editor">
+          <Tooltip title="Workflows">
             <IconButton
               size="small"
-              onClick={() => handleNavClick('editor')}
+              onClick={() => handleNavClick('workflows')}
               sx={{ 
-                color: primaryNavView === 'editor' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                color: primaryNavView === 'workflows' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
             >
-              <Code sx={{ fontSize: 18 }} />
+              <WorkOutline sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Multi-Agent">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('multi-agent')}
+              sx={{ 
+                color: primaryNavView === 'multi-agent' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <ViewModule sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
           
@@ -114,7 +171,111 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
             >
+              <Psychology sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Orchestration Designer">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('orchestration-designer')}
+              sx={{ 
+                color: primaryNavView === 'orchestration-designer' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
               <AccountTree sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Deployments">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('deployments')}
+              sx={{ 
+                color: primaryNavView === 'deployments' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <CloudUpload sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Code Editor">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('editor')}
+              sx={{ 
+                color: primaryNavView === 'editor' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Code sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Design">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('design')}
+              sx={{ 
+                color: primaryNavView === 'design' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <DesignServices sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Prompts">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('prompts')}
+              sx={{ 
+                color: primaryNavView === 'prompts' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Description sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Subagents">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('subagents')}
+              sx={{ 
+                color: primaryNavView === 'subagents' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <SmartToy sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Claude Auth">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('claude-auth')}
+              sx={{ 
+                color: primaryNavView === 'claude-auth' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <AccountCircle sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="SSH Keys">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('ssh-keys')}
+              sx={{ 
+                color: primaryNavView === 'ssh-keys' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <VpnKey sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
           
