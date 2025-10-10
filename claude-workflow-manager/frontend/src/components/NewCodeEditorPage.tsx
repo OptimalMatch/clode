@@ -32,6 +32,8 @@ import {
   CircularProgress,
   Menu,
   SvgIcon,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import type { SvgIconProps } from '@mui/material';
 import {
@@ -338,6 +340,8 @@ const NewCodeEditorPage: React.FC = () => {
     responseTimes: [],
   });
   const [perfTestLogs, setPerfTestLogs] = useState<string[]>([]);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(5); // seconds
   
   // Tab system state
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
@@ -388,6 +392,7 @@ const NewCodeEditorPage: React.FC = () => {
   const perfTestRunningRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const changesPollingIntervalRef = useRef<any>(null);
+  const autoRefreshIntervalRef = useRef<any>(null);
   
   // Load workflows and designs on mount
   useEffect(() => {
@@ -417,6 +422,31 @@ const NewCodeEditorPage: React.FC = () => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
+  
+  // Auto-refresh changes interval for performance testing
+  useEffect(() => {
+    // Clear any existing interval
+    if (autoRefreshIntervalRef.current) {
+      clearInterval(autoRefreshIntervalRef.current);
+      autoRefreshIntervalRef.current = null;
+    }
+    
+    // Set up new interval if enabled
+    if (autoRefreshEnabled && selectedWorkflow) {
+      autoRefreshIntervalRef.current = setInterval(() => {
+        loadChanges();
+        loadDirectory(currentPath);
+      }, autoRefreshInterval * 1000);
+    }
+    
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (autoRefreshIntervalRef.current) {
+        clearInterval(autoRefreshIntervalRef.current);
+        autoRefreshIntervalRef.current = null;
+      }
+    };
+  }, [autoRefreshEnabled, autoRefreshInterval, selectedWorkflow, currentPath]);
   
   // Load directory when workflow or path changes
   useEffect(() => {
@@ -4436,6 +4466,61 @@ const NewCodeEditorPage: React.FC = () => {
                           >
                             {perfTestRunning ? 'Stop Test' : 'Start Performance Test'}
                           </Button>
+                          
+                          <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)', my: 2 }} />
+                          
+                          {/* Auto-Refresh Settings */}
+                          <Typography variant="caption" sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.7)', mb: 1, display: 'block' }}>
+                            Auto-Refresh Changes
+                          </Typography>
+                          
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={autoRefreshEnabled}
+                                onChange={(e) => setAutoRefreshEnabled(e.target.checked)}
+                                size="small"
+                                sx={{
+                                  '& .MuiSwitch-switchBase.Mui-checked': {
+                                    color: 'primary.main',
+                                  },
+                                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                    backgroundColor: 'primary.main',
+                                  },
+                                }}
+                              />
+                            }
+                            label={
+                              <Typography sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Enable auto-refresh
+                              </Typography>
+                            }
+                            sx={{ mb: 1.5 }}
+                          />
+                          
+                          {autoRefreshEnabled && (
+                            <Box sx={{ mb: 1 }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)', mb: 0.5, display: 'block' }}>
+                                Refresh Interval: {autoRefreshInterval} seconds
+                              </Typography>
+                              <Box sx={{ px: 1 }}>
+                                <input
+                                  type="range"
+                                  min="1"
+                                  max="30"
+                                  value={autoRefreshInterval}
+                                  onChange={(e) => setAutoRefreshInterval(parseInt(e.target.value))}
+                                  style={{
+                                    width: '100%',
+                                    height: '4px',
+                                    borderRadius: '2px',
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                  }}
+                                />
+                              </Box>
+                            </Box>
+                          )}
                         </Box>
                         
                         <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
