@@ -350,7 +350,13 @@ const NewCodeEditorPage: React.FC = () => {
   const [perfTestLogs, setPerfTestLogs] = useState<string[]>([]);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5); // seconds
-  const [perfTestOpenTabPath, setPerfTestOpenTabPath] = useState<string | null>(null); // Track tab opened by perf test
+  const [perfTestPaneCount, setPerfTestPaneCount] = useState<1 | 2 | 3>(1); // Number of editor panes for perf test
+  const [perfTestOpenTabPaths, setPerfTestOpenTabPaths] = useState<{
+    left: string | null;
+    middle: string | null;
+    right: string | null;
+  }>({ left: null, middle: null, right: null }); // Track tabs opened by perf test in each pane
+  const [perfTestCurrentPane, setPerfTestCurrentPane] = useState<'left' | 'middle' | 'right'>('left'); // Current pane for next file
   
   // Tab system state
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
@@ -776,31 +782,58 @@ const NewCodeEditorPage: React.FC = () => {
     if (!selectedWorkflow) return;
     
     try {
-      // Close previous performance test tab if it exists
-      if (perfTestOpenTabPath) {
-        if (splitViewEnabled) {
-          // Close from active pane in split view
-          const tabs = activePaneId === 'left' ? leftPaneTabs : activePaneId === 'middle' ? middlePaneTabs : rightPaneTabs;
-          const setTabs = activePaneId === 'left' ? setLeftPaneTabs : activePaneId === 'middle' ? setMiddlePaneTabs : setRightPaneTabs;
-          const setActiveIndex = activePaneId === 'left' ? setLeftActiveIndex : activePaneId === 'middle' ? setMiddleActiveIndex : setRightActiveIndex;
-          
-          const tabIndex = tabs.findIndex(tab => tab.path === perfTestOpenTabPath);
-          if (tabIndex !== -1) {
-            const newTabs = tabs.filter((_, i) => i !== tabIndex);
-            setTabs(newTabs);
-            if (newTabs.length === 0) {
-              setActiveIndex(-1);
-            }
-          }
+      // Set up split view based on perfTestPaneCount
+      if (perfTestPaneCount > 1 && !splitViewEnabled) {
+        setSplitViewEnabled(true);
+        setPaneCount(perfTestPaneCount);
+      } else if (perfTestPaneCount === 1 && splitViewEnabled) {
+        setSplitViewEnabled(false);
+        setPaneCount(1);
+      } else if (perfTestPaneCount !== paneCount && splitViewEnabled) {
+        setPaneCount(perfTestPaneCount);
+      }
+      
+      // Determine which pane to use
+      const targetPane = perfTestCurrentPane;
+      
+      // Get the appropriate tabs and setters for the target pane
+      let tabs, setTabs, setActiveIndex, activeIndex;
+      
+      if (perfTestPaneCount === 1) {
+        // Single pane mode
+        tabs = openTabs;
+        setTabs = setOpenTabs;
+        setActiveIndex = setActiveTabIndex;
+        activeIndex = activeTabIndex;
+      } else {
+        // Multi-pane mode
+        if (targetPane === 'left') {
+          tabs = leftPaneTabs;
+          setTabs = setLeftPaneTabs;
+          setActiveIndex = setLeftActiveIndex;
+          activeIndex = leftActiveIndex;
+        } else if (targetPane === 'middle') {
+          tabs = middlePaneTabs;
+          setTabs = setMiddlePaneTabs;
+          setActiveIndex = setMiddleActiveIndex;
+          activeIndex = middleActiveIndex;
         } else {
-          // Close from single view
-          const tabIndex = openTabs.findIndex(tab => tab.path === perfTestOpenTabPath);
-          if (tabIndex !== -1) {
-            const newTabs = openTabs.filter((_, i) => i !== tabIndex);
-            setOpenTabs(newTabs);
-            if (newTabs.length === 0) {
-              setActiveTabIndex(-1);
-            }
+          tabs = rightPaneTabs;
+          setTabs = setRightPaneTabs;
+          setActiveIndex = setRightActiveIndex;
+          activeIndex = rightActiveIndex;
+        }
+      }
+      
+      // Close previous tab in current pane if it exists
+      const prevTabPath = perfTestOpenTabPaths[targetPane];
+      if (prevTabPath) {
+        const tabIndex = tabs.findIndex(tab => tab.path === prevTabPath);
+        if (tabIndex !== -1) {
+          const newTabs = tabs.filter((_, i) => i !== tabIndex);
+          setTabs(newTabs);
+          if (newTabs.length === 0) {
+            setActiveIndex(-1);
           }
         }
       }
@@ -819,25 +852,40 @@ const NewCodeEditorPage: React.FC = () => {
         isModified: false,
       };
       
-      if (splitViewEnabled) {
-        // Add to active pane in split view
-        const tabs = activePaneId === 'left' ? leftPaneTabs : activePaneId === 'middle' ? middlePaneTabs : rightPaneTabs;
-        const setTabs = activePaneId === 'left' ? setLeftPaneTabs : activePaneId === 'middle' ? setMiddlePaneTabs : setRightPaneTabs;
-        const setActiveIndex = activePaneId === 'left' ? setLeftActiveIndex : activePaneId === 'middle' ? setMiddleActiveIndex : setRightActiveIndex;
-        
-        setTabs([...tabs, newTab]);
-        setActiveIndex(tabs.length);
-      } else {
-        // Add to single view
-        setOpenTabs([...openTabs, newTab]);
-        setActiveTabIndex(openTabs.length);
+      // Get current tabs after potential deletion
+      const currentTabs = perfTestPaneCount === 1 ? openTabs : 
+                         targetPane === 'left' ? leftPaneTabs :
+                         targetPane === 'middle' ? middlePaneTabs : rightPaneTabs;
+      
+      // Add to appropriate pane
+      setTabs([...currentTabs, newTab]);
+      setActiveIndex(currentTabs.length);
+      
+      // Update file state for single pane
+      if (perfTestPaneCount === 1) {
         setSelectedFile({ name: newTab.name, path: newTab.path, type: 'file' });
         setFileContent(content);
         setOriginalContent(content);
+      } else {
+        // Set active pane for multi-pane
+        setActivePaneId(targetPane);
       }
       
-      // Track this tab as opened by performance test
-      setPerfTestOpenTabPath(filePath);
+      // Track this tab as opened by performance test in this pane
+      setPerfTestOpenTabPaths(prev => ({
+        ...prev,
+        [targetPane]: filePath,
+      }));
+      
+      // Cycle to next pane for next file
+      if (perfTestPaneCount === 2) {
+        setPerfTestCurrentPane(targetPane === 'left' ? 'right' : 'left');
+      } else if (perfTestPaneCount === 3) {
+        setPerfTestCurrentPane(
+          targetPane === 'left' ? 'middle' :
+          targetPane === 'middle' ? 'right' : 'left'
+        );
+      }
       
       // Scroll to line after a short delay to ensure editor is ready
       setTimeout(() => {
@@ -862,6 +910,8 @@ const NewCodeEditorPage: React.FC = () => {
     setPerfTestRunning(true);
     perfTestRunningRef.current = true;
     setPerfTestLogs([]);
+    setPerfTestCurrentPane('left'); // Reset to left pane for new test
+    setPerfTestOpenTabPaths({ left: null, middle: null, right: null }); // Clear any tracked tabs
     setPerfTestStats({
       totalCalls: 0,
       successCalls: 0,
@@ -888,6 +938,9 @@ const NewCodeEditorPage: React.FC = () => {
     };
     
     addLog(`Starting performance test with ${perfTestCallCount} calls at ${perfTestSpeed} calls/second`);
+    if (perfTestPaneCount > 1) {
+      addLog(`Using ${perfTestPaneCount} editor panes - files will cycle across panes`);
+    }
     
     // Get list of files to work with
     let filesInRepo: string[] = [];
@@ -916,7 +969,8 @@ const NewCodeEditorPage: React.FC = () => {
       setPerfTestRunning(false);
       perfTestRunningRef.current = false;
       setAutoRefreshEnabled(false);
-      setPerfTestOpenTabPath(null);
+      setPerfTestOpenTabPaths({ left: null, middle: null, right: null });
+      setPerfTestCurrentPane('left');
       return;
     }
     
@@ -925,7 +979,8 @@ const NewCodeEditorPage: React.FC = () => {
       setPerfTestRunning(false);
       perfTestRunningRef.current = false;
       setAutoRefreshEnabled(false);
-      setPerfTestOpenTabPath(null);
+      setPerfTestOpenTabPaths({ left: null, middle: null, right: null });
+      setPerfTestCurrentPane('left');
       return;
     }
     
@@ -1001,6 +1056,9 @@ const NewCodeEditorPage: React.FC = () => {
             new_content: newContent,
           });
           
+          // Capture pane info before opening (as opening cycles to next pane)
+          const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPane} pane]` : '';
+          
           // Open file and scroll to changed line
           await openFileAndScrollToLine(randomFile, changedLineNumber);
           
@@ -1011,7 +1069,7 @@ const NewCodeEditorPage: React.FC = () => {
           completedCalls++;
           
           if (i % 10 === 0) {
-            addLog(`Modified file: ${randomFile} line ${changedLineNumber} (${responseTime}ms)`);
+            addLog(`Modified file: ${randomFile} line ${changedLineNumber}${paneInfo} (${responseTime}ms)`);
           }
         } else {
           // Create new file (30%)
@@ -1028,6 +1086,9 @@ const NewCodeEditorPage: React.FC = () => {
           // Add to files list for future operations
           filesInRepo.push(newFileName);
           
+          // Capture pane info before opening (as opening cycles to next pane)
+          const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPane} pane]` : '';
+          
           // Open file and scroll to first line
           await openFileAndScrollToLine(newFileName, 1);
           
@@ -1038,7 +1099,7 @@ const NewCodeEditorPage: React.FC = () => {
           completedCalls++;
           
           if (i % 10 === 0) {
-            addLog(`Created file: ${newFileName} (${responseTime}ms)`);
+            addLog(`Created file: ${newFileName}${paneInfo} (${responseTime}ms)`);
           }
         }
       } catch (error: any) {
@@ -1095,7 +1156,8 @@ const NewCodeEditorPage: React.FC = () => {
     setPerfTestRunning(false);
     perfTestRunningRef.current = false;
     setAutoRefreshEnabled(false);
-    setPerfTestOpenTabPath(null); // Clear tracked tab
+    setPerfTestOpenTabPaths({ left: null, middle: null, right: null });
+    setPerfTestCurrentPane('left');
     
     // Reload changes to show new files
     await loadChanges();
@@ -4571,6 +4633,53 @@ const NewCodeEditorPage: React.FC = () => {
                             </Box>
                           </Box>
                           
+                          {/* Editor Panes Selector */}
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)', mb: 0.5, display: 'block' }}>
+                              Editor Panes
+                            </Typography>
+                            <ToggleButtonGroup
+                              value={perfTestPaneCount}
+                              exclusive
+                              onChange={(e, newValue) => {
+                                if (newValue !== null) {
+                                  setPerfTestPaneCount(newValue);
+                                }
+                              }}
+                              disabled={perfTestRunning}
+                              size="small"
+                              fullWidth
+                              sx={{
+                                '& .MuiToggleButton-root': {
+                                  py: 0.5,
+                                  fontSize: 10,
+                                  color: 'rgba(255, 255, 255, 0.7)',
+                                  borderColor: 'rgba(255, 255, 255, 0.2)',
+                                  '&.Mui-selected': {
+                                    bgcolor: 'primary.main',
+                                    color: 'white',
+                                    '&:hover': {
+                                      bgcolor: 'primary.dark',
+                                    },
+                                  },
+                                  '&:hover': {
+                                    bgcolor: 'rgba(255, 255, 255, 0.05)',
+                                  },
+                                },
+                              }}
+                            >
+                              <ToggleButton value={1}>1 Pane</ToggleButton>
+                              <ToggleButton value={2}>2 Panes</ToggleButton>
+                              <ToggleButton value={3}>3 Panes</ToggleButton>
+                            </ToggleButtonGroup>
+                            
+                            {perfTestPaneCount > 1 && (
+                              <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.5)', mt: 0.5, display: 'block' }}>
+                                Files will cycle across {perfTestPaneCount} panes
+                              </Typography>
+                            )}
+                          </Box>
+                          
                           {/* Start/Stop Button */}
                           <Button
                             variant="contained"
@@ -4580,7 +4689,8 @@ const NewCodeEditorPage: React.FC = () => {
                                 setPerfTestRunning(false);
                                 perfTestRunningRef.current = false;
                                 setAutoRefreshEnabled(false);
-                                setPerfTestOpenTabPath(null);
+                                setPerfTestOpenTabPaths({ left: null, middle: null, right: null });
+                                setPerfTestCurrentPane('left');
                               } else {
                                 runPerformanceTest();
                               }
