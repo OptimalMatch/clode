@@ -2601,11 +2601,11 @@ const NewCodeEditorPage: React.FC = () => {
                                             <Tooltip title="Side by Side"><ViewColumn sx={{ fontSize: 12 }} /></Tooltip>
                                           </ToggleButton>
                                         </ToggleButtonGroup>
-                                        <Button size="small" variant="contained" color="success" startIcon={<CheckCircle sx={{ fontSize: 12 }} />} onClick={() => handleApproveChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(255, 255, 255, 0.9)' }}>
-                                          Accept
-                                        </Button>
-                                        <Button size="small" variant="outlined" color="error" startIcon={<Cancel sx={{ fontSize: 12 }} />} onClick={() => handleRejectChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(255, 255, 255, 0.9)' }}>
-                                          Reject
+                                        <IconButton size="small" color="error" onClick={() => handleRejectChange(diffChange.change_id)} sx={{ p: 0.5, color: 'rgba(255, 100, 100, 0.9)' }}>
+                                          <Cancel sx={{ fontSize: 16 }} />
+                                        </IconButton>
+                                        <Button size="small" variant="outlined" startIcon={<CheckCircle sx={{ fontSize: 12 }} />} onClick={() => handleApproveChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(100, 255, 100, 0.9)', borderColor: 'rgba(100, 255, 100, 0.9)' }}>
+                                          {changeViewMode === 'combined' && pendingChangesForFile.length > 1 ? 'Accept All' : 'Accept'}
                                         </Button>
                                       </Box>
                                       <Box sx={{ flex: 1 }}>
@@ -2801,8 +2801,8 @@ const NewCodeEditorPage: React.FC = () => {
                                           <Box sx={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 10, p: 0.75, bgcolor: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0, borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.3)', flexWrap: 'wrap' }}>
                                             {pendingChangesForFile.length > 1 && (<><ToggleButtonGroup value={changeViewMode} exclusive onChange={(_, newMode) => newMode && setChangeViewMode(newMode)} size="small" sx={{ height: 20 }}><ToggleButton value="individual" sx={{ px: 0.5, fontSize: 9, color: 'rgba(255, 255, 255, 0.7)' }}><Tooltip title="Individual"><ViewAgenda sx={{ fontSize: 12 }} /></Tooltip></ToggleButton><ToggleButton value="combined" sx={{ px: 0.5, fontSize: 9, color: 'rgba(255, 255, 255, 0.7)' }}><Tooltip title="Combined"><CallMerge sx={{ fontSize: 12 }} /></Tooltip></ToggleButton></ToggleButtonGroup>{changeViewMode === 'individual' && (<Box display="flex" alignItems="center" gap={0.25}><IconButton size="small" onClick={() => setCurrentChangeIndex(Math.max(0, currentChangeIndex - 1))} disabled={currentChangeIndex === 0} sx={{ p: 0.15, color: 'rgba(255, 255, 255, 0.7)' }}><KeyboardArrowUp sx={{ fontSize: 14 }} /></IconButton><Typography variant="caption" sx={{ fontSize: 9, minWidth: 35, textAlign: 'center', color: 'rgba(255, 255, 255, 0.7)' }}>{currentChangeIndex + 1}/{pendingChangesForFile.length}</Typography><IconButton size="small" onClick={() => setCurrentChangeIndex(Math.min(pendingChangesForFile.length - 1, currentChangeIndex + 1))} disabled={currentChangeIndex === pendingChangesForFile.length - 1} sx={{ p: 0.15, color: 'rgba(255, 255, 255, 0.7)' }}><KeyboardArrowDown sx={{ fontSize: 14 }} /></IconButton></Box>)}</>)}
                                             <ToggleButtonGroup value={diffViewMode} exclusive onChange={(_, newMode) => newMode && setDiffViewMode(newMode)} size="small" sx={{ height: 20 }}><ToggleButton value="inline" sx={{ px: 0.5, color: 'rgba(255, 255, 255, 0.7)' }}><Tooltip title="Inline"><ViewStream sx={{ fontSize: 12 }} /></Tooltip></ToggleButton><ToggleButton value="sideBySide" sx={{ px: 0.5, color: 'rgba(255, 255, 255, 0.7)' }}><Tooltip title="Side by Side"><ViewColumn sx={{ fontSize: 12 }} /></Tooltip></ToggleButton></ToggleButtonGroup>
-                                            <Button size="small" variant="contained" color="success" startIcon={<CheckCircle sx={{ fontSize: 12 }} />} onClick={() => handleApproveChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(255, 255, 255, 0.9)' }}>Accept</Button>
-                                            <Button size="small" variant="outlined" color="error" startIcon={<Cancel sx={{ fontSize: 12 }} />} onClick={() => handleRejectChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(255, 255, 255, 0.9)' }}>Reject</Button>
+                                            <IconButton size="small" color="error" onClick={() => handleRejectChange(diffChange.change_id)} sx={{ p: 0.5, color: 'rgba(255, 100, 100, 0.9)' }}><Cancel sx={{ fontSize: 16 }} /></IconButton>
+                                            <Button size="small" variant="outlined" startIcon={<CheckCircle sx={{ fontSize: 12 }} />} onClick={() => handleApproveChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(100, 255, 100, 0.9)', borderColor: 'rgba(100, 255, 100, 0.9)' }}>{changeViewMode === 'combined' && pendingChangesForFile.length > 1 ? 'Accept All' : 'Accept'}</Button>
                                           </Box>
                                           <Box sx={{ flex: 1 }}><DiffEditor height="100%" language={getLanguageFromFilename(middlePaneTabs[middleActiveIndex].name)} original={diffChange.old_content || ''} modified={diffChange.new_content || ''} theme={selectedTheme} options={{ readOnly: true, minimap: { enabled: true }, fontSize: 13, renderSideBySide: diffViewMode === 'sideBySide', ignoreTrimWhitespace: false }} loading={<Box display="flex" alignItems="center" justifyContent="center" height="100%"><CircularProgress /></Box>} /></Box>
                                         </Box>
@@ -2990,8 +2990,8 @@ const NewCodeEditorPage: React.FC = () => {
                                       <Box sx={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 10, p: 0.75, bgcolor: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0, borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.3)', flexWrap: 'wrap' }}>
                                         {pendingChangesForFile.length > 1 && (<><ToggleButtonGroup value={changeViewMode} exclusive onChange={(_, newMode) => newMode && setChangeViewMode(newMode)} size="small" sx={{ height: 20 }}><ToggleButton value="individual" sx={{ px: 0.5, fontSize: 9, color: 'rgba(255, 255, 255, 0.7)' }}><Tooltip title="Individual"><ViewAgenda sx={{ fontSize: 12 }} /></Tooltip></ToggleButton><ToggleButton value="combined" sx={{ px: 0.5, fontSize: 9, color: 'rgba(255, 255, 255, 0.7)' }}><Tooltip title="Combined"><CallMerge sx={{ fontSize: 12 }} /></Tooltip></ToggleButton></ToggleButtonGroup>{changeViewMode === 'individual' && (<Box display="flex" alignItems="center" gap={0.25}><IconButton size="small" onClick={() => setCurrentChangeIndex(Math.max(0, currentChangeIndex - 1))} disabled={currentChangeIndex === 0} sx={{ p: 0.15, color: 'rgba(255, 255, 255, 0.7)' }}><KeyboardArrowUp sx={{ fontSize: 14 }} /></IconButton><Typography variant="caption" sx={{ fontSize: 9, minWidth: 35, textAlign: 'center', color: 'rgba(255, 255, 255, 0.7)' }}>{currentChangeIndex + 1}/{pendingChangesForFile.length}</Typography><IconButton size="small" onClick={() => setCurrentChangeIndex(Math.min(pendingChangesForFile.length - 1, currentChangeIndex + 1))} disabled={currentChangeIndex === pendingChangesForFile.length - 1} sx={{ p: 0.15, color: 'rgba(255, 255, 255, 0.7)' }}><KeyboardArrowDown sx={{ fontSize: 14 }} /></IconButton></Box>)}</>)}
                                         <ToggleButtonGroup value={diffViewMode} exclusive onChange={(_, newMode) => newMode && setDiffViewMode(newMode)} size="small" sx={{ height: 20 }}><ToggleButton value="inline" sx={{ px: 0.5, color: 'rgba(255, 255, 255, 0.7)' }}><Tooltip title="Inline"><ViewStream sx={{ fontSize: 12 }} /></Tooltip></ToggleButton><ToggleButton value="sideBySide" sx={{ px: 0.5, color: 'rgba(255, 255, 255, 0.7)' }}><Tooltip title="Side by Side"><ViewColumn sx={{ fontSize: 12 }} /></Tooltip></ToggleButton></ToggleButtonGroup>
-                                        <Button size="small" variant="contained" color="success" startIcon={<CheckCircle sx={{ fontSize: 12 }} />} onClick={() => handleApproveChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(255, 255, 255, 0.9)' }}>Accept</Button>
-                                        <Button size="small" variant="outlined" color="error" startIcon={<Cancel sx={{ fontSize: 12 }} />} onClick={() => handleRejectChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(255, 255, 255, 0.9)' }}>Reject</Button>
+                                        <IconButton size="small" color="error" onClick={() => handleRejectChange(diffChange.change_id)} sx={{ p: 0.5, color: 'rgba(255, 100, 100, 0.9)' }}><Cancel sx={{ fontSize: 16 }} /></IconButton>
+                                        <Button size="small" variant="outlined" startIcon={<CheckCircle sx={{ fontSize: 12 }} />} onClick={() => handleApproveChange(diffChange.change_id)} sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(100, 255, 100, 0.9)', borderColor: 'rgba(100, 255, 100, 0.9)' }}>{changeViewMode === 'combined' && pendingChangesForFile.length > 1 ? 'Accept All' : 'Accept'}</Button>
                                       </Box>
                                       <Box sx={{ flex: 1 }}><DiffEditor height="100%" language={getLanguageFromFilename(rightPaneTabs[rightActiveIndex].name)} original={diffChange.old_content || ''} modified={diffChange.new_content || ''} theme={selectedTheme} options={{ readOnly: true, minimap: { enabled: true }, fontSize: 13, renderSideBySide: diffViewMode === 'sideBySide', ignoreTrimWhitespace: false }} loading={<Box display="flex" alignItems="center" justifyContent="center" height="100%"><CircularProgress /></Box>} /></Box>
                                     </Box>
@@ -3112,25 +3112,22 @@ const NewCodeEditorPage: React.FC = () => {
                                 </ToggleButton>
                               </ToggleButtonGroup>
                               
-                              <Button
+                              <IconButton
                                 size="small"
-                                variant="contained"
-                                color="success"
-                                startIcon={<CheckCircle sx={{ fontSize: 12 }} />}
-                                onClick={() => handleApproveChange(diffChange.change_id)}
-                                sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(255, 255, 255, 0.9)' }}
+                                color="error"
+                                onClick={() => handleRejectChange(diffChange.change_id)}
+                                sx={{ p: 0.5, color: 'rgba(255, 100, 100, 0.9)' }}
                               >
-                                Accept
-                              </Button>
+                                <Cancel sx={{ fontSize: 16 }} />
+                              </IconButton>
                               <Button
                                 size="small"
                                 variant="outlined"
-                                color="error"
-                                startIcon={<Cancel sx={{ fontSize: 12 }} />}
-                                onClick={() => handleRejectChange(diffChange.change_id)}
-                                sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(255, 255, 255, 0.9)' }}
+                                startIcon={<CheckCircle sx={{ fontSize: 12 }} />}
+                                onClick={() => handleApproveChange(diffChange.change_id)}
+                                sx={{ fontSize: 9, height: 20, minWidth: 60, px: 0.75, color: 'rgba(100, 255, 100, 0.9)', borderColor: 'rgba(100, 255, 100, 0.9)' }}
                               >
-                                Reject
+                                {changeViewMode === 'combined' && pendingChangesForFile.length > 1 ? 'Accept All' : 'Accept'}
                               </Button>
                             </Box>
                             
