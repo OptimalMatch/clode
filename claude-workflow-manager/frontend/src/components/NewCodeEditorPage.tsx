@@ -356,7 +356,7 @@ const NewCodeEditorPage: React.FC = () => {
     middle: string | null;
     right: string | null;
   }>({ left: null, middle: null, right: null }); // Track tabs opened by perf test in each pane
-  const [perfTestCurrentPane, setPerfTestCurrentPane] = useState<'left' | 'middle' | 'right'>('left'); // Current pane for next file
+  const perfTestCurrentPaneRef = useRef<'left' | 'middle' | 'right'>('left'); // Current pane for next file
   
   // Tab system state
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
@@ -786,7 +786,7 @@ const NewCodeEditorPage: React.FC = () => {
     
     try {
       // Determine which pane to use
-      const targetPane = perfTestCurrentPane;
+      const targetPane = perfTestCurrentPaneRef.current;
       console.log(`[PerfTest] Opening file "${filePath}" in ${targetPane} pane (${perfTestPaneCount} panes total)`);
       
       // Set active pane before manipulating tabs (simulates clicking on the pane)
@@ -901,13 +901,13 @@ const NewCodeEditorPage: React.FC = () => {
       
       // Cycle to next pane for next file
       if (perfTestPaneCount === 2) {
-        setPerfTestCurrentPane(targetPane === 'left' ? 'right' : 'left');
+        perfTestCurrentPaneRef.current = targetPane === 'left' ? 'right' : 'left';
       } else if (perfTestPaneCount === 3) {
-        setPerfTestCurrentPane(
+        perfTestCurrentPaneRef.current = 
           targetPane === 'left' ? 'middle' :
-          targetPane === 'middle' ? 'right' : 'left'
-        );
+          targetPane === 'middle' ? 'right' : 'left';
       }
+      console.log(`[PerfTest] Next pane will be: ${perfTestCurrentPaneRef.current}`);
       
       // Scroll to line after a short delay to ensure editor is ready
       setTimeout(() => {
@@ -944,7 +944,7 @@ const NewCodeEditorPage: React.FC = () => {
     setPerfTestRunning(true);
     perfTestRunningRef.current = true;
     setPerfTestLogs([]);
-    setPerfTestCurrentPane('left'); // Reset to left pane for new test
+    perfTestCurrentPaneRef.current = 'left'; // Reset to left pane for new test
     setPerfTestOpenTabPaths({ left: null, middle: null, right: null }); // Clear any tracked tabs
     setPerfTestStats({
       totalCalls: 0,
@@ -1020,7 +1020,7 @@ const NewCodeEditorPage: React.FC = () => {
       perfTestRunningRef.current = false;
       setAutoRefreshEnabled(false);
       setPerfTestOpenTabPaths({ left: null, middle: null, right: null });
-      setPerfTestCurrentPane('left');
+      perfTestCurrentPaneRef.current = 'left';
       return;
     }
     
@@ -1030,7 +1030,7 @@ const NewCodeEditorPage: React.FC = () => {
       perfTestRunningRef.current = false;
       setAutoRefreshEnabled(false);
       setPerfTestOpenTabPaths({ left: null, middle: null, right: null });
-      setPerfTestCurrentPane('left');
+      perfTestCurrentPaneRef.current = 'left';
       return;
     }
     
@@ -1107,7 +1107,7 @@ const NewCodeEditorPage: React.FC = () => {
           });
           
           // Capture pane info before opening (as opening cycles to next pane)
-          const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPane} pane]` : '';
+          const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPaneRef.current} pane]` : '';
           
           // Open file and scroll to changed line
           await openFileAndScrollToLine(randomFile, changedLineNumber);
@@ -1137,7 +1137,7 @@ const NewCodeEditorPage: React.FC = () => {
           filesInRepo.push(newFileName);
           
           // Capture pane info before opening (as opening cycles to next pane)
-          const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPane} pane]` : '';
+          const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPaneRef.current} pane]` : '';
           
           // Open file and scroll to first line
           await openFileAndScrollToLine(newFileName, 1);
@@ -1207,7 +1207,7 @@ const NewCodeEditorPage: React.FC = () => {
     perfTestRunningRef.current = false;
     setAutoRefreshEnabled(false);
     setPerfTestOpenTabPaths({ left: null, middle: null, right: null });
-    setPerfTestCurrentPane('left');
+    perfTestCurrentPaneRef.current = 'left';
     
     // Reload changes to show new files
     await loadChanges();
@@ -4740,7 +4740,7 @@ const NewCodeEditorPage: React.FC = () => {
                                 perfTestRunningRef.current = false;
                                 setAutoRefreshEnabled(false);
                                 setPerfTestOpenTabPaths({ left: null, middle: null, right: null });
-                                setPerfTestCurrentPane('left');
+                                perfTestCurrentPaneRef.current = 'left';
                               } else {
                                 runPerformanceTest();
                               }
