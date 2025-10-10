@@ -330,6 +330,10 @@ const NewCodeEditorPage: React.FC = () => {
     minResponseTime: number;
     maxResponseTime: number;
     responseTimes: number[];
+    elapsedTime: number; // seconds
+    actualCallsPerSecond: number;
+    targetCallsPerSecond: number;
+    efficiency: number; // percentage
   }>({
     totalCalls: 0,
     successCalls: 0,
@@ -338,6 +342,10 @@ const NewCodeEditorPage: React.FC = () => {
     minResponseTime: 0,
     maxResponseTime: 0,
     responseTimes: [],
+    elapsedTime: 0,
+    actualCallsPerSecond: 0,
+    targetCallsPerSecond: 0,
+    efficiency: 0,
   });
   const [perfTestLogs, setPerfTestLogs] = useState<string[]>([]);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
@@ -862,6 +870,10 @@ const NewCodeEditorPage: React.FC = () => {
       minResponseTime: 0,
       maxResponseTime: 0,
       responseTimes: [],
+      elapsedTime: 0,
+      actualCallsPerSecond: 0,
+      targetCallsPerSecond: perfTestSpeed,
+      efficiency: 0,
     });
     
     const testStartTime = Date.now();
@@ -1041,7 +1053,12 @@ const NewCodeEditorPage: React.FC = () => {
         }
       }
       
-      // Update stats
+      // Update stats with performance metrics
+      const currentTime = Date.now();
+      const elapsedSeconds = (currentTime - testStartTime) / 1000;
+      const actualRate = elapsedSeconds > 0 ? completedCalls / elapsedSeconds : 0;
+      const efficiency = perfTestSpeed > 0 ? (actualRate / perfTestSpeed) * 100 : 0;
+      
       const avgTime = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
       const minTime = Math.min(...responseTimes);
       const maxTime = Math.max(...responseTimes);
@@ -1054,6 +1071,10 @@ const NewCodeEditorPage: React.FC = () => {
         minResponseTime: minTime,
         maxResponseTime: maxTime,
         responseTimes,
+        elapsedTime: elapsedSeconds,
+        actualCallsPerSecond: actualRate,
+        targetCallsPerSecond: perfTestSpeed,
+        efficiency: efficiency,
       });
       
       // Delay to match desired speed
@@ -1062,10 +1083,14 @@ const NewCodeEditorPage: React.FC = () => {
     
     const testEndTime = Date.now();
     const totalTime = (testEndTime - testStartTime) / 1000; // seconds
+    const finalActualRate = completedCalls / totalTime;
+    const finalEfficiency = (finalActualRate / perfTestSpeed) * 100;
     
     addLog(`Test completed in ${totalTime.toFixed(2)} seconds`);
     addLog(`Success: ${successCount}, Failed: ${failureCount}`);
     addLog(`Avg response time: ${(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length).toFixed(0)}ms`);
+    addLog(`Target rate: ${perfTestSpeed.toFixed(1)} calls/s, Actual rate: ${finalActualRate.toFixed(1)} calls/s`);
+    addLog(`Efficiency: ${finalEfficiency.toFixed(1)}% (${finalActualRate >= perfTestSpeed * 0.9 ? 'Good' : finalEfficiency >= 70 ? 'Fair' : 'Poor'})`);
     
     setPerfTestRunning(false);
     perfTestRunningRef.current = false;
@@ -4574,6 +4599,39 @@ const NewCodeEditorPage: React.FC = () => {
                             {perfTestRunning ? 'Stop Test' : 'Start Performance Test'}
                           </Button>
                           
+                          {/* Real-time Performance Indicator */}
+                          {perfTestRunning && perfTestStats.totalCalls > 0 && (
+                            <Box sx={{ mt: 1.5, p: 1, bgcolor: 'rgba(0, 0, 0, 0.3)', borderRadius: 1 }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                                <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                  Current Rate:
+                                </Typography>
+                                <Typography 
+                                  variant="caption" 
+                                  sx={{ 
+                                    fontSize: 9, 
+                                    fontWeight: 600,
+                                    color: perfTestStats.efficiency >= 90 ? '#4CAF50' : perfTestStats.efficiency >= 70 ? '#ff9800' : '#f44336'
+                                  }}
+                                >
+                                  {perfTestStats.actualCallsPerSecond.toFixed(1)} / {perfTestStats.targetCallsPerSecond.toFixed(1)} calls/s
+                                </Typography>
+                              </Box>
+                              <LinearProgress 
+                                variant="determinate" 
+                                value={Math.min(perfTestStats.efficiency, 100)} 
+                                sx={{
+                                  height: 4,
+                                  borderRadius: 2,
+                                  bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                  '& .MuiLinearProgress-bar': {
+                                    bgcolor: perfTestStats.efficiency >= 90 ? '#4CAF50' : perfTestStats.efficiency >= 70 ? '#ff9800' : '#f44336',
+                                  },
+                                }}
+                              />
+                            </Box>
+                          )}
+                          
                           <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)', my: 2 }} />
                           
                           {/* Auto-Refresh Settings */}
@@ -4692,6 +4750,52 @@ const NewCodeEditorPage: React.FC = () => {
                               </Typography>
                               <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600 }}>
                                 {perfTestStats.maxResponseTime.toFixed(0)}ms
+                              </Typography>
+                            </Box>
+                            
+                            <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)', my: 0.5 }} />
+                            
+                            {/* Performance Metrics */}
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Elapsed Time:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600 }}>
+                                {perfTestStats.elapsedTime.toFixed(1)}s
+                              </Typography>
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Target Rate:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600 }}>
+                                {perfTestStats.targetCallsPerSecond.toFixed(1)} calls/s
+                              </Typography>
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Actual Rate:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: perfTestStats.actualCallsPerSecond >= perfTestStats.targetCallsPerSecond * 0.9 ? '#4CAF50' : '#ff9800', fontWeight: 600 }}>
+                                {perfTestStats.actualCallsPerSecond.toFixed(1)} calls/s
+                              </Typography>
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Efficiency:
+                              </Typography>
+                              <Typography 
+                                variant="caption" 
+                                sx={{ 
+                                  fontSize: 10, 
+                                  color: perfTestStats.efficiency >= 90 ? '#4CAF50' : perfTestStats.efficiency >= 70 ? '#ff9800' : '#f44336',
+                                  fontWeight: 600 
+                                }}
+                              >
+                                {perfTestStats.efficiency.toFixed(1)}%
                               </Typography>
                             </Box>
                           </Box>
