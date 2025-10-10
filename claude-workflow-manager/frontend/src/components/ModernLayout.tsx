@@ -328,7 +328,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
       </Box>
       
       {/* Main Content Area */}
-      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'auto' }}>
         {children}
       </Box>
     </Box>

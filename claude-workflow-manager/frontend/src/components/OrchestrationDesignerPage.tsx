@@ -2314,10 +2314,12 @@ Format your response as JSON:
 
   return (
     <Box sx={{ 
-      height: '100vh', 
       display: 'flex', 
       flexDirection: 'column',
+      minHeight: '100%',
       backgroundColor: darkMode ? '#121212' : '#ffffff',
+      px: 6,
+      py: 3,
       color: darkMode ? '#ffffff' : '#000000',
     }}>
       {/* Header */}

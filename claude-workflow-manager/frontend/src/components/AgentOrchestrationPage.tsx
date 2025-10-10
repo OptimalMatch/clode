@@ -1175,7 +1175,8 @@ const AgentOrchestrationPage: React.FC = () => {
 
   return (
     <Box sx={{ 
-      p: 3,
+      px: 6,
+      py: 3,
       '@keyframes pulse': {
         '0%': {
           transform: 'rotate(0deg)',
