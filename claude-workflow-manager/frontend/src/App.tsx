@@ -6,6 +6,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { SnackbarProvider } from 'notistack';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
+import ModernLayout from './components/ModernLayout';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import ProfilePage from './components/ProfilePage';
@@ -55,23 +56,23 @@ function App() {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 
-                {/* Protected routes (with layout) */}
-                <Route path="/" element={<Layout><WorkflowsPage /></Layout>} />
-                <Route path="/workflows" element={<Layout><WorkflowsPage /></Layout>} />
-                <Route path="/profile" element={<Layout><ProfilePage /></Layout>} />
-                <Route path="/design" element={<Layout><DesignPage /></Layout>} />
-                <Route path="/prompts" element={<Layout><PromptsPage /></Layout>} />
-                <Route path="/subagents" element={<Layout><SubagentsPage /></Layout>} />
-                <Route path="/claude-auth" element={<Layout><ClaudeAuthPage /></Layout>} />
-                <Route path="/ssh-keys" element={<Layout><SSHKeysPage /></Layout>} />
-                <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
-                <Route path="/orchestration" element={<Layout><AgentOrchestrationPage /></Layout>} />
-                <Route path="/orchestration-designer" element={<Layout><OrchestrationDesignerPage /></Layout>} />
-                <Route path="/deployments" element={<Layout><DeploymentsPage /></Layout>} />
-                <Route path="/code-editor" element={<Layout><CodeEditorPage /></Layout>} />
+                {/* Protected routes (with modern layout) */}
+                <Route path="/" element={<ModernLayout><WorkflowsPage /></ModernLayout>} />
+                <Route path="/workflows" element={<ModernLayout><WorkflowsPage /></ModernLayout>} />
+                <Route path="/profile" element={<ModernLayout><ProfilePage /></ModernLayout>} />
+                <Route path="/design" element={<ModernLayout><DesignPage /></ModernLayout>} />
+                <Route path="/prompts" element={<ModernLayout><PromptsPage /></ModernLayout>} />
+                <Route path="/subagents" element={<ModernLayout><SubagentsPage /></ModernLayout>} />
+                <Route path="/claude-auth" element={<ModernLayout><ClaudeAuthPage /></ModernLayout>} />
+                <Route path="/ssh-keys" element={<ModernLayout><SSHKeysPage /></ModernLayout>} />
+                <Route path="/settings" element={<ModernLayout><SettingsPage /></ModernLayout>} />
+                <Route path="/orchestration" element={<ModernLayout><AgentOrchestrationPage /></ModernLayout>} />
+                <Route path="/orchestration-designer" element={<ModernLayout><OrchestrationDesignerPage /></ModernLayout>} />
+                <Route path="/deployments" element={<ModernLayout><DeploymentsPage /></ModernLayout>} />
+                <Route path="/code-editor" element={<NewCodeEditorPage />} />
                 <Route path="/new-code-editor" element={<NewCodeEditorPage />} />
-                <Route path="/agents/:workflowId" element={<Layout><AgentsPage /></Layout>} />
-                <Route path="/multi-agent" element={<Layout><MultiAgentView /></Layout>} />
+                <Route path="/agents/:workflowId" element={<ModernLayout><AgentsPage /></ModernLayout>} />
+                <Route path="/multi-agent" element={<ModernLayout><MultiAgentView /></ModernLayout>} />
               </Routes>
             </AuthProvider>
           </Router>
