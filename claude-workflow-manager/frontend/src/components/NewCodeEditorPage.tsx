@@ -3502,7 +3502,9 @@ const NewCodeEditorPage: React.FC = () => {
                           <MenuItem
                             key={design.id}
                             onClick={() => {
-                              setSelectedDesign(design.id);
+                              if (design.id) {
+                                setSelectedDesign(design.id);
+                              }
                               setDesignMenuAnchor(null);
                             }}
                             sx={{
