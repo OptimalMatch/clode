@@ -64,6 +64,9 @@ import {
   ArrowBack,
   History,
   Menu as MenuIcon,
+  AccountTree,
+  Terminal,
+  Dashboard,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
@@ -250,6 +253,7 @@ const NewCodeEditorPage: React.FC = () => {
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; description: string }>>([]);
   const [modelMenuAnchor, setModelMenuAnchor] = useState<null | HTMLElement>(null);
   const [designMenuAnchor, setDesignMenuAnchor] = useState<null | HTMLElement>(null);
+  const [primaryNavView, setPrimaryNavView] = useState<'editor' | 'orchestration' | 'terminal' | 'settings'>('editor');
   
   // Diff state
   const [showDiff, setShowDiff] = useState(false);
@@ -1948,13 +1952,13 @@ const NewCodeEditorPage: React.FC = () => {
         </Tooltip>
       </Box>
       
-      {/* Main Content Area with Activity Bar and Resizable Panels */}
+      {/* Main Content Area with Primary Nav, Activity Bar and Resizable Panels */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Activity Bar */}
+        {/* Primary Navigation Bar */}
         <Box 
           sx={{ 
             width: '48px',
-            bgcolor: '#333333',
+            bgcolor: '#2d2d30',
             borderRight: '1px solid rgba(255, 255, 255, 0.1)',
             display: 'flex',
             flexDirection: 'column',
@@ -1963,6 +1967,91 @@ const NewCodeEditorPage: React.FC = () => {
             flexShrink: 0,
           }}
         >
+          <Tooltip title="Editor" placement="right">
+            <IconButton
+              size="small"
+              onClick={() => setPrimaryNavView('editor')}
+              sx={{ 
+                color: primaryNavView === 'editor' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
+                borderLeft: primaryNavView === 'editor' ? '2px solid #6495ed' : '2px solid transparent',
+                borderRadius: 0,
+                width: '100%',
+                py: 1.5,
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Code sx={{ fontSize: 24 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Orchestration" placement="right">
+            <IconButton
+              size="small"
+              onClick={() => setPrimaryNavView('orchestration')}
+              sx={{ 
+                color: primaryNavView === 'orchestration' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
+                borderLeft: primaryNavView === 'orchestration' ? '2px solid #6495ed' : '2px solid transparent',
+                borderRadius: 0,
+                width: '100%',
+                py: 1.5,
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <AccountTree sx={{ fontSize: 24 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Terminal" placement="right">
+            <IconButton
+              size="small"
+              onClick={() => setPrimaryNavView('terminal')}
+              sx={{ 
+                color: primaryNavView === 'terminal' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
+                borderLeft: primaryNavView === 'terminal' ? '2px solid #6495ed' : '2px solid transparent',
+                borderRadius: 0,
+                width: '100%',
+                py: 1.5,
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Terminal sx={{ fontSize: 24 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Box sx={{ flex: 1 }} />
+          
+          <Tooltip title="Settings" placement="right">
+            <IconButton
+              size="small"
+              onClick={() => setPrimaryNavView('settings')}
+              sx={{ 
+                color: primaryNavView === 'settings' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
+                borderLeft: primaryNavView === 'settings' ? '2px solid #6495ed' : '2px solid transparent',
+                borderRadius: 0,
+                width: '100%',
+                py: 1.5,
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Settings sx={{ fontSize: 24 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+        
+        {/* Activity Bar - Only show when Editor is selected */}
+        {primaryNavView === 'editor' && (
+          <Box 
+            sx={{ 
+              width: '48px',
+              bgcolor: '#333333',
+              borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              py: 1,
+              flexShrink: 0,
+            }}
+          >
           <Tooltip title="Explorer" placement="right">
             <IconButton
               size="small"
@@ -2045,9 +2134,10 @@ const NewCodeEditorPage: React.FC = () => {
           </Tooltip>
           
         </Box>
+        )}
         
-        {/* Resizable Panels */}
-        {selectedWorkflow ? (
+        {/* Resizable Panels - Only show when Editor is selected */}
+        {primaryNavView === 'editor' && selectedWorkflow ? (
           <PanelGroup direction="horizontal" style={{ flex: 1 }}>
             {/* Sidebar Panel - Only show when not collapsed */}
             {!sidebarCollapsed && (
@@ -3600,8 +3690,8 @@ const NewCodeEditorPage: React.FC = () => {
               </>
             )}
           </PanelGroup>
-        ) : (
-          // No Workflow Selected
+        ) : primaryNavView === 'editor' ? (
+          // No Workflow Selected (Editor view)
           <Box 
             sx={{ 
               flex: 1, 
@@ -3615,6 +3705,66 @@ const NewCodeEditorPage: React.FC = () => {
             <Code sx={{ fontSize: 80, color: 'rgba(255, 255, 255, 0.2)' }} />
             <Typography variant="h5" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
               Select a repository to begin
+            </Typography>
+          </Box>
+        ) : primaryNavView === 'orchestration' ? (
+          // Orchestration Designer View
+          <Box 
+            sx={{ 
+              flex: 1, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              flexDirection: 'column',
+              gap: 2,
+            }}
+          >
+            <AccountTree sx={{ fontSize: 80, color: 'rgba(255, 255, 255, 0.2)' }} />
+            <Typography variant="h5" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+              Orchestration Designer
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.3)' }}>
+              Coming soon...
+            </Typography>
+          </Box>
+        ) : primaryNavView === 'terminal' ? (
+          // Terminal View
+          <Box 
+            sx={{ 
+              flex: 1, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              flexDirection: 'column',
+              gap: 2,
+            }}
+          >
+            <Terminal sx={{ fontSize: 80, color: 'rgba(255, 255, 255, 0.2)' }} />
+            <Typography variant="h5" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+              Terminal
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.3)' }}>
+              Coming soon...
+            </Typography>
+          </Box>
+        ) : (
+          // Settings View
+          <Box 
+            sx={{ 
+              flex: 1, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              flexDirection: 'column',
+              gap: 2,
+            }}
+          >
+            <Settings sx={{ fontSize: 80, color: 'rgba(255, 255, 255, 0.2)' }} />
+            <Typography variant="h5" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+              Settings
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.3)' }}>
+              Coming soon...
             </Typography>
           </Box>
         )}
