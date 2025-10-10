@@ -72,6 +72,7 @@ import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../ser
 import api from '../services/api';
 import EnhancedFileTree, { getFileIcon } from './EnhancedFileTree';
 import InlineDiffViewer from './InlineDiffViewer';
+import RunnerSprite from './RunnerSprite';
 
 interface FileItem {
   name: string;
@@ -1815,9 +1816,9 @@ const NewCodeEditorPage: React.FC = () => {
           flexShrink: 0,
         }}
       >
-        <Code sx={{ fontSize: 20, color: '#6495ed' }} />
+        <RunnerSprite size={20} color="blue" />
         <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 13, color: 'rgba(255, 255, 255, 0.9)' }}>
-          Code Editor
+          CLode
         </Typography>
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5, bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
         
