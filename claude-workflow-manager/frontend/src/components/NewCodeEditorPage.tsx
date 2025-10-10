@@ -785,23 +785,14 @@ const NewCodeEditorPage: React.FC = () => {
     if (!selectedWorkflow) return;
     
     try {
-      // Set up split view based on perfTestPaneCount
-      if (perfTestPaneCount > 1 && !splitViewEnabled) {
-        setSplitViewEnabled(true);
-        setPaneCount(perfTestPaneCount);
-        // Small delay to allow split view to initialize
-        await new Promise(resolve => setTimeout(resolve, 50));
-      } else if (perfTestPaneCount === 1 && splitViewEnabled) {
-        setSplitViewEnabled(false);
-        setPaneCount(1);
-      } else if (perfTestPaneCount !== paneCount && splitViewEnabled) {
-        setPaneCount(perfTestPaneCount);
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
-      
       // Determine which pane to use
       const targetPane = perfTestCurrentPane;
-      console.log(`[PerfTest] Opening file in ${targetPane} pane (${perfTestPaneCount} panes total)`);
+      console.log(`[PerfTest] Opening file "${filePath}" in ${targetPane} pane (${perfTestPaneCount} panes total)`);
+      
+      // Set active pane before manipulating tabs (simulates clicking on the pane)
+      if (perfTestPaneCount > 1) {
+        setActivePaneId(targetPane);
+      }
       
       // Get the appropriate tabs and setters for the target pane
       let tabs, setTabs, setActiveIndex, activeIndex;
@@ -862,18 +853,12 @@ const NewCodeEditorPage: React.FC = () => {
       setTabs(newTabs);
       setActiveIndex(updatedTabs.length);
       
-      // Update file state for single pane
-      if (perfTestPaneCount === 1) {
-        setSelectedFile({ name: newTab.name, path: newTab.path, type: 'file' });
-        setFileContent(content);
-        setOriginalContent(content);
-      } else {
-        // Set active pane for multi-pane and update file content
-        setActivePaneId(targetPane);
-        setSelectedFile({ name: newTab.name, path: newTab.path, type: 'file' });
-        setFileContent(content);
-        setOriginalContent(content);
-      }
+      console.log(`[PerfTest] Added tab to ${targetPane} pane. Total tabs in pane: ${newTabs.length}`);
+      
+      // Update file state
+      setSelectedFile({ name: newTab.name, path: newTab.path, type: 'file' });
+      setFileContent(content);
+      setOriginalContent(content);
       
       // Track this tab as opened by performance test in this pane
       setPerfTestOpenTabPaths(prev => ({
@@ -942,6 +927,21 @@ const NewCodeEditorPage: React.FC = () => {
       efficiency: 0,
     });
     
+    // Set up split view based on perfTestPaneCount BEFORE starting the test
+    if (perfTestPaneCount > 1 && !splitViewEnabled) {
+      setSplitViewEnabled(true);
+      setPaneCount(perfTestPaneCount);
+      setActivePaneId('left');
+      // Wait for split view to initialize
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } else if (perfTestPaneCount === 1 && splitViewEnabled) {
+      setSplitViewEnabled(false);
+      setPaneCount(1);
+    } else if (perfTestPaneCount !== paneCount && splitViewEnabled) {
+      setPaneCount(perfTestPaneCount);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    
     const testStartTime = Date.now();
     let completedCalls = 0;
     const responseTimes: number[] = [];
@@ -956,6 +956,7 @@ const NewCodeEditorPage: React.FC = () => {
     addLog(`Starting performance test with ${perfTestCallCount} calls at ${perfTestSpeed} calls/second`);
     if (perfTestPaneCount > 1) {
       addLog(`Using ${perfTestPaneCount} editor panes - files will cycle across panes`);
+      console.log(`[PerfTest] Split view initialized with ${perfTestPaneCount} panes`);
     }
     
     // Get list of files to work with
