@@ -1933,6 +1933,8 @@ const NewCodeEditorPage: React.FC = () => {
         enqueueSnackbar('Change rejected', { variant: 'success' });
       }
       loadChanges();
+      // Refresh directory to remove any leftover files from rejected create operations
+      await loadDirectory(currentPath);
     } catch (error: any) {
       enqueueSnackbar(error.response?.data?.detail || 'Failed to reject change', { variant: 'error' });
     }
@@ -3232,6 +3234,8 @@ const NewCodeEditorPage: React.FC = () => {
                                 for (const change of pendingChanges) {
                                   await handleRejectChange(change.change_id);
                                 }
+                                // Refresh directory to remove any leftover files
+                                await loadDirectory(currentPath);
                                 enqueueSnackbar('All changes cancelled', { variant: 'info' });
                               } catch (error: any) {
                                 enqueueSnackbar(`Error cancelling changes: ${error.message}`, { variant: 'error' });
