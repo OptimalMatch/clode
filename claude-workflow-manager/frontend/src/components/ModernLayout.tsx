@@ -35,7 +35,7 @@ interface ModernLayoutProps {
   aiAssistantOpen?: boolean;
 }
 
-type PrimaryNavView = 'workflows' | 'multi-agent' | 'orchestration' | 'orchestration-designer' | 'deployments' | 'editor' | 'design' | 'prompts' | 'subagents' | 'claude-auth' | 'ssh-keys' | 'terminal' | 'settings';
+type PrimaryNavView = 'workflows' | 'multi-agent' | 'orchestration' | 'orchestration-designer' | 'deployments' | 'editor' | 'design' | 'prompts' | 'subagents' | 'claude-auth' | 'ssh-keys' | 'settings';
 
 const ModernLayout: React.FC<ModernLayoutProps> = ({ 
   children,
@@ -61,7 +61,6 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
     if (location.pathname.includes('/subagents')) return 'subagents';
     if (location.pathname.includes('/claude-auth')) return 'claude-auth';
     if (location.pathname.includes('/ssh-keys')) return 'ssh-keys';
-    if (location.pathname.includes('/terminal')) return 'terminal';
     if (location.pathname.includes('/settings')) return 'settings';
     return 'workflows';
   });
@@ -102,9 +101,6 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
         break;
       case 'ssh-keys':
         navigate('/ssh-keys');
-        break;
-      case 'terminal':
-        navigate('/terminal');
         break;
       case 'settings':
         navigate('/settings');
@@ -276,19 +272,6 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
               }}
             >
               <VpnKey sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>
-          
-          <Tooltip title="Terminal">
-            <IconButton
-              size="small"
-              onClick={() => handleNavClick('terminal')}
-              sx={{ 
-                color: primaryNavView === 'terminal' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
-                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
-              }}
-            >
-              <Terminal sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
           

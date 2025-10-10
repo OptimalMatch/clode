@@ -164,7 +164,7 @@ const SubagentsPage: React.FC = () => {
   };
 
   return (
-    <Box>
+    <Box sx={{ px: 6, py: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Box>
           <Typography variant="h4">Subagents</Typography>
