@@ -72,6 +72,7 @@ import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../ser
 import api from '../services/api';
 import EnhancedFileTree, { getFileIcon } from './EnhancedFileTree';
 import InlineDiffViewer from './InlineDiffViewer';
+import RunnerSprite from './RunnerSprite';
 
 interface FileItem {
   name: string;
@@ -1815,9 +1816,9 @@ const NewCodeEditorPage: React.FC = () => {
           flexShrink: 0,
         }}
       >
-        <Code sx={{ fontSize: 20, color: '#6495ed' }} />
+        <RunnerSprite size={20} color="blue" />
         <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 13, color: 'rgba(255, 255, 255, 0.9)' }}>
-          Code Editor
+          CLode
         </Typography>
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5, bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
         
@@ -3263,7 +3264,7 @@ const NewCodeEditorPage: React.FC = () => {
                           color: 'rgba(255, 255, 255, 0.7)',
                         }}
                       >
-                        AI Assistant
+                        Agentic Construct
                       </Typography>
                       <Tooltip title="Close">
                         <IconButton
@@ -3307,7 +3308,7 @@ const NewCodeEditorPage: React.FC = () => {
                         <Box textAlign="center" py={4}>
                           <SmartToy sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)', mb: 1 }} />
                           <Typography sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.4)' }}>
-                            Start a conversation with AI
+                            Run your agentic orchestration in an Editor
                           </Typography>
                         </Box>
                       ) : (
@@ -3430,7 +3431,7 @@ const NewCodeEditorPage: React.FC = () => {
                       <TextField
                         fullWidth
                         size="small"
-                        placeholder="Ask AI..."
+                        placeholder="I would like your input for this construct...."
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
