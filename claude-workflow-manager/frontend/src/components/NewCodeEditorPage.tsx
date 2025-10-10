@@ -67,8 +67,17 @@ import {
   AccountTree,
   Terminal,
   Dashboard,
+  WorkOutline,
+  ViewModule,
+  Psychology,
+  CloudUpload,
+  DesignServices,
+  Description,
+  VpnKey,
+  AccountCircle,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor, { DiffEditor, loader } from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
@@ -210,6 +219,8 @@ const getAgentColor = (agentName: string): string => {
 
 const NewCodeEditorPage: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
+  const navigate = useNavigate();
+  const location = useLocation();
   
   // State
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
@@ -253,7 +264,6 @@ const NewCodeEditorPage: React.FC = () => {
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; description: string }>>([]);
   const [modelMenuAnchor, setModelMenuAnchor] = useState<null | HTMLElement>(null);
   const [designMenuAnchor, setDesignMenuAnchor] = useState<null | HTMLElement>(null);
-  const [primaryNavView, setPrimaryNavView] = useState<'editor' | 'orchestration' | 'terminal' | 'settings'>('editor');
   
   // Diff state
   const [showDiff, setShowDiff] = useState(false);
@@ -1901,25 +1911,51 @@ const NewCodeEditorPage: React.FC = () => {
         
         {/* Primary Navigation Icons - Centered */}
         <Box sx={{ display: 'flex', gap: 0.5, mx: 'auto' }}>
-          <Tooltip title="Editor">
+          <Tooltip title="Workflows">
             <IconButton
               size="small"
-              onClick={() => setPrimaryNavView('editor')}
+              onClick={() => navigate('/workflows')}
               sx={{ 
-                color: primaryNavView === 'editor' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                color: location.pathname === '/workflows' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
             >
-              <Code sx={{ fontSize: 18 }} />
+              <WorkOutline sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Multi-Agent">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/multi-agent')}
+              sx={{ 
+                color: location.pathname === '/multi-agent' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <ViewModule sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
           
           <Tooltip title="Orchestration">
             <IconButton
               size="small"
-              onClick={() => setPrimaryNavView('orchestration')}
+              onClick={() => navigate('/orchestration')}
               sx={{ 
-                color: primaryNavView === 'orchestration' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                color: location.pathname === '/orchestration' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Psychology sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Orchestration Designer">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/orchestration-designer')}
+              sx={{ 
+                color: location.pathname === '/orchestration-designer' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
             >
@@ -1927,12 +1963,103 @@ const NewCodeEditorPage: React.FC = () => {
             </IconButton>
           </Tooltip>
           
+          <Tooltip title="Deployments">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/deployments')}
+              sx={{ 
+                color: location.pathname === '/deployments' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <CloudUpload sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Code Editor">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/code-editor')}
+              sx={{ 
+                color: location.pathname === '/code-editor' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Code sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Design">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/design')}
+              sx={{ 
+                color: location.pathname === '/design' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <DesignServices sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Prompts">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/prompts')}
+              sx={{ 
+                color: location.pathname === '/prompts' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Description sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Subagents">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/subagents')}
+              sx={{ 
+                color: location.pathname === '/subagents' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <SmartToy sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Claude Auth">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/claude-auth')}
+              sx={{ 
+                color: location.pathname === '/claude-auth' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <AccountCircle sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="SSH Keys">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/ssh-keys')}
+              sx={{ 
+                color: location.pathname === '/ssh-keys' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <VpnKey sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
           <Tooltip title="Terminal">
             <IconButton
               size="small"
-              onClick={() => setPrimaryNavView('terminal')}
+              onClick={() => navigate('/terminal')}
               sx={{ 
-                color: primaryNavView === 'terminal' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                color: location.pathname === '/terminal' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
             >
@@ -1943,9 +2070,9 @@ const NewCodeEditorPage: React.FC = () => {
           <Tooltip title="Settings">
             <IconButton
               size="small"
-              onClick={() => setPrimaryNavView('settings')}
+              onClick={() => navigate('/settings')}
               sx={{ 
-                color: primaryNavView === 'settings' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                color: location.pathname === '/settings' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
             >
@@ -2009,8 +2136,7 @@ const NewCodeEditorPage: React.FC = () => {
       
       {/* Main Content Area with Activity Bar and Resizable Panels */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Activity Bar - Only show when Editor is selected */}
-        {primaryNavView === 'editor' && (
+        {/* Activity Bar */}
           <Box 
             sx={{ 
               width: '48px',
@@ -2105,10 +2231,9 @@ const NewCodeEditorPage: React.FC = () => {
           </Tooltip>
           
         </Box>
-        )}
         
-        {/* Resizable Panels - Only show when Editor is selected */}
-        {primaryNavView === 'editor' && selectedWorkflow ? (
+        {/* Resizable Panels */}
+        {selectedWorkflow ? (
           <PanelGroup direction="horizontal" style={{ flex: 1 }}>
             {/* Sidebar Panel - Only show when not collapsed */}
             {!sidebarCollapsed && (
@@ -3661,7 +3786,7 @@ const NewCodeEditorPage: React.FC = () => {
               </>
             )}
           </PanelGroup>
-        ) : primaryNavView === 'editor' ? (
+        ) : (
           // No Workflow Selected (Editor view)
           <Box 
             sx={{ 
@@ -3676,66 +3801,6 @@ const NewCodeEditorPage: React.FC = () => {
             <Code sx={{ fontSize: 80, color: 'rgba(255, 255, 255, 0.2)' }} />
             <Typography variant="h5" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
               Select a repository to begin
-            </Typography>
-          </Box>
-        ) : primaryNavView === 'orchestration' ? (
-          // Orchestration Designer View
-          <Box 
-            sx={{ 
-              flex: 1, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              flexDirection: 'column',
-              gap: 2,
-            }}
-          >
-            <AccountTree sx={{ fontSize: 80, color: 'rgba(255, 255, 255, 0.2)' }} />
-            <Typography variant="h5" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
-              Orchestration Designer
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.3)' }}>
-              Coming soon...
-            </Typography>
-          </Box>
-        ) : primaryNavView === 'terminal' ? (
-          // Terminal View
-          <Box 
-            sx={{ 
-              flex: 1, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              flexDirection: 'column',
-              gap: 2,
-            }}
-          >
-            <Terminal sx={{ fontSize: 80, color: 'rgba(255, 255, 255, 0.2)' }} />
-            <Typography variant="h5" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
-              Terminal
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.3)' }}>
-              Coming soon...
-            </Typography>
-          </Box>
-        ) : (
-          // Settings View
-          <Box 
-            sx={{ 
-              flex: 1, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              flexDirection: 'column',
-              gap: 2,
-            }}
-          >
-            <Settings sx={{ fontSize: 80, color: 'rgba(255, 255, 255, 0.2)' }} />
-            <Typography variant="h5" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
-              Settings
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.3)' }}>
-              Coming soon...
             </Typography>
           </Box>
         )}
