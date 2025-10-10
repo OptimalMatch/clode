@@ -1899,6 +1899,61 @@ const NewCodeEditorPage: React.FC = () => {
           </Select>
         </FormControl>
         
+        {/* Primary Navigation Icons - Centered */}
+        <Box sx={{ display: 'flex', gap: 0.5, mx: 'auto' }}>
+          <Tooltip title="Editor">
+            <IconButton
+              size="small"
+              onClick={() => setPrimaryNavView('editor')}
+              sx={{ 
+                color: primaryNavView === 'editor' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Code sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Orchestration">
+            <IconButton
+              size="small"
+              onClick={() => setPrimaryNavView('orchestration')}
+              sx={{ 
+                color: primaryNavView === 'orchestration' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <AccountTree sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Terminal">
+            <IconButton
+              size="small"
+              onClick={() => setPrimaryNavView('terminal')}
+              sx={{ 
+                color: primaryNavView === 'terminal' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Terminal sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Settings">
+            <IconButton
+              size="small"
+              onClick={() => setPrimaryNavView('settings')}
+              sx={{ 
+                color: primaryNavView === 'settings' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Settings sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+        
         <Box sx={{ flexGrow: 1 }} />
         
         {/* Compact Action Icons */}
@@ -1952,103 +2007,19 @@ const NewCodeEditorPage: React.FC = () => {
         </Tooltip>
       </Box>
       
-      {/* Main Content Area with Primary Nav, Activity Bar and Resizable Panels */}
+      {/* Main Content Area with Activity Bar and Resizable Panels */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Primary Navigation Bar */}
-        <Box 
-          sx={{ 
-            width: '48px',
-            bgcolor: '#2d2d30',
-            borderRight: '1px solid rgba(255, 255, 255, 0.1)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            py: 1,
-            flexShrink: 0,
-          }}
-        >
-          <Tooltip title="Editor" placement="right">
-            <IconButton
-              size="small"
-              onClick={() => setPrimaryNavView('editor')}
-              sx={{ 
-                color: primaryNavView === 'editor' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
-                borderLeft: primaryNavView === 'editor' ? '2px solid #6495ed' : '2px solid transparent',
-                borderRadius: 0,
-                width: '100%',
-                py: 1.5,
-                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
-              }}
-            >
-              <Code sx={{ fontSize: 24 }} />
-            </IconButton>
-          </Tooltip>
-          
-          <Tooltip title="Orchestration" placement="right">
-            <IconButton
-              size="small"
-              onClick={() => setPrimaryNavView('orchestration')}
-              sx={{ 
-                color: primaryNavView === 'orchestration' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
-                borderLeft: primaryNavView === 'orchestration' ? '2px solid #6495ed' : '2px solid transparent',
-                borderRadius: 0,
-                width: '100%',
-                py: 1.5,
-                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
-              }}
-            >
-              <AccountTree sx={{ fontSize: 24 }} />
-            </IconButton>
-          </Tooltip>
-          
-          <Tooltip title="Terminal" placement="right">
-            <IconButton
-              size="small"
-              onClick={() => setPrimaryNavView('terminal')}
-              sx={{ 
-                color: primaryNavView === 'terminal' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
-                borderLeft: primaryNavView === 'terminal' ? '2px solid #6495ed' : '2px solid transparent',
-                borderRadius: 0,
-                width: '100%',
-                py: 1.5,
-                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
-              }}
-            >
-              <Terminal sx={{ fontSize: 24 }} />
-            </IconButton>
-          </Tooltip>
-          
-          <Box sx={{ flex: 1 }} />
-          
-          <Tooltip title="Settings" placement="right">
-            <IconButton
-              size="small"
-              onClick={() => setPrimaryNavView('settings')}
-              sx={{ 
-                color: primaryNavView === 'settings' ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
-                borderLeft: primaryNavView === 'settings' ? '2px solid #6495ed' : '2px solid transparent',
-                borderRadius: 0,
-                width: '100%',
-                py: 1.5,
-                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
-              }}
-            >
-              <Settings sx={{ fontSize: 24 }} />
-            </IconButton>
-          </Tooltip>
-        </Box>
-        
         {/* Activity Bar - Only show when Editor is selected */}
         {primaryNavView === 'editor' && (
           <Box 
             sx={{ 
-              width: '24px',
+              width: '48px',
               bgcolor: '#333333',
               borderRight: '1px solid rgba(255, 255, 255, 0.1)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              py: 0.5,
+              py: 1,
               flexShrink: 0,
             }}
           >
@@ -2068,11 +2039,11 @@ const NewCodeEditorPage: React.FC = () => {
                 borderLeft: activityBarView === 'explorer' ? '2px solid #6495ed' : '2px solid transparent',
                 borderRadius: 0,
                 width: '100%',
-                py: 0.75,
+                py: 1.5,
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
             >
-              <FolderOutlined sx={{ fontSize: 12 }} />
+              <FolderOutlined sx={{ fontSize: 24 }} />
             </IconButton>
           </Tooltip>
           
@@ -2092,11 +2063,11 @@ const NewCodeEditorPage: React.FC = () => {
                 borderLeft: activityBarView === 'search' ? '2px solid #6495ed' : '2px solid transparent',
                 borderRadius: 0,
                 width: '100%',
-                py: 0.75,
+                py: 1.5,
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
             >
-              <SearchOutlined sx={{ fontSize: 12 }} />
+              <SearchOutlined sx={{ fontSize: 24 }} />
             </IconButton>
           </Tooltip>
           
@@ -2106,7 +2077,7 @@ const NewCodeEditorPage: React.FC = () => {
               color="warning" 
               sx={{ 
                 width: '100%',
-                '& .MuiBadge-badge': { right: 2, top: 4, fontSize: 7, height: 12, minWidth: 12 },
+                '& .MuiBadge-badge': { right: 8, top: 8, fontSize: 9, height: 16, minWidth: 16 },
               }}
             >
               <IconButton
@@ -2124,11 +2095,11 @@ const NewCodeEditorPage: React.FC = () => {
                   borderLeft: activityBarView === 'changes' ? '2px solid #6495ed' : '2px solid transparent',
                   borderRadius: 0,
                   width: '100%',
-                  py: 0.75,
+                  py: 1.5,
                   '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
                 }}
               >
-                <SourceOutlined sx={{ fontSize: 12 }} />
+                <SourceOutlined sx={{ fontSize: 24 }} />
               </IconButton>
             </Badge>
           </Tooltip>
