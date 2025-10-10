@@ -249,6 +249,7 @@ const NewCodeEditorPage: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState<string>('claude-sonnet-4-20250514');
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; description: string }>>([]);
   const [modelMenuAnchor, setModelMenuAnchor] = useState<null | HTMLElement>(null);
+  const [designMenuAnchor, setDesignMenuAnchor] = useState<null | HTMLElement>(null);
   
   // Diff state
   const [showDiff, setShowDiff] = useState(false);
@@ -3305,27 +3306,6 @@ const NewCodeEditorPage: React.FC = () => {
                       </Tooltip>
                     </Box>
                     
-                    {/* Design Selector */}
-                    <Box sx={{ p: 2, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                      <FormControl fullWidth size="small">
-                        <Select
-                          value={selectedDesign}
-                          onChange={(e) => setSelectedDesign(e.target.value)}
-                          displayEmpty
-                          sx={{ fontSize: 11 }}
-                        >
-                          <MenuItem value="" disabled sx={{ fontSize: 11 }}>
-                            <em>Select Design</em>
-                          </MenuItem>
-                          {orchestrationDesigns.map((design) => (
-                            <MenuItem key={design.id} value={design.id} sx={{ fontSize: 11 }}>
-                              {design.name}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    </Box>
-                    
                     {/* Chat Messages */}
                     <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
                       {chatMessages.length === 0 ? (
@@ -3485,8 +3465,73 @@ const NewCodeEditorPage: React.FC = () => {
                       )}
                     </Box>
                     
-                    {/* Model Selector */}
-                    <Box sx={{ px: 1.5, pb: 1, pt: 0.5, borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                    {/* Design & Model Selectors */}
+                    <Box sx={{ px: 1.5, pb: 1, pt: 0.5, borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', gap: 0.5 }}>
+                      {/* Design Selector */}
+                      <Button
+                        size="small"
+                        onClick={(e) => setDesignMenuAnchor(e.currentTarget)}
+                        endIcon={<KeyboardArrowDown sx={{ fontSize: 12 }} />}
+                        sx={{
+                          textTransform: 'none',
+                          fontSize: 9,
+                          color: 'rgba(255, 255, 255, 0.6)',
+                          p: 0.5,
+                          minHeight: 'unset',
+                          flex: 1,
+                          '&:hover': {
+                            bgcolor: 'rgba(255, 255, 255, 0.05)',
+                          },
+                        }}
+                      >
+                        {orchestrationDesigns.find(d => d.id === selectedDesign)?.name || 'Select Design'}
+                      </Button>
+                      <Menu
+                        anchorEl={designMenuAnchor}
+                        open={Boolean(designMenuAnchor)}
+                        onClose={() => setDesignMenuAnchor(null)}
+                        PaperProps={{
+                          sx: {
+                            bgcolor: '#1e1e1e',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            maxHeight: 300,
+                          },
+                        }}
+                      >
+                        {orchestrationDesigns.map((design) => (
+                          <MenuItem
+                            key={design.id}
+                            onClick={() => {
+                              setSelectedDesign(design.id);
+                              setDesignMenuAnchor(null);
+                            }}
+                            sx={{
+                              fontSize: 11,
+                              py: 0.75,
+                              minHeight: 'unset',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 2,
+                            }}
+                          >
+                            <Box>
+                              <Typography sx={{ fontSize: 11, fontWeight: selectedDesign === design.id ? 600 : 400 }}>
+                                {design.name}
+                              </Typography>
+                              {design.description && (
+                                <Typography sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.5)' }}>
+                                  {design.description}
+                                </Typography>
+                              )}
+                            </Box>
+                            {selectedDesign === design.id && (
+                              <Check sx={{ fontSize: 14, color: 'primary.main' }} />
+                            )}
+                          </MenuItem>
+                        ))}
+                      </Menu>
+                      
+                      {/* Model Selector */}
                       <Button
                         size="small"
                         onClick={(e) => setModelMenuAnchor(e.currentTarget)}
@@ -3497,12 +3542,13 @@ const NewCodeEditorPage: React.FC = () => {
                           color: 'rgba(255, 255, 255, 0.6)',
                           p: 0.5,
                           minHeight: 'unset',
+                          flex: 1,
                           '&:hover': {
                             bgcolor: 'rgba(255, 255, 255, 0.05)',
                           },
                         }}
                       >
-                        Model: {availableModels.find(m => m.id === selectedModel)?.name || selectedModel}
+                        {availableModels.find(m => m.id === selectedModel)?.name || selectedModel}
                       </Button>
                       <Menu
                         anchorEl={modelMenuAnchor}
