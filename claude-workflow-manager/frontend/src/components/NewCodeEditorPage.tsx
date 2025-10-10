@@ -3264,7 +3264,7 @@ const NewCodeEditorPage: React.FC = () => {
                           color: 'rgba(255, 255, 255, 0.7)',
                         }}
                       >
-                        AI Assistant
+                        Agentic Construct
                       </Typography>
                       <Tooltip title="Close">
                         <IconButton
@@ -3308,7 +3308,7 @@ const NewCodeEditorPage: React.FC = () => {
                         <Box textAlign="center" py={4}>
                           <SmartToy sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)', mb: 1 }} />
                           <Typography sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.4)' }}>
-                            Start a conversation with AI
+                            Run your agentic orchestration in an Editor
                           </Typography>
                         </Box>
                       ) : (
@@ -3431,7 +3431,7 @@ const NewCodeEditorPage: React.FC = () => {
                       <TextField
                         fullWidth
                         size="small"
-                        placeholder="Ask AI..."
+                        placeholder="I would like your input for this construct...."
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
