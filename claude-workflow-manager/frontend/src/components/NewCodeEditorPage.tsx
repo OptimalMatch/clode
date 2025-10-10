@@ -113,6 +113,7 @@ interface ChatMessage {
   content: string;
   agent?: string;
   timestamp: Date;
+  completed?: boolean;
 }
 
 interface ExecutionStatus {
@@ -176,6 +177,30 @@ const MoreActionsIcon: React.FC<SvgIconProps> = (props) => (
     <path d="M4 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m5 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m5 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
   </SvgIcon>
 );
+
+// Helper function to generate consistent colors for each agent
+const getAgentColor = (agentName: string): string => {
+  const colors = [
+    '#4FC3F7', // Light Blue
+    '#81C784', // Light Green
+    '#FFB74D', // Orange
+    '#F06292', // Pink
+    '#BA68C8', // Purple
+    '#4DB6AC', // Teal
+    '#FFD54F', // Yellow
+    '#FF8A65', // Deep Orange
+    '#A1887F', // Brown
+    '#90CAF9', // Blue
+  ];
+  
+  // Generate a consistent index based on agent name
+  let hash = 0;
+  for (let i = 0; i < agentName.length; i++) {
+    hash = agentName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+};
 
 const NewCodeEditorPage: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
@@ -3252,46 +3277,85 @@ const NewCodeEditorPage: React.FC = () => {
                           </Typography>
                         </Box>
                       ) : (
-                        chatMessages.map((msg) => (
-                          <Box
-                            key={msg.id}
-                            sx={{
-                              mb: 1,
-                              display: 'flex',
-                              flexDirection: msg.type === 'user' ? 'row-reverse' : 'row',
-                              gap: 0.5,
-                            }}
-                          >
-                            <Avatar
+                        chatMessages.map((msg, index) => {
+                          const agentColor = msg.agent ? getAgentColor(msg.agent) : '#4FC3F7';
+                          const isNewAgent = index === 0 || chatMessages[index - 1].agent !== msg.agent;
+                          
+                          return (
+                            <Box
+                              key={msg.id}
                               sx={{
-                                bgcolor: msg.type === 'user' ? 'primary.main' : 
-                                         msg.type === 'agent' ? 'secondary.main' : 'grey.500',
-                                width: 24,
-                                height: 24,
+                                mb: isNewAgent ? 2 : 1,
+                                display: 'flex',
+                                flexDirection: msg.type === 'user' ? 'row-reverse' : 'row',
+                                gap: 0.5,
                               }}
                             >
-                              {msg.type === 'user' ? <Person sx={{ fontSize: 14 }} /> : 
-                               msg.type === 'agent' ? <SmartToy sx={{ fontSize: 14 }} /> : 'S'}
-                            </Avatar>
-                            <Paper
-                              sx={{
-                                p: 1,
-                                maxWidth: '85%',
-                                bgcolor: msg.type === 'user' ? 'primary.dark' : 
-                                         msg.type === 'system' ? 'grey.800' : 'background.paper',
-                              }}
-                            >
-                              {msg.agent && (
-                                <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: 9 }}>
-                                  {msg.agent}
-                                </Typography>
-                              )}
-                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontSize: 10 }}>
-                                {msg.content}
-                              </Typography>
-                            </Paper>
-                          </Box>
-                        ))
+                              <Avatar
+                                sx={{
+                                  bgcolor: msg.type === 'user' ? 'primary.main' : 
+                                           msg.type === 'agent' && msg.agent ? agentColor : 'secondary.main',
+                                  width: 24,
+                                  height: 24,
+                                }}
+                              >
+                                {msg.type === 'user' ? <Person sx={{ fontSize: 14 }} /> : 
+                                 msg.type === 'agent' ? <SmartToy sx={{ fontSize: 14 }} /> : 'S'}
+                              </Avatar>
+                              <Box sx={{ maxWidth: '85%' }}>
+                                {msg.agent && isNewAgent && (
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 0.5,
+                                      mb: 0.5,
+                                    }}
+                                  >
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        fontSize: 10,
+                                        fontWeight: 600,
+                                        color: agentColor,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: 0.5,
+                                      }}
+                                    >
+                                      {msg.agent}
+                                    </Typography>
+                                    {msg.completed && (
+                                      <Chip
+                                        label="Completed"
+                                        size="small"
+                                        sx={{
+                                          height: 14,
+                                          fontSize: 8,
+                                          bgcolor: 'rgba(76, 175, 80, 0.2)',
+                                          color: '#4CAF50',
+                                          '& .MuiChip-label': { px: 0.5 },
+                                        }}
+                                      />
+                                    )}
+                                  </Box>
+                                )}
+                                <Paper
+                                  sx={{
+                                    p: 1,
+                                    bgcolor: msg.type === 'user' ? 'primary.dark' : 
+                                             msg.type === 'system' ? 'grey.800' : 'background.paper',
+                                    borderLeft: msg.agent ? `3px solid ${agentColor}` : 'none',
+                                    position: 'relative',
+                                  }}
+                                >
+                                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontSize: 10 }}>
+                                    {msg.content}
+                                  </Typography>
+                                </Paper>
+                              </Box>
+                            </Box>
+                          );
+                        })
                       )}
                       <div ref={chatEndRef} />
                     </Box>
