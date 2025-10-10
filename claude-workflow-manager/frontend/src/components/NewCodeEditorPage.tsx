@@ -342,6 +342,7 @@ const NewCodeEditorPage: React.FC = () => {
   const [perfTestLogs, setPerfTestLogs] = useState<string[]>([]);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5); // seconds
+  const [perfTestOpenTabPath, setPerfTestOpenTabPath] = useState<string | null>(null); // Track tab opened by perf test
   
   // Tab system state
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
@@ -393,6 +394,7 @@ const NewCodeEditorPage: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const changesPollingIntervalRef = useRef<any>(null);
   const autoRefreshIntervalRef = useRef<any>(null);
+  const editorRef = useRef<any>(null); // Monaco editor instance for scrolling to lines
   
   // Load workflows and designs on mount
   useEffect(() => {
@@ -761,6 +763,87 @@ const NewCodeEditorPage: React.FC = () => {
     }
   };
   
+  // Open file and scroll to line for performance testing
+  const openFileAndScrollToLine = async (filePath: string, lineNumber: number) => {
+    if (!selectedWorkflow) return;
+    
+    try {
+      // Close previous performance test tab if it exists
+      if (perfTestOpenTabPath) {
+        if (splitViewEnabled) {
+          // Close from active pane in split view
+          const tabs = activePaneId === 'left' ? leftPaneTabs : activePaneId === 'middle' ? middlePaneTabs : rightPaneTabs;
+          const setTabs = activePaneId === 'left' ? setLeftPaneTabs : activePaneId === 'middle' ? setMiddlePaneTabs : setRightPaneTabs;
+          const setActiveIndex = activePaneId === 'left' ? setLeftActiveIndex : activePaneId === 'middle' ? setMiddleActiveIndex : setRightActiveIndex;
+          
+          const tabIndex = tabs.findIndex(tab => tab.path === perfTestOpenTabPath);
+          if (tabIndex !== -1) {
+            const newTabs = tabs.filter((_, i) => i !== tabIndex);
+            setTabs(newTabs);
+            if (newTabs.length === 0) {
+              setActiveIndex(-1);
+            }
+          }
+        } else {
+          // Close from single view
+          const tabIndex = openTabs.findIndex(tab => tab.path === perfTestOpenTabPath);
+          if (tabIndex !== -1) {
+            const newTabs = openTabs.filter((_, i) => i !== tabIndex);
+            setOpenTabs(newTabs);
+            if (newTabs.length === 0) {
+              setActiveTabIndex(-1);
+            }
+          }
+        }
+      }
+      
+      // Load file content
+      const content = await loadFileContentForTab(filePath);
+      if (content === null) return;
+      
+      // Create new tab
+      const newTab: EditorTab = {
+        path: filePath,
+        name: filePath.split('/').pop() || filePath,
+        content,
+        originalContent: content,
+        isPermanent: true,
+        isModified: false,
+      };
+      
+      if (splitViewEnabled) {
+        // Add to active pane in split view
+        const tabs = activePaneId === 'left' ? leftPaneTabs : activePaneId === 'middle' ? middlePaneTabs : rightPaneTabs;
+        const setTabs = activePaneId === 'left' ? setLeftPaneTabs : activePaneId === 'middle' ? setMiddlePaneTabs : setRightPaneTabs;
+        const setActiveIndex = activePaneId === 'left' ? setLeftActiveIndex : activePaneId === 'middle' ? setMiddleActiveIndex : setRightActiveIndex;
+        
+        setTabs([...tabs, newTab]);
+        setActiveIndex(tabs.length);
+      } else {
+        // Add to single view
+        setOpenTabs([...openTabs, newTab]);
+        setActiveTabIndex(openTabs.length);
+        setSelectedFile({ name: newTab.name, path: newTab.path, type: 'file' });
+        setFileContent(content);
+        setOriginalContent(content);
+      }
+      
+      // Track this tab as opened by performance test
+      setPerfTestOpenTabPath(filePath);
+      
+      // Scroll to line after a short delay to ensure editor is ready
+      setTimeout(() => {
+        if (editorRef.current) {
+          editorRef.current.revealLineInCenter(lineNumber);
+          editorRef.current.setPosition({ lineNumber, column: 1 });
+        }
+      }, 100);
+      
+    } catch (error: any) {
+      console.error('Error opening file:', error);
+    }
+  };
+  
   // Performance Testing Function
   const runPerformanceTest = async () => {
     if (!selectedWorkflow) {
@@ -821,6 +904,7 @@ const NewCodeEditorPage: React.FC = () => {
       setPerfTestRunning(false);
       perfTestRunningRef.current = false;
       setAutoRefreshEnabled(false);
+      setPerfTestOpenTabPath(null);
       return;
     }
     
@@ -829,6 +913,7 @@ const NewCodeEditorPage: React.FC = () => {
       setPerfTestRunning(false);
       perfTestRunningRef.current = false;
       setAutoRefreshEnabled(false);
+      setPerfTestOpenTabPath(null);
       return;
     }
     
@@ -876,18 +961,22 @@ const NewCodeEditorPage: React.FC = () => {
           const lines = content.split('\n');
           
           // Random modification: remove, change, or add lines
+          let changedLineNumber = 1;
           const modType = Math.random();
           if (modType < 0.33 && lines.length > 1) {
             // Remove a random line
             const lineToRemove = Math.floor(Math.random() * lines.length);
+            changedLineNumber = lineToRemove + 1;
             lines.splice(lineToRemove, 1);
           } else if (modType < 0.66 && lines.length > 0) {
             // Change a random line
             const lineToChange = Math.floor(Math.random() * lines.length);
+            changedLineNumber = lineToChange + 1;
             lines[lineToChange] = `// Modified at ${new Date().toISOString()}`;
           } else {
             // Add a new line
             const lineToInsert = Math.floor(Math.random() * lines.length);
+            changedLineNumber = lineToInsert + 1;
             lines.splice(lineToInsert, 0, `// Added line at ${new Date().toISOString()}`);
           }
           
@@ -900,6 +989,9 @@ const NewCodeEditorPage: React.FC = () => {
             new_content: newContent,
           });
           
+          // Open file and scroll to changed line
+          await openFileAndScrollToLine(randomFile, changedLineNumber);
+          
           const endTime = Date.now();
           const responseTime = endTime - startTime;
           responseTimes.push(responseTime);
@@ -907,7 +999,7 @@ const NewCodeEditorPage: React.FC = () => {
           completedCalls++;
           
           if (i % 10 === 0) {
-            addLog(`Modified file: ${randomFile} (${responseTime}ms)`);
+            addLog(`Modified file: ${randomFile} line ${changedLineNumber} (${responseTime}ms)`);
           }
         } else {
           // Create new file (30%)
@@ -923,6 +1015,9 @@ const NewCodeEditorPage: React.FC = () => {
           
           // Add to files list for future operations
           filesInRepo.push(newFileName);
+          
+          // Open file and scroll to first line
+          await openFileAndScrollToLine(newFileName, 1);
           
           const endTime = Date.now();
           const responseTime = endTime - startTime;
@@ -975,6 +1070,7 @@ const NewCodeEditorPage: React.FC = () => {
     setPerfTestRunning(false);
     perfTestRunningRef.current = false;
     setAutoRefreshEnabled(false);
+    setPerfTestOpenTabPath(null); // Clear tracked tab
     
     // Reload changes to show new files
     await loadChanges();
@@ -3440,6 +3536,7 @@ const NewCodeEditorPage: React.FC = () => {
                                       language={getLanguageFromFilename(leftPaneTabs[leftActiveIndex].name)}
                                       value={leftPaneTabs[leftActiveIndex].content}
                                       onChange={(value) => handleSplitPaneContentChange('left', value || '')}
+                                      onMount={(editor) => { if (activePaneId === 'left') editorRef.current = editor; }}
                                       theme={selectedTheme}
                                       options={{
                                         readOnly: leftPaneTabs[leftActiveIndex].content === '[Binary file]',
@@ -3625,6 +3722,7 @@ const NewCodeEditorPage: React.FC = () => {
                                           language={getLanguageFromFilename(middlePaneTabs[middleActiveIndex].name)}
                                           value={middlePaneTabs[middleActiveIndex].content}
                                           onChange={(value) => handleSplitPaneContentChange('middle', value || '')}
+                                          onMount={(editor) => { if (activePaneId === 'middle') editorRef.current = editor; }}
                                           theme={selectedTheme}
                                           options={{
                                             readOnly: middlePaneTabs[middleActiveIndex].content === '[Binary file]',
@@ -3814,6 +3912,7 @@ const NewCodeEditorPage: React.FC = () => {
                                       language={getLanguageFromFilename(rightPaneTabs[rightActiveIndex].name)}
                                       value={rightPaneTabs[rightActiveIndex].content}
                                       onChange={(value) => handleSplitPaneContentChange('right', value || '')}
+                                      onMount={(editor) => { if (activePaneId === 'right') editorRef.current = editor; }}
                                       theme={selectedTheme}
                                       options={{
                                         readOnly: rightPaneTabs[rightActiveIndex].content === '[Binary file]',
@@ -3974,6 +4073,7 @@ const NewCodeEditorPage: React.FC = () => {
                             language={selectedFile ? getLanguageFromFilename(selectedFile.name) : 'plaintext'}
                             value={fileContent}
                             onChange={(value) => handleContentChange(value || '')}
+                            onMount={(editor) => { editorRef.current = editor; }}
                             theme={selectedTheme}
                             options={{
                               readOnly: !selectedFile || fileContent === '[Binary file]',
@@ -4455,6 +4555,7 @@ const NewCodeEditorPage: React.FC = () => {
                                 setPerfTestRunning(false);
                                 perfTestRunningRef.current = false;
                                 setAutoRefreshEnabled(false);
+                                setPerfTestOpenTabPath(null);
                               } else {
                                 runPerformanceTest();
                               }
