@@ -3240,6 +3240,54 @@ const NewCodeEditorPage: React.FC = () => {
                   {/* CHANGES VIEW */}
                   {activityBarView === 'changes' && (
                     <Box sx={{ p: 1 }}>
+                      {/* Action Buttons */}
+                      {pendingChanges.length > 0 && (
+                        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                          <Button
+                            fullWidth
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            startIcon={<CheckCircle sx={{ fontSize: 14 }} />}
+                            onClick={async () => {
+                              try {
+                                // Accept all changes in sequence
+                                for (const change of pendingChanges) {
+                                  await handleApproveChange(change.change_id);
+                                }
+                                enqueueSnackbar('All changes accepted', { variant: 'success' });
+                              } catch (error: any) {
+                                enqueueSnackbar(`Error accepting changes: ${error.message}`, { variant: 'error' });
+                              }
+                            }}
+                            sx={{ fontSize: 10, height: 28, px: 1 }}
+                          >
+                            Accept All
+                          </Button>
+                          <Button
+                            fullWidth
+                            size="small"
+                            variant="contained"
+                            color="error"
+                            startIcon={<Cancel sx={{ fontSize: 14 }} />}
+                            onClick={async () => {
+                              try {
+                                // Cancel all changes in sequence
+                                for (const change of pendingChanges) {
+                                  await handleRejectChange(change.change_id);
+                                }
+                                enqueueSnackbar('All changes cancelled', { variant: 'info' });
+                              } catch (error: any) {
+                                enqueueSnackbar(`Error cancelling changes: ${error.message}`, { variant: 'error' });
+                              }
+                            }}
+                            sx={{ fontSize: 10, height: 28, px: 1 }}
+                          >
+                            Cancel All
+                          </Button>
+                        </Box>
+                      )}
+                      
                       {pendingChanges.length === 0 ? (
                         <Box textAlign="center" py={4}>
                           <SourceOutlined sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)', mb: 1 }} />
