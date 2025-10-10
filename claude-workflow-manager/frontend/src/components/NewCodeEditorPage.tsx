@@ -67,6 +67,7 @@ import {
 import { useSnackbar } from 'notistack';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor, { DiffEditor, loader } from '@monaco-editor/react';
+import ReactMarkdown from 'react-markdown';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
 import api from '../services/api';
 import EnhancedFileTree, { getFileIcon } from './EnhancedFileTree';
@@ -3379,11 +3380,32 @@ const NewCodeEditorPage: React.FC = () => {
                                              msg.type === 'system' ? 'grey.800' : 'background.paper',
                                     borderLeft: msg.agent ? `3px solid ${agentColor}` : 'none',
                                     position: 'relative',
+                                    '& p': { margin: 0, marginBottom: 0.5, fontSize: 10 },
+                                    '& p:last-child': { marginBottom: 0 },
+                                    '& pre': { 
+                                      bgcolor: 'rgba(0, 0, 0, 0.3)', 
+                                      p: 1, 
+                                      borderRadius: 1, 
+                                      overflow: 'auto',
+                                      fontSize: 9,
+                                    },
+                                    '& code': { 
+                                      bgcolor: 'rgba(0, 0, 0, 0.3)', 
+                                      px: 0.5, 
+                                      borderRadius: 0.5,
+                                      fontSize: 9,
+                                    },
+                                    '& ul, & ol': { margin: 0, paddingLeft: 2, fontSize: 10 },
+                                    '& h1, & h2, & h3, & h4, & h5, & h6': { 
+                                      margin: 0, 
+                                      marginTop: 1, 
+                                      marginBottom: 0.5,
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                    },
                                   }}
                                 >
-                                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontSize: 10 }}>
-                                    {msg.content}
-                                  </Typography>
+                                  <ReactMarkdown>{msg.content}</ReactMarkdown>
                                 </Paper>
                               </Box>
                             </Box>
