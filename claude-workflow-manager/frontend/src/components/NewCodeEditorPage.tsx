@@ -3502,7 +3502,7 @@ const NewCodeEditorPage: React.FC = () => {
                           },
                         }}
                       >
-                        Model: {availableModels.find(m => m.id === selectedModel)?.name || selectedModel}
+                        {availableModels.find(m => m.id === selectedModel)?.name || selectedModel}
                       </Button>
                       <Menu
                         anchorEl={modelMenuAnchor}
