@@ -305,6 +305,7 @@ const NewCodeEditorPage: React.FC = () => {
   const [changes, setChanges] = useState<FileChange[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<string>('vs-dark');
+  const [loadedThemes, setLoadedThemes] = useState<Set<string>>(new Set(['vs', 'vs-dark', 'hc-black', 'hc-light']));
   const [activityBarView, setActivityBarView] = useState<'explorer' | 'search' | 'changes'>('explorer');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false); // For AI Assistant
@@ -430,6 +431,17 @@ const NewCodeEditorPage: React.FC = () => {
     }
   }, [changeViewMode, currentChangeIndex, pendingChangesForFile]);
   
+  const handleThemeChange = (newTheme: string) => {
+    // Check if theme is loaded or is a built-in theme
+    if (loadedThemes.has(newTheme)) {
+      setSelectedTheme(newTheme);
+    } else {
+      // If theme isn't loaded yet, fall back to vs-dark and show a message
+      console.warn(`Theme ${newTheme} is not loaded yet. Please try again in a moment.`);
+      enqueueSnackbar(`Theme is loading, please try again in a moment.`, { variant: 'info' });
+    }
+  };
+
   const configureMonacoThemes = () => {
     loader.init().then((monaco) => {
       const themeMap: { [key: string]: string } = {
@@ -440,17 +452,27 @@ const NewCodeEditorPage: React.FC = () => {
         'night-owl': 'Night Owl',
         'solarized-dark': 'Solarized-dark',
         'cobalt': 'Cobalt',
+        'github': 'GitHub',
+        'solarized-light': 'Solarized-light',
       };
 
+      // Load each theme and track successful loads
       Object.keys(themeMap).forEach((themeKey) => {
         const themeName = themeMap[themeKey];
         fetch(`https://raw.githubusercontent.com/brijeshb42/monaco-themes/master/themes/${themeName}.json`)
-          .then((response) => response.json())
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+          })
           .then((data) => {
             monaco.editor.defineTheme(themeKey, data);
+            // Mark theme as loaded
+            setLoadedThemes(prev => new Set(prev).add(themeKey));
           })
           .catch((error) => {
-            console.error(`Failed to load theme ${themeKey}:`, error);
+            console.warn(`Failed to load theme ${themeKey}:`, error);
           });
       });
     }).catch((error) => {
@@ -1963,7 +1985,7 @@ const NewCodeEditorPage: React.FC = () => {
         <FormControl size="small" sx={{ minWidth: 150 }}>
           <Select
             value={selectedTheme}
-            onChange={(e) => setSelectedTheme(e.target.value)}
+            onChange={(e) => handleThemeChange(e.target.value)}
             sx={{ 
               fontSize: 12,
               height: 30,
@@ -1974,8 +1996,16 @@ const NewCodeEditorPage: React.FC = () => {
             }}
           >
             {getAvailableThemes().map((theme) => (
-              <MenuItem key={theme.value} value={theme.value} sx={{ fontSize: 12 }}>
-                {theme.label}
+              <MenuItem 
+                key={theme.value} 
+                value={theme.value} 
+                sx={{ 
+                  fontSize: 12,
+                  opacity: loadedThemes.has(theme.value) ? 1 : 0.5,
+                }}
+                disabled={!loadedThemes.has(theme.value)}
+              >
+                {theme.label} {!loadedThemes.has(theme.value) && '(loading...)'}
               </MenuItem>
             ))}
           </Select>
