@@ -53,6 +53,7 @@ import {
   Search,
   CheckCircle,
   Cancel,
+  Check,
   ViewColumn,
   ViewStream,
   KeyboardArrowUp,
@@ -245,6 +246,9 @@ const NewCodeEditorPage: React.FC = () => {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState<string>('');
   const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>({ executing: false });
+  const [selectedModel, setSelectedModel] = useState<string>('claude-sonnet-4-20250514');
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; description: string }>>([]);
+  const [modelMenuAnchor, setModelMenuAnchor] = useState<null | HTMLElement>(null);
   
   // Diff state
   const [showDiff, setShowDiff] = useState(false);
@@ -271,6 +275,7 @@ const NewCodeEditorPage: React.FC = () => {
   useEffect(() => {
     loadWorkflows();
     loadOrchestrationDesigns();
+    loadAvailableModels();
     configureMonacoThemes();
     
     return () => {
@@ -386,6 +391,25 @@ const NewCodeEditorPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load orchestration designs:', error);
+    }
+  };
+  
+  const loadAvailableModels = async () => {
+    try {
+      const response = await api.get('/api/settings/available-models');
+      setAvailableModels(response.data.models || []);
+      if (response.data.default_model_id) {
+        setSelectedModel(response.data.default_model_id);
+      }
+    } catch (error) {
+      console.error('Failed to load available models:', error);
+      // Fallback to default models if API call fails
+      setAvailableModels([
+        { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', description: 'Most capable model' },
+        { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: 'Balanced performance' },
+        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'High capability' },
+        { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: 'Fast and efficient' },
+      ]);
     }
   };
   
@@ -1361,7 +1385,7 @@ const NewCodeEditorPage: React.FC = () => {
       task,
       agents,
       agent_sequence: agents.map(a => a.name),
-      model: 'claude-sonnet-4-20250514',
+      model: selectedModel,
       git_repo: gitRepo
     }, signal);
   };
@@ -1373,7 +1397,7 @@ const NewCodeEditorPage: React.FC = () => {
       agents,
       agent_names: agents.map(a => a.name),
       aggregator: null,
-      model: 'claude-sonnet-4-20250514',
+      model: selectedModel,
       git_repo: gitRepo
     }, signal);
   };
@@ -1385,7 +1409,7 @@ const NewCodeEditorPage: React.FC = () => {
       router,
       specialists,
       specialist_names: specialists.map(s => s.name),
-      model: 'claude-sonnet-4-20250514',
+      model: selectedModel,
       git_repo: gitRepo
     }, signal);
   };
@@ -3459,6 +3483,69 @@ const NewCodeEditorPage: React.FC = () => {
                           <Send sx={{ fontSize: 18 }} />
                         </IconButton>
                       )}
+                    </Box>
+                    
+                    {/* Model Selector */}
+                    <Box sx={{ px: 1.5, pb: 1, pt: 0.5, borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                      <Button
+                        size="small"
+                        onClick={(e) => setModelMenuAnchor(e.currentTarget)}
+                        endIcon={<KeyboardArrowDown sx={{ fontSize: 12 }} />}
+                        sx={{
+                          textTransform: 'none',
+                          fontSize: 9,
+                          color: 'rgba(255, 255, 255, 0.6)',
+                          p: 0.5,
+                          minHeight: 'unset',
+                          '&:hover': {
+                            bgcolor: 'rgba(255, 255, 255, 0.05)',
+                          },
+                        }}
+                      >
+                        Model: {availableModels.find(m => m.id === selectedModel)?.name || selectedModel}
+                      </Button>
+                      <Menu
+                        anchorEl={modelMenuAnchor}
+                        open={Boolean(modelMenuAnchor)}
+                        onClose={() => setModelMenuAnchor(null)}
+                        PaperProps={{
+                          sx: {
+                            bgcolor: '#1e1e1e',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            maxHeight: 300,
+                          },
+                        }}
+                      >
+                        {availableModels.map((model) => (
+                          <MenuItem
+                            key={model.id}
+                            onClick={() => {
+                              setSelectedModel(model.id);
+                              setModelMenuAnchor(null);
+                            }}
+                            sx={{
+                              fontSize: 11,
+                              py: 0.75,
+                              minHeight: 'unset',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 2,
+                            }}
+                          >
+                            <Box>
+                              <Typography sx={{ fontSize: 11, fontWeight: selectedModel === model.id ? 600 : 400 }}>
+                                {model.name}
+                              </Typography>
+                              <Typography sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.5)' }}>
+                                {model.description}
+                              </Typography>
+                            </Box>
+                            {selectedModel === model.id && (
+                              <Check sx={{ fontSize: 14, color: 'primary.main' }} />
+                            )}
+                          </MenuItem>
+                        ))}
+                      </Menu>
                     </Box>
                   </Box>
                 </Panel>
