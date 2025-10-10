@@ -2042,13 +2042,13 @@ const NewCodeEditorPage: React.FC = () => {
         {primaryNavView === 'editor' && (
           <Box 
             sx={{ 
-              width: '48px',
+              width: '24px',
               bgcolor: '#333333',
               borderRight: '1px solid rgba(255, 255, 255, 0.1)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              py: 1,
+              py: 0.5,
               flexShrink: 0,
             }}
           >
@@ -2068,11 +2068,11 @@ const NewCodeEditorPage: React.FC = () => {
                 borderLeft: activityBarView === 'explorer' ? '2px solid #6495ed' : '2px solid transparent',
                 borderRadius: 0,
                 width: '100%',
-                py: 1.5,
+                py: 0.75,
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
             >
-              <FolderOutlined sx={{ fontSize: 24 }} />
+              <FolderOutlined sx={{ fontSize: 12 }} />
             </IconButton>
           </Tooltip>
           
@@ -2092,11 +2092,11 @@ const NewCodeEditorPage: React.FC = () => {
                 borderLeft: activityBarView === 'search' ? '2px solid #6495ed' : '2px solid transparent',
                 borderRadius: 0,
                 width: '100%',
-                py: 1.5,
+                py: 0.75,
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
             >
-              <SearchOutlined sx={{ fontSize: 24 }} />
+              <SearchOutlined sx={{ fontSize: 12 }} />
             </IconButton>
           </Tooltip>
           
@@ -2106,7 +2106,7 @@ const NewCodeEditorPage: React.FC = () => {
               color="warning" 
               sx={{ 
                 width: '100%',
-                '& .MuiBadge-badge': { right: 8, top: 8, fontSize: 9, height: 16, minWidth: 16 },
+                '& .MuiBadge-badge': { right: 2, top: 4, fontSize: 7, height: 12, minWidth: 12 },
               }}
             >
               <IconButton
@@ -2124,11 +2124,11 @@ const NewCodeEditorPage: React.FC = () => {
                   borderLeft: activityBarView === 'changes' ? '2px solid #6495ed' : '2px solid transparent',
                   borderRadius: 0,
                   width: '100%',
-                  py: 1.5,
+                  py: 0.75,
                   '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
                 }}
               >
-                <SourceOutlined sx={{ fontSize: 24 }} />
+                <SourceOutlined sx={{ fontSize: 12 }} />
               </IconButton>
             </Badge>
           </Tooltip>
