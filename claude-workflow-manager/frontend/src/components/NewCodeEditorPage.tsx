@@ -306,6 +306,7 @@ const NewCodeEditorPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<string>('vs-dark');
   const [loadedThemes, setLoadedThemes] = useState<Set<string>>(new Set(['vs', 'vs-dark', 'hc-black', 'hc-light']));
+  const [themeColors, setThemeColors] = useState<any>(null);
   const [activityBarView, setActivityBarView] = useState<'explorer' | 'search' | 'changes'>('explorer');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false); // For AI Assistant
@@ -365,6 +366,18 @@ const NewCodeEditorPage: React.FC = () => {
     loadOrchestrationDesigns();
     loadAvailableModels();
     configureMonacoThemes();
+    
+    // Apply default vs-dark theme colors on mount
+    applyThemeColors('vs-dark', { 
+      colors: { 
+        'editor.background': '#1e1e1e', 
+        'editor.foreground': '#d4d4d4', 
+        'sideBar.background': '#252526', 
+        'activityBar.background': '#333333', 
+        'statusBar.background': '#007acc', 
+        'titleBar.activeBackground': '#3c3c3c' 
+      } 
+    });
     
     return () => {
       stopChangesPolling();
@@ -431,10 +444,57 @@ const NewCodeEditorPage: React.FC = () => {
     }
   }, [changeViewMode, currentChangeIndex, pendingChangesForFile]);
   
+  const applyThemeColors = (themeName: string, themeData: any) => {
+    // Extract colors from the theme
+    const colors = themeData?.colors || {};
+    
+    // Get key colors with fallbacks
+    const background = colors['editor.background'] || '#1e1e1e';
+    const foreground = colors['editor.foreground'] || '#d4d4d4';
+    const sidebarBg = colors['sideBar.background'] || colors['editor.background'] || '#252526';
+    const activityBarBg = colors['activityBar.background'] || '#333333';
+    const statusBarBg = colors['statusBar.background'] || '#007acc';
+    const titleBarBg = colors['titleBar.activeBackground'] || '#3c3c3c';
+    const inputBg = colors['input.background'] || '#3c3c3c';
+    const buttonBg = colors['button.background'] || '#0e639c';
+    
+    setThemeColors({
+      background,
+      foreground,
+      sidebarBg,
+      activityBarBg,
+      statusBarBg,
+      titleBarBg,
+      inputBg,
+      buttonBg,
+    });
+  };
+
   const handleThemeChange = (newTheme: string) => {
     // Check if theme is loaded or is a built-in theme
     if (loadedThemes.has(newTheme)) {
       setSelectedTheme(newTheme);
+      
+      // Apply theme colors to the page
+      if (newTheme === 'vs') {
+        // Light theme
+        applyThemeColors(newTheme, { colors: { 'editor.background': '#ffffff', 'editor.foreground': '#000000', 'sideBar.background': '#f3f3f3', 'activityBar.background': '#2c2c2c', 'statusBar.background': '#007acc', 'titleBar.activeBackground': '#dddddd' } });
+      } else if (newTheme === 'vs-dark') {
+        // Default dark theme
+        applyThemeColors(newTheme, { colors: { 'editor.background': '#1e1e1e', 'editor.foreground': '#d4d4d4', 'sideBar.background': '#252526', 'activityBar.background': '#333333', 'statusBar.background': '#007acc', 'titleBar.activeBackground': '#3c3c3c' } });
+      } else if (newTheme === 'hc-black') {
+        // High contrast black
+        applyThemeColors(newTheme, { colors: { 'editor.background': '#000000', 'editor.foreground': '#ffffff', 'sideBar.background': '#000000', 'activityBar.background': '#000000', 'statusBar.background': '#000000', 'titleBar.activeBackground': '#000000' } });
+      } else if (newTheme === 'hc-light') {
+        // High contrast light
+        applyThemeColors(newTheme, { colors: { 'editor.background': '#ffffff', 'editor.foreground': '#000000', 'sideBar.background': '#ffffff', 'activityBar.background': '#ffffff', 'statusBar.background': '#0000ff', 'titleBar.activeBackground': '#ffffff' } });
+      } else {
+        // Custom theme - get from cache
+        const themeData = (window as any).monacoThemeData?.[newTheme];
+        if (themeData) {
+          applyThemeColors(newTheme, themeData);
+        }
+      }
     } else {
       // If theme isn't loaded yet, fall back to vs-dark and show a message
       console.warn(`Theme ${newTheme} is not loaded yet. Please try again in a moment.`);
@@ -500,6 +560,9 @@ const NewCodeEditorPage: React.FC = () => {
         'monoindustrial': 'monoindustrial',
       };
 
+      // Store theme data for applying colors
+      const themeDataCache: { [key: string]: any } = {};
+
       // Load each theme and track successful loads
       Object.keys(themeMap).forEach((themeKey) => {
         const themeName = themeMap[themeKey];
@@ -512,13 +575,23 @@ const NewCodeEditorPage: React.FC = () => {
           })
           .then((data) => {
             monaco.editor.defineTheme(themeKey, data);
+            // Store theme data for color extraction
+            themeDataCache[themeKey] = data;
             // Mark theme as loaded
             setLoadedThemes(prev => new Set(prev).add(themeKey));
+            
+            // If this is the currently selected theme, apply its colors
+            if (themeKey === selectedTheme) {
+              applyThemeColors(themeKey, data);
+            }
           })
           .catch((error) => {
             console.warn(`Failed to load theme ${themeKey}:`, error);
           });
       });
+
+      // Make theme data available globally for theme switching
+      (window as any).monacoThemeData = themeDataCache;
     }).catch((error) => {
       console.error('Failed to initialize Monaco editor:', error);
     });
@@ -1978,7 +2051,7 @@ const NewCodeEditorPage: React.FC = () => {
   };
   
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: '#1e1e1e', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: themeColors?.background || '#1e1e1e', color: themeColors?.foreground || '#d4d4d4', overflow: 'hidden' }}>
       {/* Compact Top Toolbar */}
       <Box 
         sx={{ 
@@ -1987,7 +2060,7 @@ const NewCodeEditorPage: React.FC = () => {
           px: 1.5,
           py: 0.75,
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-          bgcolor: '#252526',
+          bgcolor: themeColors?.titleBarBg || '#252526',
           minHeight: '40px',
           gap: 1.5,
           flexShrink: 0,
@@ -2324,7 +2397,7 @@ const NewCodeEditorPage: React.FC = () => {
           <Box 
             sx={{ 
               width: '48px',
-              bgcolor: '#333333',
+              bgcolor: themeColors?.activityBarBg || '#333333',
               borderRight: '1px solid rgba(255, 255, 255, 0.1)',
               display: 'flex',
               flexDirection: 'column',
@@ -2423,7 +2496,7 @@ const NewCodeEditorPage: React.FC = () => {
             {!sidebarCollapsed && (
               <>
                 <Panel defaultSize={20} minSize={15} maxSize={35}>
-              <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#252526' }}>
+              <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: themeColors?.sidebarBg || '#252526' }}>
                 {/* Sidebar Header */}
                 <Box 
                   sx={{ 
@@ -3637,7 +3710,7 @@ const NewCodeEditorPage: React.FC = () => {
               <>
                 <PanelResizeHandle style={resizeHandleStyles} />
                 <Panel defaultSize={25} minSize={20} maxSize={40}>
-                  <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#252526', borderLeft: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: themeColors?.sidebarBg || '#252526', borderLeft: '1px solid rgba(255, 255, 255, 0.1)' }}>
                     {/* AI Assistant Header */}
                     <Box 
                       sx={{ 
