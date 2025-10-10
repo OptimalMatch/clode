@@ -3232,6 +3232,17 @@ const NewCodeEditorPage: React.FC = () => {
                               try {
                                 // Cancel all changes in sequence
                                 for (const change of pendingChanges) {
+                                  // For create operations, delete the created file
+                                  if (change.operation === 'create') {
+                                    try {
+                                      await api.post('/api/file-editor/delete', {
+                                        workflow_id: selectedWorkflow,
+                                        file_path: change.file_path,
+                                      });
+                                    } catch (deleteError) {
+                                      console.error(`Failed to delete ${change.file_path}:`, deleteError);
+                                    }
+                                  }
                                   await handleRejectChange(change.change_id);
                                 }
                                 // Refresh directory to remove any leftover files
@@ -3247,6 +3258,63 @@ const NewCodeEditorPage: React.FC = () => {
                           </Button>
                         </Box>
                       )}
+                      
+                      {/* Cleanup Perf Test Files Button */}
+                      <Button
+                        fullWidth
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        onClick={async () => {
+                          try {
+                            // Get file tree
+                            const treeResponse = await api.post('/api/file-editor/tree', {
+                              workflow_id: selectedWorkflow,
+                              path: '',
+                            });
+                            
+                            // Find all perf_test files recursively
+                            const findPerfTestFiles = (items: any[]): string[] => {
+                              let perfFiles: string[] = [];
+                              for (const item of items) {
+                                if (item.type === 'file' && item.path.includes('perf_test_')) {
+                                  perfFiles.push(item.path);
+                                } else if (item.type === 'directory' && item.children) {
+                                  perfFiles = perfFiles.concat(findPerfTestFiles(item.children));
+                                }
+                              }
+                              return perfFiles;
+                            };
+                            
+                            const perfTestFiles = findPerfTestFiles(treeResponse.data.items || []);
+                            
+                            if (perfTestFiles.length === 0) {
+                              enqueueSnackbar('No performance test files found', { variant: 'info' });
+                              return;
+                            }
+                            
+                            // Delete all perf test files
+                            for (const filePath of perfTestFiles) {
+                              try {
+                                await api.post('/api/file-editor/delete', {
+                                  workflow_id: selectedWorkflow,
+                                  file_path: filePath,
+                                });
+                              } catch (deleteError) {
+                                console.error(`Failed to delete ${filePath}:`, deleteError);
+                              }
+                            }
+                            
+                            await loadDirectory(currentPath);
+                            enqueueSnackbar(`Deleted ${perfTestFiles.length} performance test file(s)`, { variant: 'success' });
+                          } catch (error: any) {
+                            enqueueSnackbar(`Error cleaning up: ${error.message}`, { variant: 'error' });
+                          }
+                        }}
+                        sx={{ fontSize: 10, height: 28, px: 1, mb: 2 }}
+                      >
+                        Clean Up Perf Test Files
+                      </Button>
                       
                       {pendingChanges.length === 0 ? (
                         <Box textAlign="center" py={4}>
