@@ -3267,47 +3267,69 @@ const NewCodeEditorPage: React.FC = () => {
                         color="warning"
                         onClick={async () => {
                           try {
-                            // Get file tree
-                            const treeResponse = await api.post('/api/file-editor/tree', {
+                            // Use browse endpoint to get actual files
+                            const browseResponse = await api.post('/api/file-editor/browse', {
                               workflow_id: selectedWorkflow,
-                              path: '',
+                              path: currentPath || '',
                             });
                             
-                            // Find all perf_test files recursively
-                            const findPerfTestFiles = (items: any[]): string[] => {
-                              let perfFiles: string[] = [];
-                              for (const item of items) {
-                                if (item.type === 'file' && item.path.includes('perf_test_')) {
-                                  perfFiles.push(item.path);
-                                } else if (item.type === 'directory' && item.children) {
-                                  perfFiles = perfFiles.concat(findPerfTestFiles(item.children));
-                                }
-                              }
-                              return perfFiles;
-                            };
+                            console.log('Browse response:', browseResponse.data);
                             
-                            const perfTestFiles = findPerfTestFiles(treeResponse.data.items || []);
+                            // Find all perf_test files in current directory
+                            const perfTestFiles = (browseResponse.data.items || [])
+                              .filter((item: any) => item.type === 'file' && item.name.includes('perf_test_'))
+                              .map((item: any) => item.path);
+                            
+                            console.log('Performance test files found:', perfTestFiles);
                             
                             if (perfTestFiles.length === 0) {
-                              enqueueSnackbar('No performance test files found', { variant: 'info' });
+                              enqueueSnackbar('No performance test files found in current directory', { variant: 'info' });
                               return;
                             }
                             
                             // Delete all perf test files
+                            let successCount = 0;
+                            let failCount = 0;
                             for (const filePath of perfTestFiles) {
                               try {
+                                console.log('Attempting to delete:', filePath);
                                 await api.post('/api/file-editor/delete', {
                                   workflow_id: selectedWorkflow,
                                   file_path: filePath,
                                 });
-                              } catch (deleteError) {
+                                console.log('Successfully deleted:', filePath);
+                                successCount++;
+                              } catch (deleteError: any) {
                                 console.error(`Failed to delete ${filePath}:`, deleteError);
+                                console.error('Error response:', deleteError.response?.data);
+                                
+                                // Try creating a delete change instead
+                                try {
+                                  console.log('Trying delete via change:', filePath);
+                                  await api.post('/api/file-editor/create-change', {
+                                    workflow_id: selectedWorkflow,
+                                    file_path: filePath,
+                                    operation: 'delete',
+                                    new_content: null,
+                                  });
+                                  console.log('Created delete change for:', filePath);
+                                  successCount++;
+                                } catch (changeError: any) {
+                                  console.error('Failed to create delete change:', changeError);
+                                  failCount++;
+                                }
                               }
                             }
                             
                             await loadDirectory(currentPath);
-                            enqueueSnackbar(`Deleted ${perfTestFiles.length} performance test file(s)`, { variant: 'success' });
+                            await loadChanges();
+                            if (failCount > 0) {
+                              enqueueSnackbar(`Processed ${successCount} file(s), ${failCount} failed (check changes panel)`, { variant: 'warning' });
+                            } else {
+                              enqueueSnackbar(`Processed ${successCount} performance test file(s)`, { variant: 'success' });
+                            }
                           } catch (error: any) {
+                            console.error('Cleanup error:', error);
                             enqueueSnackbar(`Error cleaning up: ${error.message}`, { variant: 'error' });
                           }
                         }}
