@@ -140,16 +140,62 @@ interface ExecutionStatus {
 // Helper function to get available themes
 const getAvailableThemes = (): Array<{ value: string; label: string }> => {
   return [
-    { value: 'vs', label: 'VS Light' },
-    { value: 'vs-dark', label: 'VS Dark' },
-    { value: 'hc-black', label: 'High Contrast' },
-    { value: 'monokai', label: 'Monokai' },
-    { value: 'dracula', label: 'Dracula' },
-    { value: 'github-dark', label: 'GitHub Dark' },
-    { value: 'nord', label: 'Nord' },
-    { value: 'night-owl', label: 'Night Owl' },
-    { value: 'solarized-dark', label: 'Solarized Dark' },
+    { value: 'vs', label: 'Visual Studio Light' },
+    { value: 'vs-dark', label: 'Visual Studio Dark' },
+    { value: 'hc-black', label: 'High Contrast Black' },
+    { value: 'hc-light', label: 'High Contrast Light' },
+    { value: 'active4d', label: 'Active4D' },
+    { value: 'all-hallows-eve', label: 'All Hallows Eve' },
+    { value: 'amy', label: 'Amy' },
+    { value: 'birds-of-paradise', label: 'Birds Of Paradise' },
+    { value: 'blackboard', label: 'Blackboard' },
+    { value: 'brilliance-black', label: 'Brilliance Black' },
+    { value: 'brilliance-dull', label: 'Brilliance Dull' },
+    { value: 'chrome-devtools', label: 'Chrome DevTools' },
+    { value: 'clouds-midnight', label: 'Clouds Midnight' },
+    { value: 'clouds', label: 'Clouds' },
     { value: 'cobalt', label: 'Cobalt' },
+    { value: 'cobalt2', label: 'Cobalt2' },
+    { value: 'dawn', label: 'Dawn' },
+    { value: 'dracula', label: 'Dracula' },
+    { value: 'dreamweaver', label: 'Dreamweaver' },
+    { value: 'eiffel', label: 'Eiffel' },
+    { value: 'espresso-libre', label: 'Espresso Libre' },
+    { value: 'github', label: 'GitHub' },
+    { value: 'github-dark', label: 'GitHub Dark' },
+    { value: 'idle', label: 'IDLE' },
+    { value: 'katzenmilch', label: 'Katzenmilch' },
+    { value: 'kuroir-theme', label: 'Kuroir Theme' },
+    { value: 'lazy', label: 'Lazy' },
+    { value: 'magicwb--amiga-', label: 'MagicWB (Amiga)' },
+    { value: 'merbivore-soft', label: 'Merbivore Soft' },
+    { value: 'merbivore', label: 'Merbivore' },
+    { value: 'monokai-bright', label: 'Monokai Bright' },
+    { value: 'monokai', label: 'Monokai' },
+    { value: 'night-owl', label: 'Night Owl' },
+    { value: 'nord', label: 'Nord' },
+    { value: 'oceanic-next', label: 'Oceanic Next' },
+    { value: 'pastels-on-dark', label: 'Pastels On Dark' },
+    { value: 'slush-and-poppies', label: 'Slush And Poppies' },
+    { value: 'solarized-dark', label: 'Solarized Dark' },
+    { value: 'solarized-light', label: 'Solarized Light' },
+    { value: 'spacecadet', label: 'SpaceCadet' },
+    { value: 'sunburst', label: 'Sunburst' },
+    { value: 'textmate--mac-classic-', label: 'Textmate (Mac Classic)' },
+    { value: 'tomorrow-night-blue', label: 'Tomorrow Night Blue' },
+    { value: 'tomorrow-night-bright', label: 'Tomorrow Night Bright' },
+    { value: 'tomorrow-night-eighties', label: 'Tomorrow Night Eighties' },
+    { value: 'tomorrow-night', label: 'Tomorrow Night' },
+    { value: 'tomorrow', label: 'Tomorrow' },
+    { value: 'twilight', label: 'Twilight' },
+    { value: 'upstream-sunburst', label: 'Upstream Sunburst' },
+    { value: 'vibrant-ink', label: 'Vibrant Ink' },
+    { value: 'xcode-default', label: 'Xcode Default' },
+    { value: 'zenburnesque', label: 'Zenburnesque' },
+    { value: 'iplastic', label: 'iPlastic' },
+    { value: 'idlefingers', label: 'idleFingers' },
+    { value: 'krtheme', label: 'krTheme' },
+    { value: 'monoindustrial', label: 'monoindustrial' },
   ];
 };
 
@@ -2051,19 +2097,6 @@ const NewCodeEditorPage: React.FC = () => {
               }}
             >
               <VpnKey sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>
-          
-          <Tooltip title="Terminal">
-            <IconButton
-              size="small"
-              onClick={() => navigate('/terminal')}
-              sx={{ 
-                color: location.pathname === '/terminal' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
-                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
-              }}
-            >
-              <Terminal sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
           
