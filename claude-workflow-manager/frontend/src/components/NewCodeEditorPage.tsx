@@ -17,8 +17,6 @@ import {
   Avatar,
   Paper,
   LinearProgress,
-  Breadcrumbs,
-  Link,
   Chip,
   Dialog,
   DialogTitle,
@@ -1975,20 +1973,6 @@ const NewCodeEditorPage: React.FC = () => {
     }
   };
   
-  const getBreadcrumbs = () => {
-    if (!currentPath) return [{ name: 'Root', path: '' }];
-    
-    const parts = currentPath.split('/').filter(Boolean);
-    const breadcrumbs = [{ name: 'Root', path: '' }];
-    
-    parts.forEach((part, index) => {
-      const path = parts.slice(0, index + 1).join('/');
-      breadcrumbs.push({ name: part, path });
-    });
-    
-    return breadcrumbs;
-  };
-  
   const getCombinedChange = (): FileChange | null => {
     if (pendingChangesForFile.length === 0) return null;
     if (pendingChangesForFile.length === 1) return pendingChangesForFile[0];
@@ -3116,45 +3100,50 @@ const NewCodeEditorPage: React.FC = () => {
                   {/* EXPLORER VIEW */}
                   {activityBarView === 'explorer' && (
                     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                      {/* Breadcrumbs */}
+                      {/* Explorer Header with Refresh */}
                       <Box 
                         sx={{ 
-                          px: 2,
+                          px: 1.5,
                           py: 1,
                           borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
                           bgcolor: 'rgba(0, 0, 0, 0.1)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
                         }}
                       >
-                        <Breadcrumbs 
-                          separator="›" 
+                        <Typography 
+                          variant="caption" 
                           sx={{ 
                             fontSize: 11,
-                            '& .MuiBreadcrumbs-separator': {
-                              color: 'rgba(255, 255, 255, 0.4)',
-                            },
+                            color: 'rgba(255, 255, 255, 0.7)',
+                            fontWeight: 500,
+                            textTransform: 'uppercase',
+                            letterSpacing: 0.5,
                           }}
                         >
-                          {getBreadcrumbs().map((crumb, index) => (
-                            <Link
-                              key={index}
-                              component="button"
-                              variant="body2"
-                              onClick={() => setCurrentPath(crumb.path)}
-                              sx={{ 
-                                cursor: 'pointer',
-                                fontSize: 11,
-                                color: index === getBreadcrumbs().length - 1 
-                                  ? 'rgba(255, 255, 255, 0.9)' 
-                                  : 'rgba(255, 255, 255, 0.6)',
-                                '&:hover': {
-                                  color: 'rgba(255, 255, 255, 1)',
-                                },
-                              }}
-                            >
-                              {crumb.name}
-                            </Link>
-                          ))}
-                        </Breadcrumbs>
+                          Files
+                        </Typography>
+                        <Tooltip title="Refresh Explorer">
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              loadDirectory(currentPath);
+                              loadChanges();
+                            }}
+                            disabled={!selectedWorkflow}
+                            sx={{ 
+                              p: 0.5,
+                              color: 'rgba(255, 255, 255, 0.6)',
+                              '&:hover': { 
+                                bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                color: 'rgba(255, 255, 255, 0.9)',
+                              },
+                            }}
+                          >
+                            <Refresh sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
                       </Box>
                       {/* File Tree */}
                       <Box sx={{ flex: 1, overflow: 'auto' }}>
