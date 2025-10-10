@@ -351,6 +351,9 @@ const NewCodeEditorPage: React.FC = () => {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5); // seconds
   const [perfTestPaneCount, setPerfTestPaneCount] = useState<1 | 2 | 3>(1); // Number of editor panes for perf test
+  const [perfTestReadPercent, setPerfTestReadPercent] = useState(50);
+  const [perfTestModifyPercent, setPerfTestModifyPercent] = useState(45);
+  const [perfTestCreatePercent, setPerfTestCreatePercent] = useState(5);
   const [perfTestOpenTabPaths, setPerfTestOpenTabPaths] = useState<{
     left: string | null;
     middle: string | null;
@@ -1010,6 +1013,7 @@ const NewCodeEditorPage: React.FC = () => {
     };
     
     addLog(`Starting performance test with ${perfTestCallCount} calls at ${perfTestSpeed} calls/second`);
+    addLog(`Operations: ${perfTestReadPercent}% read, ${perfTestModifyPercent}% modify, ${perfTestCreatePercent}% create`);
     if (perfTestPaneCount > 1) {
       addLog(`Using ${perfTestPaneCount} editor panes - files will cycle across panes`);
       console.log(`[PerfTest] Split view initialized with ${perfTestPaneCount} panes`);
@@ -1070,8 +1074,12 @@ const NewCodeEditorPage: React.FC = () => {
       const startTime = Date.now();
       
       try {
-        if (operationType < 0.5) {
-          // Read file operation (50%)
+        // Calculate thresholds based on user-defined percentages
+        const readThreshold = perfTestReadPercent / 100;
+        const modifyThreshold = readThreshold + (perfTestModifyPercent / 100);
+        
+        if (operationType < readThreshold) {
+          // Read file operation
           const randomFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
           await api.post('/api/file-editor/read', {
             workflow_id: selectedWorkflow,
@@ -1087,8 +1095,8 @@ const NewCodeEditorPage: React.FC = () => {
           if (i % 10 === 0) { // Log every 10th operation
             addLog(`Read file: ${randomFile} (${responseTime}ms)`);
           }
-        } else if (operationType < 0.7) {
-          // Modify existing file (20%)
+        } else if (operationType < modifyThreshold) {
+          // Modify existing file
           const randomFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
           
           // Read the file first
@@ -1145,7 +1153,7 @@ const NewCodeEditorPage: React.FC = () => {
             addLog(`Modified file: ${randomFile} line ${changedLineNumber}${paneInfo} (${responseTime}ms)`);
           }
         } else {
-          // Create new file (30%)
+          // Create new file
           const newFileName = `perf_test_${Date.now()}_${Math.random().toString(36).substring(7)}.txt`;
           const newContent = `Performance test file created at ${new Date().toISOString()}`;
           
@@ -4801,6 +4809,103 @@ const NewCodeEditorPage: React.FC = () => {
                             )}
                           </Box>
                           
+                          {/* Operation Distribution */}
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)', mb: 1, display: 'block' }}>
+                              Operation Distribution
+                              <Typography component="span" sx={{ 
+                                ml: 1, 
+                                fontSize: 9, 
+                                color: perfTestReadPercent + perfTestModifyPercent + perfTestCreatePercent === 100 
+                                  ? 'rgba(76, 175, 80, 0.8)' 
+                                  : 'rgba(244, 67, 54, 0.8)' 
+                              }}>
+                                (Total: {perfTestReadPercent + perfTestModifyPercent + perfTestCreatePercent}%)
+                              </Typography>
+                            </Typography>
+                            
+                            {/* Read Operations */}
+                            <Box sx={{ mb: 1.5 }}>
+                              <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.5)', mb: 0.5, display: 'block' }}>
+                                Read: {perfTestReadPercent}%
+                              </Typography>
+                              <Box sx={{ px: 1 }}>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  value={perfTestReadPercent}
+                                  onChange={(e) => setPerfTestReadPercent(parseInt(e.target.value))}
+                                  disabled={perfTestRunning}
+                                  style={{
+                                    width: '100%',
+                                    height: '4px',
+                                    borderRadius: '2px',
+                                    outline: 'none',
+                                    opacity: perfTestRunning ? 0.5 : 1,
+                                    cursor: perfTestRunning ? 'not-allowed' : 'pointer',
+                                  }}
+                                />
+                              </Box>
+                            </Box>
+                            
+                            {/* Modify Operations */}
+                            <Box sx={{ mb: 1.5 }}>
+                              <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.5)', mb: 0.5, display: 'block' }}>
+                                Modify: {perfTestModifyPercent}%
+                              </Typography>
+                              <Box sx={{ px: 1 }}>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  value={perfTestModifyPercent}
+                                  onChange={(e) => setPerfTestModifyPercent(parseInt(e.target.value))}
+                                  disabled={perfTestRunning}
+                                  style={{
+                                    width: '100%',
+                                    height: '4px',
+                                    borderRadius: '2px',
+                                    outline: 'none',
+                                    opacity: perfTestRunning ? 0.5 : 1,
+                                    cursor: perfTestRunning ? 'not-allowed' : 'pointer',
+                                  }}
+                                />
+                              </Box>
+                            </Box>
+                            
+                            {/* Create Operations */}
+                            <Box sx={{ mb: 0.5 }}>
+                              <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.5)', mb: 0.5, display: 'block' }}>
+                                Create: {perfTestCreatePercent}%
+                              </Typography>
+                              <Box sx={{ px: 1 }}>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  value={perfTestCreatePercent}
+                                  onChange={(e) => setPerfTestCreatePercent(parseInt(e.target.value))}
+                                  disabled={perfTestRunning}
+                                  style={{
+                                    width: '100%',
+                                    height: '4px',
+                                    borderRadius: '2px',
+                                    outline: 'none',
+                                    opacity: perfTestRunning ? 0.5 : 1,
+                                    cursor: perfTestRunning ? 'not-allowed' : 'pointer',
+                                  }}
+                                />
+                              </Box>
+                            </Box>
+                            
+                            {perfTestReadPercent + perfTestModifyPercent + perfTestCreatePercent !== 100 && (
+                              <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(244, 67, 54, 0.8)', display: 'block', mt: 0.5 }}>
+                                ⚠ Percentages should total 100%
+                              </Typography>
+                            )}
+                          </Box>
+                          
                           {/* Start/Stop Button */}
                           <Button
                             variant="contained"
@@ -4816,7 +4921,7 @@ const NewCodeEditorPage: React.FC = () => {
                                 runPerformanceTest();
                               }
                             }}
-                            disabled={!selectedWorkflow}
+                            disabled={!selectedWorkflow || (!perfTestRunning && perfTestReadPercent + perfTestModifyPercent + perfTestCreatePercent !== 100)}
                             startIcon={perfTestRunning ? <Pause /> : <PlayArrow />}
                             sx={{
                               textTransform: 'none',
