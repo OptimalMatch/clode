@@ -349,8 +349,8 @@ const NewCodeEditorPage: React.FC = () => {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5); // seconds
   const [perfTestPaneCount, setPerfTestPaneCount] = useState<1 | 2 | 3>(1); // Number of editor panes for perf test
-  const [perfTestReadPercent, setPerfTestReadPercent] = useState(50);
-  const [perfTestModifyPercent, setPerfTestModifyPercent] = useState(45);
+  const [perfTestReadPercent, setPerfTestReadPercent] = useState(25);
+  const [perfTestModifyPercent, setPerfTestModifyPercent] = useState(70);
   const [perfTestCreatePercent, setPerfTestCreatePercent] = useState(5);
   const [perfTestOpenTabPaths, setPerfTestOpenTabPaths] = useState<{
     left: string | null;
