@@ -3100,51 +3100,6 @@ const NewCodeEditorPage: React.FC = () => {
                   {/* EXPLORER VIEW */}
                   {activityBarView === 'explorer' && (
                     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                      {/* Explorer Header with Refresh */}
-                      <Box 
-                        sx={{ 
-                          px: 1.5,
-                          py: 1,
-                          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-                          bgcolor: 'rgba(0, 0, 0, 0.1)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                        }}
-                      >
-                        <Typography 
-                          variant="caption" 
-                          sx={{ 
-                            fontSize: 11,
-                            color: 'rgba(255, 255, 255, 0.7)',
-                            fontWeight: 500,
-                            textTransform: 'uppercase',
-                            letterSpacing: 0.5,
-                          }}
-                        >
-                          Files
-                        </Typography>
-                        <Tooltip title="Refresh Explorer">
-                          <IconButton
-                            size="small"
-                            onClick={() => {
-                              loadDirectory(currentPath);
-                              loadChanges();
-                            }}
-                            disabled={!selectedWorkflow}
-                            sx={{ 
-                              p: 0.5,
-                              color: 'rgba(255, 255, 255, 0.6)',
-                              '&:hover': { 
-                                bgcolor: 'rgba(255, 255, 255, 0.1)',
-                                color: 'rgba(255, 255, 255, 0.9)',
-                              },
-                            }}
-                          >
-                            <Refresh sx={{ fontSize: 16 }} />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
                       {/* File Tree */}
                       <Box sx={{ flex: 1, overflow: 'auto' }}>
                         <EnhancedFileTree
@@ -3159,6 +3114,10 @@ const NewCodeEditorPage: React.FC = () => {
                           openTabs={openTabs.map(tab => tab.path)}
                           pendingChanges={pendingChanges}
                           currentPath={currentPath}
+                          onRefresh={() => {
+                            loadDirectory(currentPath);
+                            loadChanges();
+                          }}
                         />
                         {items.length === 0 && !loading && (
                           <Box textAlign="center" py={4}>

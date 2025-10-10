@@ -26,6 +26,7 @@ import {
   Archive,
   Settings,
   SourceOutlined,
+  Refresh,
 } from '@mui/icons-material';
 import { SvgIcon, SvgIconProps } from '@mui/material';
 
@@ -104,6 +105,7 @@ interface EnhancedFileTreeProps {
   openTabs?: string[];
   pendingChanges?: Array<{ file_path: string }>;
   currentPath?: string;
+  onRefresh?: () => void;
 }
 
 // Helper to get file icon based on extension (VSCode-style icons)
@@ -463,6 +465,7 @@ const EnhancedFileTree: React.FC<EnhancedFileTreeProps> = ({
   openTabs,
   pendingChanges,
   currentPath,
+  onRefresh,
 }) => {
   const [headerHovered, setHeaderHovered] = useState(false);
   const [createDialog, setCreateDialog] = useState<'file' | 'folder' | null>(null);
@@ -520,6 +523,23 @@ const EnhancedFileTree: React.FC<EnhancedFileTreeProps> = ({
         {/* Hover Actions */}
         {headerHovered && (
           <Box sx={{ display: 'flex', gap: 0.5 }}>
+            {onRefresh && (
+              <Tooltip title="Refresh">
+                <IconButton
+                  size="small"
+                  onClick={onRefresh}
+                  sx={{ 
+                    p: 0.5, 
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    '&:hover': {
+                      color: 'rgba(255, 255, 255, 0.9)',
+                    }
+                  }}
+                >
+                  <Refresh sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            )}
             {onCreateFile && (
               <Tooltip title="New File">
                 <IconButton
