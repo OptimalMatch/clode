@@ -772,16 +772,19 @@ const NewCodeEditorPage: React.FC = () => {
         path: '',
       });
       
-      const extractFilePaths = (node: any): string[] => {
-        if (node.type === 'file') {
-          return [node.path];
-        } else if (node.children) {
-          return node.children.flatMap((child: any) => extractFilePaths(child));
+      const extractFilePaths = (items: any[]): string[] => {
+        const paths: string[] = [];
+        for (const item of items) {
+          if (item.type === 'file') {
+            paths.push(item.path);
+          } else if (item.type === 'directory' && item.children) {
+            paths.push(...extractFilePaths(item.children));
+          }
         }
-        return [];
+        return paths;
       };
       
-      filesInRepo = extractFilePaths(treeResponse.data.tree);
+      filesInRepo = extractFilePaths(treeResponse.data.items || []);
       addLog(`Found ${filesInRepo.length} files in repository`);
     } catch (error: any) {
       addLog(`Error loading file tree: ${error.message}`);
