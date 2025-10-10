@@ -647,7 +647,7 @@ const NewCodeEditorPage: React.FC = () => {
       const response = await api.post('/api/file-editor/browse', {
         workflow_id: selectedWorkflow,
         path,
-        include_hidden: false,
+        include_hidden: true,
       });
       setItems(response.data.items || []);
     } catch (error: any) {
@@ -664,7 +664,7 @@ const NewCodeEditorPage: React.FC = () => {
       const response = await api.post('/api/file-editor/browse', {
         workflow_id: selectedWorkflow,
         path: folderPath,
-        include_hidden: false,
+        include_hidden: true,
       });
       return response.data.items || [];
     } catch (error: any) {
