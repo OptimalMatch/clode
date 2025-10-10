@@ -819,12 +819,16 @@ const NewCodeEditorPage: React.FC = () => {
     } catch (error: any) {
       addLog(`Error loading file tree: ${error.message}`);
       setPerfTestRunning(false);
+      perfTestRunningRef.current = false;
+      setAutoRefreshEnabled(false);
       return;
     }
     
     if (filesInRepo.length === 0) {
       addLog('No files found in repository');
       setPerfTestRunning(false);
+      perfTestRunningRef.current = false;
+      setAutoRefreshEnabled(false);
       return;
     }
     
@@ -970,6 +974,7 @@ const NewCodeEditorPage: React.FC = () => {
     
     setPerfTestRunning(false);
     perfTestRunningRef.current = false;
+    setAutoRefreshEnabled(false);
     
     // Reload changes to show new files
     await loadChanges();
@@ -4449,6 +4454,7 @@ const NewCodeEditorPage: React.FC = () => {
                               if (perfTestRunning) {
                                 setPerfTestRunning(false);
                                 perfTestRunningRef.current = false;
+                                setAutoRefreshEnabled(false);
                               } else {
                                 runPerformanceTest();
                               }
