@@ -833,7 +833,9 @@ const NewCodeEditorPage: React.FC = () => {
           return currentLength - adjustment;
         });
       } else {
-        // Multi-pane mode - keep files open in each pane, just switch active tab
+        // Multi-pane mode - keep files open in each pane, limit to 3 tabs per pane
+        const MAX_TABS_PER_PANE = 3;
+        
         if (targetPane === 'left') {
           let newTabIndex = -1;
           setLeftPaneTabs(currentTabs => {
@@ -845,8 +847,15 @@ const NewCodeEditorPage: React.FC = () => {
               return currentTabs;
             }
             
+            // If at max capacity, remove the oldest tab (first one)
+            let updatedTabs = [...currentTabs];
+            if (updatedTabs.length >= MAX_TABS_PER_PANE) {
+              console.log(`[PerfTest] LEFT pane at max capacity (${MAX_TABS_PER_PANE}), removing oldest tab`);
+              updatedTabs = updatedTabs.slice(1); // Remove first (oldest) tab
+            }
+            
             // Add new tab to left pane
-            const newTabs = [...currentTabs, newTab];
+            const newTabs = [...updatedTabs, newTab];
             newTabIndex = newTabs.length - 1;
             console.log(`[PerfTest] Added tab to LEFT pane. Total tabs in left pane: ${newTabs.length}`);
             return newTabs;
@@ -863,7 +872,14 @@ const NewCodeEditorPage: React.FC = () => {
               return currentTabs;
             }
             
-            const newTabs = [...currentTabs, newTab];
+            // If at max capacity, remove the oldest tab
+            let updatedTabs = [...currentTabs];
+            if (updatedTabs.length >= MAX_TABS_PER_PANE) {
+              console.log(`[PerfTest] MIDDLE pane at max capacity (${MAX_TABS_PER_PANE}), removing oldest tab`);
+              updatedTabs = updatedTabs.slice(1);
+            }
+            
+            const newTabs = [...updatedTabs, newTab];
             newTabIndex = newTabs.length - 1;
             console.log(`[PerfTest] Added tab to MIDDLE pane. Total tabs in middle pane: ${newTabs.length}`);
             return newTabs;
@@ -879,7 +895,14 @@ const NewCodeEditorPage: React.FC = () => {
               return currentTabs;
             }
             
-            const newTabs = [...currentTabs, newTab];
+            // If at max capacity, remove the oldest tab
+            let updatedTabs = [...currentTabs];
+            if (updatedTabs.length >= MAX_TABS_PER_PANE) {
+              console.log(`[PerfTest] RIGHT pane at max capacity (${MAX_TABS_PER_PANE}), removing oldest tab`);
+              updatedTabs = updatedTabs.slice(1);
+            }
+            
+            const newTabs = [...updatedTabs, newTab];
             newTabIndex = newTabs.length - 1;
             console.log(`[PerfTest] Added tab to RIGHT pane. Total tabs in right pane: ${newTabs.length}`);
             return newTabs;
