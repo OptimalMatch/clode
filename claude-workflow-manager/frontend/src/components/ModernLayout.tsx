@@ -5,6 +5,10 @@ import {
   Tooltip,
   Typography,
   Divider,
+  Avatar,
+  Menu,
+  MenuItem,
+  ListItemIcon,
 } from '@mui/material';
 import {
   Code,
@@ -22,8 +26,11 @@ import {
   Description,
   VpnKey,
   AccountCircle,
+  Person,
+  Logout,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import RunnerSprite from './RunnerSprite';
 
 interface ModernLayoutProps {
@@ -47,6 +54,30 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, isAuthenticated, logout } = useAuth();
+  
+  // User menu state
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const isUserMenuOpen = Boolean(anchorEl);
+
+  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleUserMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = async () => {
+    handleUserMenuClose();
+    await logout();
+    navigate('/login');
+  };
+
+  const handleProfile = () => {
+    handleUserMenuClose();
+    navigate('/profile');
+  };
   
   const [primaryNavView, setPrimaryNavView] = useState<PrimaryNavView>(() => {
     // Set initial view based on current path
@@ -290,6 +321,57 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
         </Box>
         
         <Box sx={{ flexGrow: 1 }} />
+        
+        {/* User Profile */}
+        {isAuthenticated && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
+            <Typography variant="body2" sx={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.9)' }}>
+              {user?.username}
+            </Typography>
+            <Tooltip title="Account">
+              <IconButton
+                onClick={handleUserMenuOpen}
+                size="small"
+                aria-controls={isUserMenuOpen ? 'account-menu' : undefined}
+                aria-haspopup="true"
+                aria-expanded={isUserMenuOpen ? 'true' : undefined}
+                sx={{ p: 0 }}
+              >
+                <Avatar sx={{ width: 28, height: 28, bgcolor: 'primary.main', fontSize: 14 }}>
+                  {user?.username?.charAt(0).toUpperCase()}
+                </Avatar>
+              </IconButton>
+            </Tooltip>
+            <Menu
+              anchorEl={anchorEl}
+              id="account-menu"
+              open={isUserMenuOpen}
+              onClose={handleUserMenuClose}
+              onClick={handleUserMenuClose}
+              transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+              anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            >
+              <MenuItem disabled>
+                <Typography variant="body2" color="text.secondary">
+                  {user?.email}
+                </Typography>
+              </MenuItem>
+              <Divider />
+              <MenuItem onClick={handleProfile}>
+                <ListItemIcon>
+                  <Person fontSize="small" />
+                </ListItemIcon>
+                Profile
+              </MenuItem>
+              <MenuItem onClick={handleLogout}>
+                <ListItemIcon>
+                  <Logout fontSize="small" />
+                </ListItemIcon>
+                Logout
+              </MenuItem>
+            </Menu>
+          </Box>
+        )}
         
         {/* Action Icons */}
         {showRefresh && onRefresh && (
