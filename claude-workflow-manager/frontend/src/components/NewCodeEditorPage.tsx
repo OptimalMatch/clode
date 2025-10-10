@@ -76,6 +76,9 @@ import {
   VpnKey,
   AccountCircle,
   Logout,
+  Speed,
+  PlayArrow,
+  Pause,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -309,7 +312,32 @@ const NewCodeEditorPage: React.FC = () => {
   const [themeColors, setThemeColors] = useState<any>(null);
   const [activityBarView, setActivityBarView] = useState<'explorer' | 'search' | 'changes'>('explorer');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [rightPanelOpen, setRightPanelOpen] = useState(false); // For AI Assistant
+  const [rightPanelOpen, setRightPanelOpen] = useState(false); // For AI Assistant or Performance Testing
+  const [rightPanelType, setRightPanelType] = useState<'ai' | 'performance'>('ai'); // Track which panel to show
+  const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null); // More menu anchor
+  
+  // Performance testing state
+  const [perfTestRunning, setPerfTestRunning] = useState(false);
+  const [perfTestCallCount, setPerfTestCallCount] = useState(100);
+  const [perfTestSpeed, setPerfTestSpeed] = useState(10); // calls per second
+  const [perfTestStats, setPerfTestStats] = useState<{
+    totalCalls: number;
+    successCalls: number;
+    failedCalls: number;
+    avgResponseTime: number;
+    minResponseTime: number;
+    maxResponseTime: number;
+    responseTimes: number[];
+  }>({
+    totalCalls: 0,
+    successCalls: 0,
+    failedCalls: 0,
+    avgResponseTime: 0,
+    minResponseTime: 0,
+    maxResponseTime: 0,
+    responseTimes: [],
+  });
+  const [perfTestLogs, setPerfTestLogs] = useState<string[]>([]);
   
   // Tab system state
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
@@ -357,6 +385,7 @@ const NewCodeEditorPage: React.FC = () => {
   
   // Refs
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const perfTestRunningRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const changesPollingIntervalRef = useRef<any>(null);
   
@@ -700,6 +729,218 @@ const NewCodeEditorPage: React.FC = () => {
     } catch (error: any) {
       enqueueSnackbar(error.response?.data?.detail || 'Failed to initialize editor', { variant: 'error' });
     }
+  };
+  
+  // Performance Testing Function
+  const runPerformanceTest = async () => {
+    if (!selectedWorkflow) {
+      enqueueSnackbar('Please select a workflow first', { variant: 'warning' });
+      return;
+    }
+    
+    setPerfTestRunning(true);
+    perfTestRunningRef.current = true;
+    setPerfTestLogs([]);
+    setPerfTestStats({
+      totalCalls: 0,
+      successCalls: 0,
+      failedCalls: 0,
+      avgResponseTime: 0,
+      minResponseTime: 0,
+      maxResponseTime: 0,
+      responseTimes: [],
+    });
+    
+    const testStartTime = Date.now();
+    let completedCalls = 0;
+    const responseTimes: number[] = [];
+    let successCount = 0;
+    let failureCount = 0;
+    
+    const addLog = (message: string) => {
+      const timestamp = new Date().toLocaleTimeString();
+      setPerfTestLogs(prev => [...prev, `[${timestamp}] ${message}`]);
+    };
+    
+    addLog(`Starting performance test with ${perfTestCallCount} calls at ${perfTestSpeed} calls/second`);
+    
+    // Get list of files to work with
+    let filesInRepo: string[] = [];
+    try {
+      const treeResponse = await api.post('/api/file-editor/tree', {
+        workflow_id: selectedWorkflow,
+        path: '',
+      });
+      
+      const extractFilePaths = (node: any): string[] => {
+        if (node.type === 'file') {
+          return [node.path];
+        } else if (node.children) {
+          return node.children.flatMap((child: any) => extractFilePaths(child));
+        }
+        return [];
+      };
+      
+      filesInRepo = extractFilePaths(treeResponse.data.tree);
+      addLog(`Found ${filesInRepo.length} files in repository`);
+    } catch (error: any) {
+      addLog(`Error loading file tree: ${error.message}`);
+      setPerfTestRunning(false);
+      return;
+    }
+    
+    if (filesInRepo.length === 0) {
+      addLog('No files found in repository');
+      setPerfTestRunning(false);
+      return;
+    }
+    
+    // Run performance test
+    const delayBetweenCalls = 1000 / perfTestSpeed; // milliseconds
+    
+    for (let i = 0; i < perfTestCallCount; i++) {
+      if (!perfTestRunningRef.current) {
+        addLog('Test stopped by user');
+        break;
+      }
+      
+      const operationType = Math.random();
+      const startTime = Date.now();
+      
+      try {
+        if (operationType < 0.5) {
+          // Read file operation (50%)
+          const randomFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
+          await api.post('/api/file-editor/read', {
+            workflow_id: selectedWorkflow,
+            file_path: randomFile,
+          });
+          
+          const endTime = Date.now();
+          const responseTime = endTime - startTime;
+          responseTimes.push(responseTime);
+          successCount++;
+          completedCalls++;
+          
+          if (i % 10 === 0) { // Log every 10th operation
+            addLog(`Read file: ${randomFile} (${responseTime}ms)`);
+          }
+        } else if (operationType < 0.7) {
+          // Modify existing file (20%)
+          const randomFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
+          
+          // Read the file first
+          const readResponse = await api.post('/api/file-editor/read', {
+            workflow_id: selectedWorkflow,
+            file_path: randomFile,
+          });
+          
+          let content = readResponse.data.content || '';
+          const lines = content.split('\n');
+          
+          // Random modification: remove, change, or add lines
+          const modType = Math.random();
+          if (modType < 0.33 && lines.length > 1) {
+            // Remove a random line
+            const lineToRemove = Math.floor(Math.random() * lines.length);
+            lines.splice(lineToRemove, 1);
+          } else if (modType < 0.66 && lines.length > 0) {
+            // Change a random line
+            const lineToChange = Math.floor(Math.random() * lines.length);
+            lines[lineToChange] = `// Modified at ${new Date().toISOString()}`;
+          } else {
+            // Add a new line
+            const lineToInsert = Math.floor(Math.random() * lines.length);
+            lines.splice(lineToInsert, 0, `// Added line at ${new Date().toISOString()}`);
+          }
+          
+          const newContent = lines.join('\n');
+          
+          await api.post('/api/file-editor/create-change', {
+            workflow_id: selectedWorkflow,
+            file_path: randomFile,
+            operation: 'update',
+            new_content: newContent,
+          });
+          
+          const endTime = Date.now();
+          const responseTime = endTime - startTime;
+          responseTimes.push(responseTime);
+          successCount++;
+          completedCalls++;
+          
+          if (i % 10 === 0) {
+            addLog(`Modified file: ${randomFile} (${responseTime}ms)`);
+          }
+        } else {
+          // Create new file (30%)
+          const newFileName = `perf_test_${Date.now()}_${Math.random().toString(36).substring(7)}.txt`;
+          const newContent = `Performance test file created at ${new Date().toISOString()}`;
+          
+          await api.post('/api/file-editor/create-change', {
+            workflow_id: selectedWorkflow,
+            file_path: newFileName,
+            operation: 'create',
+            new_content: newContent,
+          });
+          
+          // Add to files list for future operations
+          filesInRepo.push(newFileName);
+          
+          const endTime = Date.now();
+          const responseTime = endTime - startTime;
+          responseTimes.push(responseTime);
+          successCount++;
+          completedCalls++;
+          
+          if (i % 10 === 0) {
+            addLog(`Created file: ${newFileName} (${responseTime}ms)`);
+          }
+        }
+      } catch (error: any) {
+        const endTime = Date.now();
+        const responseTime = endTime - startTime;
+        responseTimes.push(responseTime);
+        failureCount++;
+        completedCalls++;
+        
+        if (i % 10 === 0) {
+          addLog(`Operation failed: ${error.response?.data?.detail || error.message}`);
+        }
+      }
+      
+      // Update stats
+      const avgTime = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
+      const minTime = Math.min(...responseTimes);
+      const maxTime = Math.max(...responseTimes);
+      
+      setPerfTestStats({
+        totalCalls: completedCalls,
+        successCalls: successCount,
+        failedCalls: failureCount,
+        avgResponseTime: avgTime,
+        minResponseTime: minTime,
+        maxResponseTime: maxTime,
+        responseTimes,
+      });
+      
+      // Delay to match desired speed
+      await new Promise(resolve => setTimeout(resolve, delayBetweenCalls));
+    }
+    
+    const testEndTime = Date.now();
+    const totalTime = (testEndTime - testStartTime) / 1000; // seconds
+    
+    addLog(`Test completed in ${totalTime.toFixed(2)} seconds`);
+    addLog(`Success: ${successCount}, Failed: ${failureCount}`);
+    addLog(`Avg response time: ${(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length).toFixed(0)}ms`);
+    
+    setPerfTestRunning(false);
+    perfTestRunningRef.current = false;
+    
+    // Reload changes to show new files
+    await loadChanges();
+    await loadDirectory(currentPath);
   };
   
   const handleItemClick = async (item: FileItem, isDoubleClick: boolean = false) => {
@@ -2364,9 +2605,12 @@ const NewCodeEditorPage: React.FC = () => {
         <Tooltip title="AI Assistant">
           <IconButton 
             size="small"
-            onClick={() => setRightPanelOpen(!rightPanelOpen)}
+            onClick={() => {
+              setRightPanelType('ai');
+              setRightPanelOpen(!rightPanelOpen || rightPanelType !== 'ai');
+            }}
             sx={{ 
-              color: rightPanelOpen ? '#6495ed' : 'rgba(255, 255, 255, 0.7)', 
+              color: (rightPanelOpen && rightPanelType === 'ai') ? '#6495ed' : 'rgba(255, 255, 255, 0.7)', 
               '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' } 
             }}
           >
@@ -2384,11 +2628,39 @@ const NewCodeEditorPage: React.FC = () => {
         <Tooltip title="More">
           <IconButton 
             size="small"
+            onClick={(e) => setMoreMenuAnchor(e.currentTarget)}
             sx={{ color: 'rgba(255, 255, 255, 0.7)', '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' } }}
           >
             <MoreVert sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
+        
+        {/* More Menu */}
+        <Menu
+          anchorEl={moreMenuAnchor}
+          open={Boolean(moreMenuAnchor)}
+          onClose={() => setMoreMenuAnchor(null)}
+          PaperProps={{
+            sx: {
+              bgcolor: '#1e1e1e',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+            },
+          }}
+        >
+          <MenuItem
+            onClick={() => {
+              setRightPanelType('performance');
+              setRightPanelOpen(true);
+              setMoreMenuAnchor(null);
+            }}
+            sx={{ fontSize: 13, py: 1 }}
+          >
+            <ListItemIcon>
+              <Speed fontSize="small" sx={{ color: 'rgba(255, 255, 255, 0.7)' }} />
+            </ListItemIcon>
+            <ListItemText>Performance Testing</ListItemText>
+          </MenuItem>
+        </Menu>
       </Box>
       
       {/* Main Content Area with Activity Bar and Resizable Panels */}
@@ -3705,49 +3977,51 @@ const NewCodeEditorPage: React.FC = () => {
               </Box>
             </Panel>
             
-            {/* Right Panel for AI Assistant */}
+            {/* Right Panel for AI Assistant or Performance Testing */}
             {rightPanelOpen && (
               <>
                 <PanelResizeHandle style={resizeHandleStyles} />
                 <Panel defaultSize={25} minSize={20} maxSize={40}>
                   <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: themeColors?.sidebarBg || '#252526', borderLeft: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                    {/* AI Assistant Header */}
-                    <Box 
-                      sx={{ 
-                        p: 1.5,
-                        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Typography 
-                        variant="subtitle2" 
-                        sx={{ 
-                          fontWeight: 600,
-                          fontSize: 11,
-                          textTransform: 'uppercase',
-                          letterSpacing: 0.8,
-                          color: 'rgba(255, 255, 255, 0.7)',
-                        }}
-                      >
-                        Agentic Construct
-                      </Typography>
-                      <Tooltip title="Close">
-                        <IconButton
-                          onClick={() => setRightPanelOpen(false)}
-                          size="small"
+                    {rightPanelType === 'ai' ? (
+                      <>
+                        {/* AI Assistant Header */}
+                        <Box 
                           sx={{ 
-                            p: 0.5, 
-                            color: 'rgba(255, 255, 255, 0.6)',
-                            '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+                            p: 1.5,
+                            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexShrink: 0,
                           }}
                         >
-                          <Close sx={{ fontSize: 16 }} />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
+                          <Typography 
+                            variant="subtitle2" 
+                            sx={{ 
+                              fontWeight: 600,
+                              fontSize: 11,
+                              textTransform: 'uppercase',
+                              letterSpacing: 0.8,
+                              color: 'rgba(255, 255, 255, 0.7)',
+                            }}
+                          >
+                            Agentic Construct
+                          </Typography>
+                          <Tooltip title="Close">
+                            <IconButton
+                              onClick={() => setRightPanelOpen(false)}
+                              size="small"
+                              sx={{ 
+                                p: 0.5, 
+                                color: 'rgba(255, 255, 255, 0.6)',
+                                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+                              }}
+                            >
+                              <Close sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                     
                     {/* Chat Messages */}
                     <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
@@ -4038,6 +4312,231 @@ const NewCodeEditorPage: React.FC = () => {
                         ))}
                       </Menu>
                     </Box>
+                      </>
+                    ) : (
+                      <>
+                        {/* Performance Testing Panel */}
+                        <Box 
+                          sx={{ 
+                            p: 1.5,
+                            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Speed sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.7)' }} />
+                            <Typography 
+                              variant="subtitle2" 
+                              sx={{ 
+                                fontWeight: 600,
+                                fontSize: 11,
+                                textTransform: 'uppercase',
+                                letterSpacing: 0.8,
+                                color: 'rgba(255, 255, 255, 0.7)',
+                              }}
+                            >
+                              Performance Testing
+                            </Typography>
+                          </Box>
+                          <Tooltip title="Close">
+                            <IconButton
+                              onClick={() => setRightPanelOpen(false)}
+                              size="small"
+                              sx={{ 
+                                p: 0.5, 
+                                color: 'rgba(255, 255, 255, 0.6)',
+                                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+                              }}
+                            >
+                              <Close sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                        
+                        {/* Performance Test Controls */}
+                        <Box sx={{ p: 2 }}>
+                          <Typography variant="caption" sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.7)', mb: 1, display: 'block' }}>
+                            Test Configuration
+                          </Typography>
+                          
+                          {/* Number of Calls */}
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)', mb: 0.5, display: 'block' }}>
+                              Number of API Calls: {perfTestCallCount}
+                            </Typography>
+                            <TextField
+                              type="number"
+                              size="small"
+                              fullWidth
+                              value={perfTestCallCount}
+                              onChange={(e) => setPerfTestCallCount(Math.max(1, parseInt(e.target.value) || 1))}
+                              disabled={perfTestRunning}
+                              sx={{
+                                '& .MuiOutlinedInput-root': {
+                                  bgcolor: 'rgba(255, 255, 255, 0.05)',
+                                  fontSize: 11,
+                                },
+                              }}
+                            />
+                          </Box>
+                          
+                          {/* Speed Slider */}
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)', mb: 0.5, display: 'block' }}>
+                              Speed: {perfTestSpeed} calls/second
+                            </Typography>
+                            <Box sx={{ px: 1 }}>
+                              <input
+                                type="range"
+                                min="1"
+                                max="100"
+                                value={perfTestSpeed}
+                                onChange={(e) => setPerfTestSpeed(parseInt(e.target.value))}
+                                disabled={perfTestRunning}
+                                style={{
+                                  width: '100%',
+                                  height: '4px',
+                                  borderRadius: '2px',
+                                  outline: 'none',
+                                  opacity: perfTestRunning ? 0.5 : 1,
+                                  cursor: perfTestRunning ? 'not-allowed' : 'pointer',
+                                }}
+                              />
+                            </Box>
+                          </Box>
+                          
+                          {/* Start/Stop Button */}
+                          <Button
+                            variant="contained"
+                            fullWidth
+                            onClick={() => {
+                              if (perfTestRunning) {
+                                setPerfTestRunning(false);
+                                perfTestRunningRef.current = false;
+                              } else {
+                                runPerformanceTest();
+                              }
+                            }}
+                            disabled={!selectedWorkflow}
+                            startIcon={perfTestRunning ? <Pause /> : <PlayArrow />}
+                            sx={{
+                              textTransform: 'none',
+                              fontSize: 11,
+                              bgcolor: perfTestRunning ? 'error.main' : 'primary.main',
+                              '&:hover': {
+                                bgcolor: perfTestRunning ? 'error.dark' : 'primary.dark',
+                              },
+                            }}
+                          >
+                            {perfTestRunning ? 'Stop Test' : 'Start Performance Test'}
+                          </Button>
+                        </Box>
+                        
+                        <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
+                        
+                        {/* Statistics */}
+                        <Box sx={{ p: 2 }}>
+                          <Typography variant="caption" sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.7)', mb: 1, display: 'block' }}>
+                            Statistics
+                          </Typography>
+                          
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Total Calls:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600 }}>
+                                {perfTestStats.totalCalls}
+                              </Typography>
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Successful:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: '#4CAF50', fontWeight: 600 }}>
+                                {perfTestStats.successCalls}
+                              </Typography>
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Failed:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: '#f44336', fontWeight: 600 }}>
+                                {perfTestStats.failedCalls}
+                              </Typography>
+                            </Box>
+                            
+                            <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)', my: 0.5 }} />
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Avg Response:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600 }}>
+                                {perfTestStats.avgResponseTime.toFixed(0)}ms
+                              </Typography>
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Min Response:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600 }}>
+                                {perfTestStats.minResponseTime > 0 ? perfTestStats.minResponseTime.toFixed(0) : 0}ms
+                              </Typography>
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Max Response:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600 }}>
+                                {perfTestStats.maxResponseTime.toFixed(0)}ms
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Box>
+                        
+                        <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
+                        
+                        {/* Logs */}
+                        <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+                          <Typography variant="caption" sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.7)', mb: 1, display: 'block' }}>
+                            Test Logs
+                          </Typography>
+                          
+                          {perfTestLogs.length === 0 ? (
+                            <Box sx={{ textAlign: 'center', py: 4 }}>
+                              <Speed sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.2)', mb: 1 }} />
+                              <Typography sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.4)' }}>
+                                No test logs yet. Start a test to see results.
+                              </Typography>
+                            </Box>
+                          ) : (
+                            <Box sx={{ 
+                              bgcolor: 'rgba(0, 0, 0, 0.3)',
+                              borderRadius: 1,
+                              p: 1,
+                              fontFamily: 'monospace',
+                              fontSize: 9,
+                              maxHeight: '300px',
+                              overflow: 'auto',
+                            }}>
+                              {perfTestLogs.map((log, index) => (
+                                <Box key={index} sx={{ mb: 0.5, color: 'rgba(255, 255, 255, 0.8)' }}>
+                                  {log}
+                                </Box>
+                              ))}
+                            </Box>
+                          )}
+                        </Box>
+                      </>
+                    )}
                   </Box>
                 </Panel>
               </>
