@@ -3488,7 +3488,7 @@ const NewCodeEditorPage: React.FC = () => {
             {/* Sidebar Panel - Only show when not collapsed */}
             {!sidebarCollapsed && (
               <>
-                <Panel defaultSize={20} minSize={15} maxSize={35}>
+                <Panel defaultSize={20} minSize={10} maxSize={35}>
               <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: themeColors?.sidebarBg || '#252526' }}>
                 {/* Sidebar Header */}
                 <Box 
@@ -4843,7 +4843,7 @@ const NewCodeEditorPage: React.FC = () => {
             {showAgentPanels && agents.length > 0 && (
               <>
                 <PanelResizeHandle style={resizeHandleStyles} />
-                <Panel defaultSize={30} minSize={20} maxSize={50}>
+                <Panel defaultSize={30} minSize={10} maxSize={50}>
                   <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {/* Agent Tabs */}
                     {agents.length > 1 && (
@@ -4919,7 +4919,7 @@ const NewCodeEditorPage: React.FC = () => {
             {rightPanelOpen && (
               <>
                 <PanelResizeHandle style={resizeHandleStyles} />
-                <Panel defaultSize={25} minSize={20} maxSize={40}>
+                <Panel defaultSize={25} minSize={10} maxSize={40}>
                   <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: themeColors?.sidebarBg || '#252526', borderLeft: '1px solid rgba(255, 255, 255, 0.1)' }}>
                     {rightPanelType === 'ai' ? (
                       <>
