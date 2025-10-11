@@ -363,6 +363,7 @@ const NewCodeEditorPage: React.FC = () => {
   const perfTestCurrentPaneRef = useRef<'left' | 'middle' | 'right'>('left'); // Current pane for next file
   const [perfTestUIUpdateRate, setPerfTestUIUpdateRate] = useState(10); // UI updates per second (max visible rate)
   const perfTestLastUIUpdateRef = useRef<number>(0); // Timestamp of last UI update for throttling
+  const [perfTestMaxConcurrent, setPerfTestMaxConcurrent] = useState(6); // Max concurrent API calls (connection pool limit)
   
   // Tab system state
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
@@ -1123,6 +1124,30 @@ const NewCodeEditorPage: React.FC = () => {
     const delayBetweenCalls = 1000 / perfTestSpeed; // milliseconds
     const fileLocks = new Map<string, Promise<void>>(); // Track ongoing operations per file
     
+    // Semaphore to limit concurrent API calls (prevent resource exhaustion)
+    let activeCalls = 0;
+    const semaphoreQueue: (() => void)[] = [];
+    
+    const acquireSemaphore = async (): Promise<void> => {
+      if (activeCalls < perfTestMaxConcurrent) {
+        activeCalls++;
+        return;
+      }
+      // Wait for a slot to become available
+      return new Promise(resolve => {
+        semaphoreQueue.push(resolve);
+      });
+    };
+    
+    const releaseSemaphore = () => {
+      activeCalls--;
+      const next = semaphoreQueue.shift();
+      if (next) {
+        activeCalls++;
+        next();
+      }
+    };
+    
     // Function to execute a single test operation
     const executeTestOperation = async (callIndex: number) => {
       if (!perfTestRunningRef.current) {
@@ -1133,6 +1158,9 @@ const NewCodeEditorPage: React.FC = () => {
       const startTime = Date.now();
       
       try {
+        // Acquire semaphore slot (limit concurrent connections)
+        await acquireSemaphore();
+        
         // Calculate thresholds based on user-defined percentages
         const readThreshold = perfTestReadPercent / 100;
         const modifyThreshold = readThreshold + (perfTestModifyPercent / 100);
@@ -1143,10 +1171,7 @@ const NewCodeEditorPage: React.FC = () => {
           // Read file operation
           targetFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
           
-          // Wait for any pending operations on this file
-          if (fileLocks.has(targetFile)) {
-            await fileLocks.get(targetFile);
-          }
+          // No need to wait for file locks on read operations
           
           await api.post('/api/file-editor/read', {
             workflow_id: selectedWorkflow,
@@ -1286,7 +1311,14 @@ const NewCodeEditorPage: React.FC = () => {
             addLog(`Created file: ${newFileName}${paneInfo} (${responseTime}ms)`);
           }
         }
+        
+        // Release semaphore slot
+        releaseSemaphore();
+        
       } catch (error: any) {
+        // Release semaphore slot on error
+        releaseSemaphore();
+        
         const endTime = Date.now();
         const responseTime = endTime - startTime;
         responseTimes.push(responseTime);
@@ -4954,6 +4986,34 @@ const NewCodeEditorPage: React.FC = () => {
                             </Box>
                             <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.5)', mt: 0.5, display: 'block' }}>
                               Limits visual file updates for high-speed tests
+                            </Typography>
+                          </Box>
+                          
+                          {/* Max Concurrent Connections */}
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)', mb: 0.5, display: 'block' }}>
+                              Max Concurrent: {perfTestMaxConcurrent} connections
+                            </Typography>
+                            <Box sx={{ px: 1 }}>
+                              <input
+                                type="range"
+                                min="1"
+                                max="50"
+                                value={perfTestMaxConcurrent}
+                                onChange={(e) => setPerfTestMaxConcurrent(parseInt(e.target.value))}
+                                disabled={perfTestRunning}
+                                style={{
+                                  width: '100%',
+                                  height: '4px',
+                                  borderRadius: '2px',
+                                  outline: 'none',
+                                  opacity: perfTestRunning ? 0.5 : 1,
+                                  cursor: perfTestRunning ? 'not-allowed' : 'pointer',
+                                }}
+                              />
+                            </Box>
+                            <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.5)', mt: 0.5, display: 'block' }}>
+                              Limits concurrent HTTP requests (prevents ERR_INSUFFICIENT_RESOURCES)
                             </Typography>
                           </Box>
                           
