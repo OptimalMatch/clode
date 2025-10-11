@@ -515,7 +515,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
               selectedPath={selectedFile?.path}
               openTabs={openTabs.map(tab => tab.path)}
               pendingChanges={pendingChanges}
-              currentPath={agent.workspacePath || agent.workFolder}
+              currentPath={agent.workspacePath ? '' : agent.workFolder}
               onRefresh={() => {
                 loadDirectory();
                 loadChanges();
