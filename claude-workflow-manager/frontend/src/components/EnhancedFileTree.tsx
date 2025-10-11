@@ -241,6 +241,22 @@ const EnhancedFileTreeItem: React.FC<{
       });
     }
   }, [isSelected]);
+
+  // Load children when folder is programmatically expanded
+  useEffect(() => {
+    if (isDirectory && expanded && children.length === 0 && onFolderExpand) {
+      setLoading(true);
+      onFolderExpand(item.path)
+        .then(loadedChildren => {
+          setChildren(loadedChildren);
+          setLoading(false);
+        })
+        .catch(error => {
+          console.error('Failed to load folder contents:', error);
+          setLoading(false);
+        });
+    }
+  }, [expanded, isDirectory, item.path, onFolderExpand]);
   
   // Normalize paths for comparison
   const normalizePath = (path: string) => path.replace(/\\/g, '/');
