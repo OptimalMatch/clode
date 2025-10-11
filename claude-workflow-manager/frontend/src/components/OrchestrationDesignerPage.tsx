@@ -2725,8 +2725,8 @@ Format your response as JSON:
               </Select>
             </FormControl>
 
-            {/* Isolate Agent Workspaces Option */}
-            {selectedBlock.data.git_repo && (
+            {/* Isolate Agent Workspaces Option - Show for all multi-agent block types */}
+            {selectedBlock.data.git_repo && ['sequential', 'parallel', 'hierarchical', 'router', 'debate'].includes(selectedBlock.type) && (
               <FormControlLabel
                 control={
                   <Switch

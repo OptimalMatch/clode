@@ -2248,13 +2248,13 @@ const NewCodeEditorPage: React.FC = () => {
           result = await executeBlockSequential(contextualAgents, blockTask, gitRepo, signal);
           break;
         case 'parallel':
-          result = await executeBlockParallel(contextualAgents, blockTask, gitRepo, signal);
+          result = await executeBlockParallel(contextualAgents, blockTask, gitRepo, signal, block);
           break;
         case 'routing':
           const router = contextualAgents.find((a: any) => a.role === 'manager' || a.name.toLowerCase().includes('router'));
           const specialists = contextualAgents.filter((a: any) => a.role === 'specialist');
           if (router && specialists.length > 0) {
-            result = await executeBlockRouting(router, specialists, blockTask, gitRepo, signal);
+            result = await executeBlockRouting(router, specialists, blockTask, gitRepo, signal, block);
           } else {
             // Fall back to sequential
             result = await executeBlockSequential(contextualAgents, blockTask, gitRepo, signal);
@@ -2352,7 +2352,34 @@ const NewCodeEditorPage: React.FC = () => {
   };
   
   // Execute a parallel block
-  const executeBlockParallel = async (agents: any[], task: string, gitRepo: string, signal: AbortSignal) => {
+  const executeBlockParallel = async (agents: any[], task: string, gitRepo: string, signal: AbortSignal, block?: any) => {
+    // If this block has isolate_agent_workspaces enabled, create AgentPanels
+    if (block?.data?.isolate_agent_workspaces && agents.length > 0) {
+      const spawnedAgents = spawnAgentPanels(agents, agents.length);
+      const agentIds = spawnedAgents.map(a => a.id);
+      
+      try {
+        const result = await executeParallelWithStreaming({
+          task,
+          agents,
+          agent_names: agents.map(a => a.name),
+          aggregator: null,
+          model: selectedModel,
+          git_repo: gitRepo,
+          isolate_agent_workspaces: true
+        }, signal);
+        
+        // Mark agents as completed
+        updateAgentPanelStatus(agentIds, 'completed');
+        return result;
+      } catch (error) {
+        // Mark agents as error
+        updateAgentPanelStatus(agentIds, 'error');
+        throw error;
+      }
+    }
+    
+    // Default: no AgentPanels
     return await executeParallelWithStreaming({
       task,
       agents,
@@ -2364,7 +2391,32 @@ const NewCodeEditorPage: React.FC = () => {
   };
   
   // Execute a routing block
-  const executeBlockRouting = async (router: any, specialists: any[], task: string, gitRepo: string, signal: AbortSignal) => {
+  const executeBlockRouting = async (router: any, specialists: any[], task: string, gitRepo: string, signal: AbortSignal, block?: any) => {
+    // If this block has isolate_agent_workspaces enabled, create AgentPanels for all agents
+    if (block?.data?.isolate_agent_workspaces && specialists.length > 0) {
+      const allAgents = [router, ...specialists];
+      const spawnedAgents = spawnAgentPanels(allAgents, agents.length);
+      const agentIds = spawnedAgents.map(a => a.id);
+      
+      try {
+        const result = await executeRoutingWithStreaming({
+          task,
+          router,
+          specialists,
+          specialist_names: specialists.map(s => s.name),
+          model: selectedModel,
+          git_repo: gitRepo,
+          isolate_agent_workspaces: true
+        }, signal);
+        
+        updateAgentPanelStatus(agentIds, 'completed');
+        return result;
+      } catch (error) {
+        updateAgentPanelStatus(agentIds, 'error');
+        throw error;
+      }
+    }
+    
     return await executeRoutingWithStreaming({
       task,
       router,
@@ -2812,6 +2864,27 @@ const NewCodeEditorPage: React.FC = () => {
   
   const handleAgentStatusChange = (agentId: string, status: Agent['status']) => {
     setAgents(prev => prev.map(a => a.id === agentId ? { ...a, status } : a));
+  };
+  
+  // Spawn AgentPanels for orchestration agents
+  const spawnAgentPanels = (agentConfigs: any[], baseIndex: number = 0) => {
+    const newAgents: Agent[] = agentConfigs.map((agent: any, index: number) => ({
+      id: `agent-${Date.now()}-${index}`,
+      name: agent.name,
+      color: generateAgentColor(baseIndex + index),
+      workFolder: agent.name.replace(/\s+/g, '_'), // Use agent name as folder (matches backend)
+      status: 'working' as const,
+    }));
+    
+    setAgents(prev => [...prev, ...newAgents]);
+    setShowAgentPanels(true);
+    
+    return newAgents;
+  };
+  
+  // Update agent panel statuses after execution
+  const updateAgentPanelStatus = (agentIds: string[], status: Agent['status']) => {
+    agentIds.forEach(id => handleAgentStatusChange(id, status));
   };
   
   const pendingChanges = changes.filter((c: FileChange) => c.status === 'pending');
