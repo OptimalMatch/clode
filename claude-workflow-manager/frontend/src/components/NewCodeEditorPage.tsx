@@ -4890,7 +4890,7 @@ const NewCodeEditorPage: React.FC = () => {
                               <input
                                 type="range"
                                 min="1"
-                                max="100"
+                                max="1000"
                                 value={perfTestSpeed}
                                 onChange={(e) => setPerfTestSpeed(parseInt(e.target.value))}
                                 disabled={perfTestRunning}
