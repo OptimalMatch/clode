@@ -3833,7 +3833,7 @@ const NewCodeEditorPage: React.FC = () => {
             <Panel 
               ref={editorPanelRef}
               defaultSize={sidebarCollapsed ? 100 : 80}
-              minSize={10}
+              minSize={3}
               collapsible={true}
               collapsedSize={3}
               onCollapse={() => setEditorMinimized(true)}
