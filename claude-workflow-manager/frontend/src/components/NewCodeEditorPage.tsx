@@ -361,6 +361,8 @@ const NewCodeEditorPage: React.FC = () => {
     right: string | null;
   }>({ left: null, middle: null, right: null }); // Track tabs opened by perf test in each pane
   const perfTestCurrentPaneRef = useRef<'left' | 'middle' | 'right'>('left'); // Current pane for next file
+  const [perfTestUIUpdateRate, setPerfTestUIUpdateRate] = useState(10); // UI updates per second (max visible rate)
+  const perfTestLastUIUpdateRef = useRef<number>(0); // Timestamp of last UI update for throttling
   
   // Tab system state
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
@@ -1027,6 +1029,7 @@ const NewCodeEditorPage: React.FC = () => {
     setPerfTestChartData([]); // Clear chart data
     perfTestCurrentPaneRef.current = 'left'; // Reset to left pane for new test
     setPerfTestOpenTabPaths({ left: null, middle: null, right: null }); // Clear any tracked tabs
+    perfTestLastUIUpdateRef.current = 0; // Reset UI update throttle timer
     setPerfTestStats({
       totalCalls: 0,
       successCalls: 0,
@@ -1215,8 +1218,16 @@ const NewCodeEditorPage: React.FC = () => {
             // Capture pane info before opening (as opening cycles to next pane)
             const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPaneRef.current} pane]` : '';
             
-            // Open file and scroll to changed line
-            await openFileAndScrollToLine(targetFile, changedLineNumber);
+            // Throttle UI updates to perfTestUIUpdateRate per second
+            const currentTime = Date.now();
+            const timeSinceLastUpdate = currentTime - perfTestLastUIUpdateRef.current;
+            const minUpdateInterval = 1000 / perfTestUIUpdateRate; // ms between updates
+            
+            if (timeSinceLastUpdate >= minUpdateInterval) {
+              // Time for a UI update
+              await openFileAndScrollToLine(targetFile, changedLineNumber);
+              perfTestLastUIUpdateRef.current = currentTime;
+            }
             
             const endTime = Date.now();
             const responseTime = endTime - startTime;
@@ -1250,8 +1261,16 @@ const NewCodeEditorPage: React.FC = () => {
           // Capture pane info before opening (as opening cycles to next pane)
           const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPaneRef.current} pane]` : '';
           
-          // Open file and scroll to first line
-          await openFileAndScrollToLine(newFileName, 1);
+          // Throttle UI updates to perfTestUIUpdateRate per second
+          const currentTime = Date.now();
+          const timeSinceLastUpdate = currentTime - perfTestLastUIUpdateRef.current;
+          const minUpdateInterval = 1000 / perfTestUIUpdateRate; // ms between updates
+          
+          if (timeSinceLastUpdate >= minUpdateInterval) {
+            // Time for a UI update
+            await openFileAndScrollToLine(newFileName, 1);
+            perfTestLastUIUpdateRef.current = currentTime;
+          }
           
           const endTime = Date.now();
           const responseTime = endTime - startTime;
@@ -4904,6 +4923,34 @@ const NewCodeEditorPage: React.FC = () => {
                                 }}
                               />
                             </Box>
+                          </Box>
+                          
+                          {/* UI Update Rate Slider */}
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)', mb: 0.5, display: 'block' }}>
+                              UI Update Rate: {perfTestUIUpdateRate} updates/second
+                            </Typography>
+                            <Box sx={{ px: 1 }}>
+                              <input
+                                type="range"
+                                min="1"
+                                max="60"
+                                value={perfTestUIUpdateRate}
+                                onChange={(e) => setPerfTestUIUpdateRate(parseInt(e.target.value))}
+                                disabled={perfTestRunning}
+                                style={{
+                                  width: '100%',
+                                  height: '4px',
+                                  borderRadius: '2px',
+                                  outline: 'none',
+                                  opacity: perfTestRunning ? 0.5 : 1,
+                                  cursor: perfTestRunning ? 'not-allowed' : 'pointer',
+                                }}
+                              />
+                            </Box>
+                            <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.5)', mt: 0.5, display: 'block' }}>
+                              Limits visual file updates for high-speed tests
+                            </Typography>
                           </Box>
                           
                           {/* Editor Panes Selector */}
