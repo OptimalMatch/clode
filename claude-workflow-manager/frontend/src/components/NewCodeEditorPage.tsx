@@ -86,6 +86,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor, { DiffEditor, loader } from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { workflowApi, orchestrationDesignApi, OrchestrationDesign } from '../services/api';
 import api from '../services/api';
 import EnhancedFileTree, { getFileIcon } from './EnhancedFileTree';
@@ -347,6 +348,7 @@ const NewCodeEditorPage: React.FC = () => {
     efficiency: 0,
   });
   const [perfTestLogs, setPerfTestLogs] = useState<string[]>([]);
+  const [perfTestChartData, setPerfTestChartData] = useState<Array<{ time: number; rate: number }>>([]);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5); // seconds
   const [perfTestPaneCount, setPerfTestPaneCount] = useState<1 | 2 | 3>(1); // Number of editor panes for perf test
@@ -1022,6 +1024,7 @@ const NewCodeEditorPage: React.FC = () => {
     setPerfTestRunning(true);
     perfTestRunningRef.current = true;
     setPerfTestLogs([]);
+    setPerfTestChartData([]); // Clear chart data
     perfTestCurrentPaneRef.current = 'left'; // Reset to left pane for new test
     setPerfTestOpenTabPaths({ left: null, middle: null, right: null }); // Clear any tracked tabs
     setPerfTestStats({
@@ -1270,6 +1273,11 @@ const NewCodeEditorPage: React.FC = () => {
         targetCallsPerSecond: perfTestSpeed,
         efficiency: efficiency,
       });
+
+      // Update chart data every few calls to avoid too many data points
+      if (completedCalls % Math.max(1, Math.floor(perfTestCallCount / 50)) === 0) {
+        setPerfTestChartData(prev => [...prev, { time: elapsedSeconds, rate: actualRate }]);
+      }
       
       // Delay to match desired speed
       await new Promise(resolve => setTimeout(resolve, delayBetweenCalls));
@@ -5063,6 +5071,58 @@ const NewCodeEditorPage: React.FC = () => {
                                   },
                                 }}
                               />
+                            </Box>
+                          )}
+
+                          {/* Performance Chart */}
+                          {perfTestChartData.length > 0 && (
+                            <Box sx={{ mt: 1.5, p: 1, bgcolor: 'rgba(0, 0, 0, 0.3)', borderRadius: 1 }}>
+                              <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.6)', mb: 1, display: 'block' }}>
+                                Rate History
+                              </Typography>
+                              <ResponsiveContainer width="100%" height={120}>
+                                <LineChart data={perfTestChartData}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
+                                  <XAxis 
+                                    dataKey="time" 
+                                    stroke="rgba(255, 255, 255, 0.5)"
+                                    tick={{ fontSize: 9, fill: 'rgba(255, 255, 255, 0.5)' }}
+                                    label={{ value: 'Time (s)', position: 'insideBottom', offset: -5, fontSize: 9, fill: 'rgba(255, 255, 255, 0.6)' }}
+                                  />
+                                  <YAxis 
+                                    stroke="rgba(255, 255, 255, 0.5)"
+                                    tick={{ fontSize: 9, fill: 'rgba(255, 255, 255, 0.5)' }}
+                                    label={{ value: 'Rate (calls/s)', angle: -90, position: 'insideLeft', fontSize: 9, fill: 'rgba(255, 255, 255, 0.6)' }}
+                                  />
+                                  <RechartsTooltip 
+                                    contentStyle={{ 
+                                      backgroundColor: 'rgba(0, 0, 0, 0.9)', 
+                                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                                      borderRadius: '4px',
+                                      fontSize: '10px',
+                                    }}
+                                    labelStyle={{ color: 'rgba(255, 255, 255, 0.7)' }}
+                                  />
+                                  <Line 
+                                    type="monotone" 
+                                    dataKey="rate" 
+                                    stroke="#2196F3" 
+                                    strokeWidth={2}
+                                    dot={false}
+                                    name="Rate"
+                                  />
+                                  {/* Target rate line */}
+                                  <Line 
+                                    type="monotone" 
+                                    dataKey={() => perfTestSpeed} 
+                                    stroke="rgba(76, 175, 80, 0.5)" 
+                                    strokeWidth={1}
+                                    strokeDasharray="5 5"
+                                    dot={false}
+                                    name="Target"
+                                  />
+                                </LineChart>
+                              </ResponsiveContainer>
                             </Box>
                           )}
                           
