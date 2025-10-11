@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
 from bson import ObjectId
-from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics, OrchestrationDesign, OrchestrationDesignVersion, Deployment, ExecutionLog, ScheduleConfig
+from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics, OrchestrationDesign, OrchestrationDesignVersion, Deployment, ExecutionLog, ScheduleConfig, AgentWorkspace
 
 class Database:
     def __init__(self):
@@ -68,6 +68,12 @@ class Database:
         await self.db.execution_logs.create_index("design_id")
         await self.db.execution_logs.create_index("status")
         await self.db.execution_logs.create_index("started_at")
+        
+        # Agent Workspaces indexes
+        await self.db.agent_workspaces.create_index("execution_id")
+        await self.db.agent_workspaces.create_index("workflow_id")
+        await self.db.agent_workspaces.create_index("status")
+        await self.db.agent_workspaces.create_index("created_at")
         
         # Subagents indexes
         await self.db.subagents.create_index("name", unique=True)
@@ -1362,4 +1368,95 @@ class Database:
             return result.modified_count > 0
         except Exception as e:
             print(f"Error updating execution log {log_id}: {e}")
+            return False
+    
+    # ==================== Agent Workspace Methods ====================
+    
+    async def create_agent_workspace(self, workspace: AgentWorkspace) -> str:
+        """Create a new agent workspace record"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        workspace_dict = workspace.dict(exclude={"id"})
+        result = await self.db.agent_workspaces.insert_one(workspace_dict)
+        return str(result.inserted_id)
+    
+    async def get_agent_workspace(self, workspace_id: str) -> Optional[AgentWorkspace]:
+        """Get an agent workspace by ID"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        object_id = ObjectId(workspace_id) if ObjectId.is_valid(workspace_id) else workspace_id
+        doc = await self.db.agent_workspaces.find_one({"_id": object_id})
+        if doc:
+            doc["id"] = str(doc.pop("_id"))
+            return AgentWorkspace(**doc)
+        return None
+    
+    async def get_workspaces_by_execution(self, execution_id: str) -> List[AgentWorkspace]:
+        """Get all agent workspaces for an execution"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        cursor = self.db.agent_workspaces.find({"execution_id": execution_id}).sort("created_at", 1)
+        workspaces = []
+        async for doc in cursor:
+            doc["id"] = str(doc.pop("_id"))
+            workspaces.append(AgentWorkspace(**doc))
+        return workspaces
+    
+    async def get_workspaces_by_workflow(self, workflow_id: str, status: Optional[str] = None) -> List[AgentWorkspace]:
+        """Get all agent workspaces for a workflow"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        query = {"workflow_id": workflow_id}
+        if status:
+            query["status"] = status
+        
+        cursor = self.db.agent_workspaces.find(query).sort("created_at", -1)
+        workspaces = []
+        async for doc in cursor:
+            doc["id"] = str(doc.pop("_id"))
+            workspaces.append(AgentWorkspace(**doc))
+        return workspaces
+    
+    async def update_agent_workspace(self, workspace_id: str, updates: Dict[str, Any]) -> bool:
+        """Update an agent workspace"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(workspace_id) if ObjectId.is_valid(workspace_id) else workspace_id
+            result = await self.db.agent_workspaces.update_one(
+                {"_id": object_id},
+                {"$set": updates}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error updating agent workspace {workspace_id}: {e}")
+            return False
+    
+    async def cleanup_workspaces(self, execution_id: str) -> int:
+        """Mark all workspaces for an execution as archived"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        result = await self.db.agent_workspaces.update_many(
+            {"execution_id": execution_id},
+            {"$set": {"status": "archived"}}
+        )
+        return result.modified_count
+    
+    async def delete_agent_workspace(self, workspace_id: str) -> bool:
+        """Delete an agent workspace record"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(workspace_id) if ObjectId.is_valid(workspace_id) else workspace_id
+            result = await self.db.agent_workspaces.delete_one({"_id": object_id})
+            return result.deleted_count > 0
+        except Exception as e:
+            print(f"Error deleting agent workspace {workspace_id}: {e}")
             return False

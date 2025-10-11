@@ -504,12 +504,29 @@ class OrchestrationResult(BaseModel):
     duration_ms: int
     created_at: datetime
 
+class AgentWorkspace(BaseModel):
+    """Persistent workspace for orchestration agents"""
+    id: Optional[str] = None
+    execution_id: str           # Links to OrchestrationExecution
+    workflow_id: str            # Same workflow_id for all agents in execution
+    agent_name: str             # e.g., "Code Editor 1"
+    agent_role: AgentRole       # e.g., WORKER
+    workspace_path: str         # e.g., "/tmp/orchestration_isolated_xyz/Code_Editor_1"
+    branch_name: Optional[str] = None  # e.g., "agent/code-editor-1"
+    git_repo: str               # Git repository URL
+    created_at: datetime
+    last_accessed_at: datetime
+    status: str = "active"      # "active", "merged", "archived"
+
 class OrchestrationExecution(BaseModel):
     """Orchestration execution record"""
     id: Optional[str] = None
     pattern: OrchestrationPattern
+    workflow_id: Optional[str] = None  # Link to workflow for all agents
     request_data: Dict[str, Any]
     result_data: Dict[str, Any]
+    workspace_parent_dir: Optional[str] = None  # Parent temp directory
+    agent_workspaces: List[str] = []  # List of AgentWorkspace IDs
     status: str
     created_at: datetime
     completed_at: Optional[datetime] = None

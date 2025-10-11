@@ -3369,6 +3369,9 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
     async def event_generator():
         temp_dir = None
         agent_dir_mapping = None
+        execution_id = str(uuid.uuid4())  # Generate unique execution ID
+        workspace_ids = []
+        
         try:
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
             
@@ -3393,10 +3396,53 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
             
             orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
             
-            # Send workspace info to frontend if using isolated workspaces
-            if agent_dir_mapping:
+            # Store workspace metadata in database if using isolated workspaces
+            if agent_dir_mapping and request.workflow_id:
+                from models import AgentWorkspace, AgentRole
+                
+                print(f"📁 Persisting {len(agent_dir_mapping)} agent workspaces for execution {execution_id}")
+                
+                workspace_id_mapping = {}
+                for agent_name, rel_path in agent_dir_mapping.items():
+                    # Find agent role
+                    agent_role = next(
+                        (a.role for a in request.agents if a.name == agent_name), 
+                        AgentRole.WORKER
+                    )
+                    
+                    # Create workspace record
+                    workspace = AgentWorkspace(
+                        execution_id=execution_id,
+                        workflow_id=request.workflow_id,
+                        agent_name=agent_name,
+                        agent_role=agent_role,
+                        workspace_path=os.path.join(temp_dir, rel_path),
+                        git_repo=request.git_repo,
+                        created_at=datetime.now(),
+                        last_accessed_at=datetime.now(),
+                        status="active"
+                    )
+                    
+                    workspace_id = await db.create_agent_workspace(workspace)
+                    workspace_ids.append(workspace_id)
+                    workspace_id_mapping[agent_name] = workspace_id
+                    print(f"  ✅ Created workspace {workspace_id} for agent '{agent_name}'")
+                
+                # Send workspace info to frontend with workspace IDs
                 workspace_info = {
                     'type': 'workspace_info',
+                    'execution_id': execution_id,
+                    'parent_dir': temp_dir,
+                    'agent_mapping': {name: os.path.join(temp_dir, rel_path) for name, rel_path in agent_dir_mapping.items()},
+                    'workspace_ids': workspace_id_mapping,
+                    'timestamp': datetime.now().isoformat()
+                }
+                yield f"data: {json.dumps(workspace_info)}\n\n"
+            elif agent_dir_mapping:
+                # No workflow_id - still send workspace info but without DB persistence
+                workspace_info = {
+                    'type': 'workspace_info',
+                    'execution_id': execution_id,
                     'parent_dir': temp_dir,
                     'agent_mapping': {name: os.path.join(temp_dir, rel_path) for name, rel_path in agent_dir_mapping.items()},
                     'timestamp': datetime.now().isoformat()
@@ -3409,17 +3455,19 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
                 
                 # If using isolated workspaces, prepend workspace instructions
                 if agent_dir_mapping and agent.name in agent_dir_mapping:
-                    full_workspace_path = os.path.join(cwd, agent_dir_mapping[agent.name])
+                    # Get workspace_id for this agent
+                    agent_workspace_id = workspace_id_mapping.get(agent.name)
+                    
                     workspace_instruction = (
                         f"IMPORTANT: You are working in an ISOLATED WORKSPACE.\n"
                         f"For shell commands: use relative path './{agent_dir_mapping[agent.name]}/'\n"
-                        f"For MCP editor tools: use BOTH workflow_id AND workspace_path parameters:\n\n"
+                        f"For MCP editor tools: use BOTH workflow_id AND workspace_id parameters:\n\n"
                         f"MCP TOOL USAGE (use BOTH parameters):\n"
-                        f"- editor_browse_directory(workflow_id, workspace_path='{full_workspace_path}', path='')\n"
-                        f"- editor_read_file(workflow_id, workspace_path='{full_workspace_path}', file_path='README.md')\n"
-                        f"- editor_create_change(workflow_id, workspace_path='{full_workspace_path}', file_path='file.py', operation='update', new_content='...')\n"
-                        f"- editor_search_files(workflow_id, workspace_path='{full_workspace_path}', query='*.py')\n\n"
-                        f"The workflow_id provides context and tracking, workspace_path specifies your isolated directory.\n\n"
+                        f"- editor_browse_directory(workflow_id, workspace_id='{agent_workspace_id}', path='')\n"
+                        f"- editor_read_file(workflow_id, workspace_id='{agent_workspace_id}', file_path='README.md')\n"
+                        f"- editor_create_change(workflow_id, workspace_id='{agent_workspace_id}', file_path='file.py', operation='update', new_content='...')\n"
+                        f"- editor_search_files(workflow_id, workspace_id='{agent_workspace_id}', query='*.py')\n\n"
+                        f"The workflow_id provides context, workspace_id identifies your isolated workspace.\n\n"
                     )
                     system_prompt = workspace_instruction + system_prompt
                 
@@ -3514,49 +3562,17 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
         finally:
-            # Copy changes from isolated workspaces to main workflow before cleanup
-            if agent_dir_mapping and request.git_repo:
-                try:
-                    from file_editor import FileEditorManager
-                    
-                    # Get or create main workflow FileEditorManager
-                    workflow_id = request.workflow_id
-                    if workflow_id:
-                        workflow = await db.get_workflow(workflow_id)
-                        if workflow:
-                            print(f"📋 Copying changes from isolated workspaces to workflow {workflow_id}")
-                            editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
-                            main_manager = editor_data["manager"]
-                            
-                            # Copy changes from each agent's isolated workspace
-                            for agent_name, rel_path in agent_dir_mapping.items():
-                                agent_workspace = os.path.join(temp_dir, rel_path)
-                                if os.path.exists(agent_workspace):
-                                    agent_manager = FileEditorManager(agent_workspace)
-                                    agent_changes = agent_manager.get_changes()
-                                    
-                                    print(f"  📝 Agent '{agent_name}': Found {len(agent_changes)} changes")
-                                    
-                                    # Copy each change to main manager
-                                    for change in agent_changes:
-                                        main_manager.create_change(
-                                            file_path=change.file_path,
-                                            operation=change.operation,
-                                            new_content=change.new_content,
-                                            generate_diff=True
-                                        )
-                                    
-                            print(f"✅ Successfully copied changes to main workflow")
-                except Exception as e:
-                    print(f"⚠️ Warning: Could not copy changes from isolated workspaces: {e}")
-            
-            # Clean up temporary directory
+            # DON'T cleanup workspaces - keep them alive for user review
             if temp_dir and os.path.exists(temp_dir):
-                try:
-                    print(f"🧹 Cleaning up temporary directory: {temp_dir}")
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                except Exception as e:
-                    print(f"⚠️ Warning: Could not clean up {temp_dir}: {e}")
+                print(f"📁 Workspaces preserved at: {temp_dir}")
+                print(f"🔍 Execution ID: {execution_id}")
+                print(f"💡 Workspaces will remain active until manually cleaned up")
+                
+                # Log workspace locations for each agent
+                if agent_dir_mapping:
+                    for agent_name, rel_path in agent_dir_mapping.items():
+                        workspace_path = os.path.join(temp_dir, rel_path)
+                        print(f"   - {agent_name}: {workspace_path}")
     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -5365,6 +5381,143 @@ async def search_files(data: dict, user: Optional[User] = Depends(get_current_us
         raise
     except Exception as e:
         print(f"Error searching files: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== Agent Workspace Management ====================
+
+@app.get(
+    "/api/workspaces/workflow/{workflow_id}",
+    summary="Get Workflow Workspaces",
+    description="Get all agent workspaces for a workflow",
+    tags=["Agent Workspaces"]
+)
+async def get_workflow_workspaces(workflow_id: str, status: Optional[str] = None, user: Optional[User] = Depends(get_current_user_or_internal)):
+    """Get all agent workspaces for a workflow"""
+    try:
+        workspaces = await db.get_workspaces_by_workflow(workflow_id, status)
+        return {"success": True, "workspaces": [ws.dict() for ws in workspaces]}
+    except Exception as e:
+        print(f"Error getting workspaces: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get(
+    "/api/workspaces/execution/{execution_id}",
+    summary="Get Execution Workspaces",
+    description="Get all agent workspaces for an execution",
+    tags=["Agent Workspaces"]
+)
+async def get_execution_workspaces(execution_id: str, user: Optional[User] = Depends(get_current_user_or_internal)):
+    """Get all agent workspaces for an execution"""
+    try:
+        workspaces = await db.get_workspaces_by_execution(execution_id)
+        return {"success": True, "workspaces": [ws.dict() for ws in workspaces]}
+    except Exception as e:
+        print(f"Error getting workspaces: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get(
+    "/api/workspaces/{workspace_id}",
+    summary="Get Workspace",
+    description="Get a specific agent workspace by ID",
+    tags=["Agent Workspaces"]
+)
+async def get_workspace(workspace_id: str, user: Optional[User] = Depends(get_current_user_or_internal)):
+    """Get a specific agent workspace"""
+    try:
+        workspace = await db.get_agent_workspace(workspace_id)
+        if not workspace:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        return {"success": True, "workspace": workspace.dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting workspace: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/workspaces/{workspace_id}/cleanup",
+    summary="Cleanup Workspace",
+    description="Manually cleanup a specific workspace (delete files and mark as archived)",
+    tags=["Agent Workspaces"]
+)
+async def cleanup_workspace(workspace_id: str, user: Optional[User] = Depends(get_current_user_or_internal)):
+    """Manually cleanup a specific workspace"""
+    try:
+        workspace = await db.get_agent_workspace(workspace_id)
+        if not workspace:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        
+        # Delete physical workspace directory
+        if os.path.exists(workspace.workspace_path):
+            shutil.rmtree(workspace.workspace_path, ignore_errors=True)
+            print(f"🧹 Cleaned up workspace: {workspace.workspace_path}")
+        
+        # Mark as archived in database
+        await db.update_agent_workspace(workspace_id, {"status": "archived"})
+        
+        return {"success": True, "message": "Workspace cleaned up"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error cleaning up workspace: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/api/workspaces/execution/{execution_id}/cleanup-all",
+    summary="Cleanup Execution Workspaces",
+    description="Cleanup all workspaces for an execution",
+    tags=["Agent Workspaces"]
+)
+async def cleanup_execution_workspaces(execution_id: str, user: Optional[User] = Depends(get_current_user_or_internal)):
+    """Cleanup all workspaces for an execution"""
+    try:
+        workspaces = await db.get_workspaces_by_execution(execution_id)
+        cleaned_count = 0
+        
+        for ws in workspaces:
+            if os.path.exists(ws.workspace_path):
+                shutil.rmtree(ws.workspace_path, ignore_errors=True)
+                cleaned_count += 1
+                print(f"🧹 Cleaned up workspace: {ws.workspace_path}")
+        
+        # Mark all as archived
+        await db.cleanup_workspaces(execution_id)
+        
+        return {"success": True, "cleaned": cleaned_count, "message": f"Cleaned up {cleaned_count} workspaces"}
+    except Exception as e:
+        print(f"Error cleaning up execution workspaces: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put(
+    "/api/workspaces/{workspace_id}",
+    summary="Update Workspace",
+    description="Update workspace metadata (e.g., status, last_accessed_at)",
+    tags=["Agent Workspaces"]
+)
+async def update_workspace(workspace_id: str, data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
+    """Update workspace metadata"""
+    try:
+        workspace = await db.get_agent_workspace(workspace_id)
+        if not workspace:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        
+        # Update fields
+        updates = {}
+        if "status" in data:
+            updates["status"] = data["status"]
+        if "last_accessed_at" in data:
+            updates["last_accessed_at"] = datetime.now()
+        if "branch_name" in data:
+            updates["branch_name"] = data["branch_name"]
+        
+        if updates:
+            await db.update_agent_workspace(workspace_id, updates)
+        
+        return {"success": True, "message": "Workspace updated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating workspace: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

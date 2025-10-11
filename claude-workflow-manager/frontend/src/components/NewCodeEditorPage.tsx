@@ -2700,10 +2700,10 @@ const NewCodeEditorPage: React.FC = () => {
             const event = JSON.parse(line.slice(6));
             
             if (event.type === 'workspace_info') {
-              // Update agent panels with workspace paths
+              // Update agent panels with workspace IDs and paths
               console.log('[Code Editor] Received workspace info:', event);
               if (event.agent_mapping) {
-                updateAgentWorkspacePaths(event.agent_mapping);
+                updateAgentWorkspaces(event.agent_mapping, event.workspace_ids || {});
               }
             } else if (event.type === 'status' && event.agent) {
               setExecutionStatus({
@@ -2920,13 +2920,14 @@ const NewCodeEditorPage: React.FC = () => {
     agentIds.forEach(id => handleAgentStatusChange(id, status));
   };
   
-  // Update agent workspace paths (for isolated workspaces)
-  const updateAgentWorkspacePaths = (agentMapping: Record<string, string>) => {
+  // Update agent workspace IDs and paths (for isolated workspaces)
+  const updateAgentWorkspaces = (agentMapping: Record<string, string>, workspaceIds: Record<string, string>) => {
     setAgents(prev => prev.map(agent => {
       const workspacePath = agentMapping[agent.name];
-      if (workspacePath) {
-        console.log(`[Code Editor] Updated agent ${agent.name} workspace path: ${workspacePath}`);
-        return { ...agent, workspacePath };
+      const workspaceId = workspaceIds[agent.name];
+      if (workspacePath || workspaceId) {
+        console.log(`[Code Editor] Updated agent ${agent.name}: workspace_id=${workspaceId}, path=${workspacePath}`);
+        return { ...agent, workspacePath, workspace_id: workspaceId };
       }
       return agent;
     }));
