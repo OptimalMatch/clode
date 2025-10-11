@@ -18,7 +18,7 @@ class FileChange:
     """Represents a single file change"""
     def __init__(self, change_id: str, file_path: str, operation: str, 
                  old_content: Optional[str], new_content: Optional[str], 
-                 timestamp: str, status: str = "pending"):
+                 timestamp: str, status: str = "pending", generate_diff: bool = True):
         self.change_id = change_id
         self.file_path = file_path
         self.operation = operation  # create, update, delete, move
@@ -26,9 +26,10 @@ class FileChange:
         self.new_content = new_content
         self.timestamp = timestamp
         self.status = status  # pending, approved, rejected, applied
+        self.generate_diff = generate_diff
     
-    def to_dict(self):
-        return {
+    def to_dict(self, include_diff: bool = True):
+        result = {
             "change_id": self.change_id,
             "file_path": self.file_path,
             "operation": self.operation,
@@ -36,8 +37,13 @@ class FileChange:
             "new_content": self.new_content,
             "timestamp": self.timestamp,
             "status": self.status,
-            "diff": self._generate_diff() if self.operation == "update" else None
         }
+        # Only generate diff if requested and it's an update operation
+        if include_diff and self.generate_diff and self.operation == "update":
+            result["diff"] = self._generate_diff()
+        else:
+            result["diff"] = None
+        return result
     
     def _generate_diff(self) -> str:
         """Generate a unified diff between old and new content"""
@@ -156,7 +162,8 @@ class FileEditorManager:
     
     def create_change(self, file_path: str, operation: str, 
                      new_content: Optional[str] = None,
-                     old_path: Optional[str] = None) -> FileChange:
+                     old_path: Optional[str] = None,
+                     generate_diff: bool = True) -> FileChange:
         """
         Create a new file change - applies immediately but tracks as pending for review/undo
         
@@ -168,6 +175,7 @@ class FileEditorManager:
             operation: Operation type (create, update, delete, move)
             new_content: New content for the file
             old_path: Old path for move operations
+            generate_diff: Whether to generate diff (can be disabled for performance)
             
         Returns:
             FileChange object
@@ -210,7 +218,8 @@ class FileEditorManager:
             old_content=old_content,
             new_content=new_content,
             timestamp=datetime.utcnow().isoformat(),
-            status="pending"  # Pending = shown in UI for review, can be undone
+            status="pending",  # Pending = shown in UI for review, can be undone
+            generate_diff=generate_diff
         )
         
         self.changes[change_id] = change

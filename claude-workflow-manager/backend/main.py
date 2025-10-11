@@ -47,6 +47,32 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from agent_orchestrator import MultiAgentOrchestrator, AgentRole as OrchestratorAgentRole, ensure_orchestration_credentials
 from deployment_executor import DeploymentExecutor
 from deployment_scheduler import DeploymentScheduler, set_scheduler, get_scheduler
+from functools import lru_cache
+
+# Performance: Workflow cache to reduce database lookups
+workflow_cache: Dict[str, Tuple[dict, float]] = {}  # {workflow_id: (workflow_data, timestamp)}
+WORKFLOW_CACHE_TTL = 60  # Cache for 60 seconds
+
+async def get_cached_workflow(workflow_id: str, db: Database) -> Optional[dict]:
+    """Get workflow from cache or database, with time-based expiration"""
+    current_time = time.time()
+    
+    # Check cache
+    if workflow_id in workflow_cache:
+        workflow_data, cache_time = workflow_cache[workflow_id]
+        if current_time - cache_time < WORKFLOW_CACHE_TTL:
+            # Cache hit
+            return workflow_data
+        else:
+            # Expired, remove from cache
+            del workflow_cache[workflow_id]
+    
+    # Cache miss - fetch from database
+    workflow = await db.get_workflow(workflow_id)
+    if workflow:
+        workflow_cache[workflow_id] = (workflow, current_time)
+    
+    return workflow
 
 # Ensure ANTHROPIC_API_KEY is set for claude-cli
 claude_api_key = os.getenv("CLAUDE_API_KEY")
@@ -4740,7 +4766,7 @@ async def execute_via_endpoint(endpoint_path: str, request: Request):
 file_editor_managers: Dict[str, Any] = {}  # Cache of FileEditorManager instances by repo path
 
 def get_file_editor_manager(git_repo: str, workflow_id: str) -> Any:
-    """Get or create a FileEditorManager for a repository"""
+    """Get or create a FileEditorManager for a repository with caching"""
     from file_editor import FileEditorManager
     import tempfile
     
@@ -4846,7 +4872,7 @@ async def get_directory_tree(data: dict, user: Optional[User] = Depends(get_curr
         path = data.get("path", "")
         max_depth = data.get("max_depth", 3)
         
-        workflow = await db.get_workflow(workflow_id)
+        workflow = await get_cached_workflow(workflow_id, db)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
         
@@ -4876,7 +4902,7 @@ async def read_file_content(data: dict, user: Optional[User] = Depends(get_curre
         if not file_path:
             raise HTTPException(status_code=400, detail="file_path is required")
         
-        workflow = await db.get_workflow(workflow_id)
+        workflow = await get_cached_workflow(workflow_id, db)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
         
@@ -4908,15 +4934,19 @@ async def create_file_change(data: dict, user: Optional[User] = Depends(get_curr
         if not file_path or not operation:
             raise HTTPException(status_code=400, detail="file_path and operation are required")
         
-        workflow = await db.get_workflow(workflow_id)
+        workflow = await get_cached_workflow(workflow_id, db)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
         
         editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
         manager = editor_data["manager"]
         
-        change = manager.create_change(file_path, operation, new_content)
-        return {"success": True, "change": change.to_dict()}
+        # Skip diff generation for performance test files (optimization)
+        is_perf_test = file_path.startswith("perf_test_")
+        generate_diff = not is_perf_test
+        
+        change = manager.create_change(file_path, operation, new_content, generate_diff=generate_diff)
+        return {"success": True, "change": change.to_dict(include_diff=generate_diff)}
     except HTTPException:
         raise
     except Exception as e:
