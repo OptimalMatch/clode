@@ -966,6 +966,7 @@ Be specific about which files each agent should focus on.""",
                 "position": {"x": 50, "y": 200},
                 "data": {
                     "label": "Parallel Execution",
+                    "isolate_agent_workspaces": True,
                     "agents": [
                         {
                             "id": "agent-2",
