@@ -4865,6 +4865,25 @@ def get_file_editor_manager(git_repo: str, workflow_id: str) -> Any:
     
     return file_editor_managers[cache_key]
 
+def get_isolated_workspace_manager(workspace_path: str) -> Any:
+    """Get or create a FileEditorManager for an isolated workspace with caching"""
+    from file_editor import FileEditorManager
+    
+    cache_key = f"workspace:{workspace_path}"
+    
+    if cache_key not in file_editor_managers:
+        if not os.path.exists(workspace_path):
+            raise FileNotFoundError(f"Workspace path does not exist: {workspace_path}")
+        
+        print(f"📦 Caching FileEditorManager for isolated workspace: {workspace_path}")
+        file_editor_managers[cache_key] = {
+            "manager": FileEditorManager(workspace_path),
+            "temp_dir": workspace_path,
+            "git_repo": None  # Isolated workspace, no original git repo
+        }
+    
+    return file_editor_managers[cache_key]
+
 @app.post(
     "/api/file-editor/init",
     summary="Initialize File Editor",
@@ -4934,9 +4953,10 @@ async def browse_directory(data: dict, user: Optional[User] = Depends(get_curren
             if not os.path.exists(workspace_path):
                 raise HTTPException(status_code=404, detail="Workspace not found")
             
-            # Create temporary manager for this workspace
+            # Get cached manager for this workspace
             # Note: workflow_id provides context, workspace_path specifies location
-            manager = FileEditorManager(workspace_path)
+            editor_data = get_isolated_workspace_manager(workspace_path)
+            manager = editor_data["manager"]
             result = manager.browse_directory(path, include_hidden)
             return {"success": True, **result, "workflow_id": workflow_id}  # Include workflow_id in response
         
@@ -5023,8 +5043,9 @@ async def read_file_content(data: dict, user: Optional[User] = Depends(get_curre
             if not os.path.exists(workspace_path):
                 raise HTTPException(status_code=404, detail="Workspace not found")
             
-            # Create temporary manager for this workspace
-            manager = FileEditorManager(workspace_path)
+            # Get cached manager for this workspace
+            editor_data = get_isolated_workspace_manager(workspace_path)
+            manager = editor_data["manager"]
             result = manager.read_file(file_path)
             return {"success": True, **result, "workflow_id": workflow_id}
         
@@ -5089,8 +5110,9 @@ async def create_file_change(data: dict, user: Optional[User] = Depends(get_curr
             if not os.path.exists(workspace_path):
                 raise HTTPException(status_code=404, detail="Workspace not found")
             
-            # Create temporary manager for this workspace
-            manager = FileEditorManager(workspace_path)
+            # Get cached manager for this workspace
+            editor_data = get_isolated_workspace_manager(workspace_path)
+            manager = editor_data["manager"]
             change = manager.create_change(file_path, operation, new_content, generate_diff=generate_diff)
             return {"success": True, "change": change.to_dict(include_diff=generate_diff), "workflow_id": workflow_id}
         
@@ -5146,8 +5168,9 @@ async def get_file_changes(data: dict, user: Optional[User] = Depends(get_curren
             if not os.path.exists(workspace_path):
                 raise HTTPException(status_code=404, detail="Workspace not found")
             
-            # Create temporary manager for this workspace
-            manager = FileEditorManager(workspace_path)
+            # Get cached manager for this workspace
+            editor_data = get_isolated_workspace_manager(workspace_path)
+            manager = editor_data["manager"]
             changes = manager.get_changes(status)
             return {"success": True, "changes": changes, "workflow_id": workflow_id}
         
@@ -5359,8 +5382,9 @@ async def search_files(data: dict, user: Optional[User] = Depends(get_current_us
             if not os.path.exists(workspace_path):
                 raise HTTPException(status_code=404, detail="Workspace not found")
             
-            # Create temporary manager for this workspace
-            manager = FileEditorManager(workspace_path)
+            # Get cached manager for this workspace
+            editor_data = get_isolated_workspace_manager(workspace_path)
+            manager = editor_data["manager"]
             matches = manager.search_files(query, path, case_sensitive)
             return {"success": True, "matches": matches, "count": len(matches), "workflow_id": workflow_id}
         
