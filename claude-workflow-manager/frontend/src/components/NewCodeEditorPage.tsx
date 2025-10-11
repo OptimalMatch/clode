@@ -3839,6 +3839,13 @@ const NewCodeEditorPage: React.FC = () => {
               onCollapse={() => setEditorMinimized(true)}
               onExpand={() => setEditorMinimized(false)}
             >
+              {editorMinimized ? (
+                <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#1e1e1e', writingMode: 'vertical-lr', p: 1 }}>
+                  <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: 10 }}>
+                    EDITOR
+                  </Typography>
+                </Box>
+              ) : (
               <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#1e1e1e' }}>
                 {/* Tab Bar - Single view or Split view */}
                 {!splitViewEnabled && (
@@ -4837,6 +4844,7 @@ const NewCodeEditorPage: React.FC = () => {
                   )}
                 </Box>
               </Box>
+              )}
             </Panel>
             
             {/* Agent Panels - Show when enabled and agents exist */}
