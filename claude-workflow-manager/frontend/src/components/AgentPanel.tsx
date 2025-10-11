@@ -369,35 +369,73 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         </Box>
       </Box>
 
-      {/* File Explorer */}
+      {/* File Explorer or Isolated Workspace Message */}
       <Box sx={{ height: '40%', overflow: 'auto', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-        <EnhancedFileTree
-          items={items}
-          onItemClick={handleItemClick}
-          onFolderExpand={handleFolderExpand}
-          selectedPath={selectedFile?.path}
-          openTabs={openTabs.map(tab => tab.path)}
-          pendingChanges={pendingChanges}
-          currentPath={agent.workFolder}
-          onRefresh={() => {
-            loadDirectory();
-            loadChanges();
-          }}
-          expandedFolders={expandedFolders}
-          onToggleExpand={handleToggleExpand}
-        />
-        {items.length === 0 && !loading && (
-          <Box textAlign="center" py={4}>
-            <FolderOpen sx={{ fontSize: 32, color: 'rgba(255, 255, 255, 0.2)', mb: 1 }} />
+        {!agent.workFolder ? (
+          // Isolated workspace mode - show message instead of file tree
+          <Box textAlign="center" py={4} px={2}>
+            <FolderOpen sx={{ fontSize: 48, color: agent.color, mb: 2, opacity: 0.7 }} />
+            <Typography
+              sx={{
+                fontSize: 11,
+                color: 'rgba(255, 255, 255, 0.9)',
+                mb: 1,
+                fontWeight: 600,
+              }}
+            >
+              Isolated Workspace
+            </Typography>
             <Typography
               sx={{
                 fontSize: 10,
-                color: 'rgba(255, 255, 255, 0.4)',
+                color: 'rgba(255, 255, 255, 0.6)',
+                mb: 2,
               }}
             >
-              Empty workspace
+              This agent is working in a temporary isolated clone.
+              Changes will appear in the main Changes panel.
             </Typography>
+            <Chip
+              label={`${pendingChanges.length} changes`}
+              size="small"
+              sx={{
+                fontSize: 9,
+                bgcolor: pendingChanges.length > 0 ? 'rgba(255, 152, 0, 0.2)' : 'rgba(0, 0, 0, 0.2)',
+                color: pendingChanges.length > 0 ? '#ff9800' : 'rgba(255, 255, 255, 0.5)',
+              }}
+            />
           </Box>
+        ) : (
+          <>
+            <EnhancedFileTree
+              items={items}
+              onItemClick={handleItemClick}
+              onFolderExpand={handleFolderExpand}
+              selectedPath={selectedFile?.path}
+              openTabs={openTabs.map(tab => tab.path)}
+              pendingChanges={pendingChanges}
+              currentPath={agent.workFolder}
+              onRefresh={() => {
+                loadDirectory();
+                loadChanges();
+              }}
+              expandedFolders={expandedFolders}
+              onToggleExpand={handleToggleExpand}
+            />
+            {items.length === 0 && !loading && (
+              <Box textAlign="center" py={4}>
+                <FolderOpen sx={{ fontSize: 32, color: 'rgba(255, 255, 255, 0.2)', mb: 1 }} />
+                <Typography
+                  sx={{
+                    fontSize: 10,
+                    color: 'rgba(255, 255, 255, 0.4)',
+                  }}
+                >
+                  Empty workspace
+                </Typography>
+              </Box>
+            )}
+          </>
         )}
       </Box>
 
