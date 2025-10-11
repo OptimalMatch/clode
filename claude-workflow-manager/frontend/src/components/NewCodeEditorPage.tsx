@@ -3830,6 +3830,7 @@ const NewCodeEditorPage: React.FC = () => {
             
             {/* Main Editor Panel - Always show when workflow is selected */}
             <Panel 
+              key={`editor-${editorMinimized}`}
               defaultSize={editorMinimized ? 3 : (sidebarCollapsed ? 100 : 80)} 
               minSize={editorMinimized ? 3 : 50}
               maxSize={editorMinimized ? 3 : undefined}
