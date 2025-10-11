@@ -9,6 +9,7 @@ import {
   LinearProgress,
   Paper,
   Chip,
+  CircularProgress,
 } from '@mui/material';
 import {
   Close,
@@ -113,8 +114,34 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
   const [openTabs, setOpenTabs] = useState<FileItem[]>([]);
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
   const [panelHovered, setPanelHovered] = useState(false);
+  const [editorTransitioning, setEditorTransitioning] = useState(false);
   
   const editorRef = useRef<any>(null);
+  const previousFileHadChanges = useRef<boolean>(false);
+
+  // Handle editor transitions to prevent Monaco disposal errors
+  useEffect(() => {
+    if (!selectedFile) {
+      previousFileHadChanges.current = false;
+      return;
+    }
+
+    const fileChange = changes.find(c => c.file_path === selectedFile.path && c.status === 'pending');
+    const currentHasChanges = !!fileChange;
+    
+    // If switching from diff to regular editor or vice versa, add a brief transition
+    if (previousFileHadChanges.current !== currentHasChanges) {
+      setEditorTransitioning(true);
+      const timer = setTimeout(() => {
+        setEditorTransitioning(false);
+        previousFileHadChanges.current = currentHasChanges;
+      }, 50); // 50ms delay for cleanup
+      
+      return () => clearTimeout(timer);
+    } else {
+      previousFileHadChanges.current = currentHasChanges;
+    }
+  }, [selectedFile, changes]);
 
   // Load directory for this agent's work folder
   const loadDirectory = async (path: string = '') => {
@@ -646,13 +673,20 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {loading && <LinearProgress />}
         
-        {selectedFile ? (() => {
+        {editorTransitioning ? (
+          <Box display="flex" alignItems="center" justifyContent="center" height="100%">
+            <CircularProgress size={24} />
+          </Box>
+        ) : selectedFile ? (() => {
           // Find pending changes for this file
           const fileChange = pendingChanges.find(c => c.file_path === selectedFile.path);
           
           return fileChange ? (
             // Show diff view with accept/decline buttons
-            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <Box 
+              key={`diff-view-${selectedFile.path}-${fileChange.change_id}`}
+              sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+            >
               {/* Action buttons */}
               <Box
                 sx={{
@@ -689,7 +723,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
               </Box>
               
               {/* Diff Editor */}
-              <Box sx={{ flex: 1 }} key={`diff-${selectedFile.path}-${fileChange.change_id}`}>
+              <Box sx={{ flex: 1 }}>
                 <DiffEditor
                   height="100%"
                   language={getLanguageFromFilename(selectedFile.name)}
@@ -702,33 +736,37 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     fontSize: 11,
                     renderSideBySide: true,
                     ignoreTrimWhitespace: false,
+                    enableSplitViewResizing: false,
                   }}
+                  keepCurrentOriginalModel={true}
+                  keepCurrentModifiedModel={true}
                 />
               </Box>
             </Box>
           ) : (
             // Show regular editor (no changes)
-            <Editor
-              key={`editor-${selectedFile.path}`}
-              height="100%"
-              language={getLanguageFromFilename(selectedFile.name)}
-              value={fileContent}
-              onChange={(value) => setFileContent(value || '')}
-              onMount={(editor) => { editorRef.current = editor; }}
-              theme={selectedTheme}
-              options={{
-                readOnly: fileContent === '[Binary file]',
-                minimap: { enabled: false },
-                fontSize: 11,
-                lineNumbers: 'on',
-                renderWhitespace: 'selection',
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                tabSize: 2,
-                wordWrap: 'on',
-                folding: true,
-              }}
-            />
+            <Box key={`editor-view-${selectedFile.path}`} sx={{ flex: 1 }}>
+              <Editor
+                height="100%"
+                language={getLanguageFromFilename(selectedFile.name)}
+                value={fileContent}
+                onChange={(value) => setFileContent(value || '')}
+                onMount={(editor) => { editorRef.current = editor; }}
+                theme={selectedTheme}
+                options={{
+                  readOnly: fileContent === '[Binary file]',
+                  minimap: { enabled: false },
+                  fontSize: 11,
+                  lineNumbers: 'on',
+                  renderWhitespace: 'selection',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                  wordWrap: 'on',
+                  folding: true,
+                }}
+              />
+            </Box>
           );
         })() : (
           <Box
