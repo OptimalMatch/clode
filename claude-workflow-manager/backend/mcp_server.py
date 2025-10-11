@@ -698,41 +698,44 @@ class ClaudeWorkflowMCPServer:
             # File Editor Tools
             Tool(
                 name="editor_browse_directory",
-                description="Browse files and folders in a repository directory. Returns a list of items with their metadata.",
+                description="Browse files and folders in a repository directory or isolated workspace. Returns a list of items with their metadata.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository (required unless workspace_path provided)"},
+                        "workspace_path": {"type": "string", "description": "Direct path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)"},
                         "path": {"type": "string", "description": "Relative path to browse (empty string for root)", "default": ""},
                         "include_hidden": {"type": "boolean", "description": "Include hidden files/directories", "default": False}
                     },
-                    "required": ["workflow_id"]
+                    "required": []
                 }
             ),
             Tool(
                 name="editor_read_file",
-                description="Read the content of a file from the repository. Returns file content and metadata.",
+                description="Read the content of a file from the repository or isolated workspace. Returns file content and metadata.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository (required unless workspace_path provided)"},
+                        "workspace_path": {"type": "string", "description": "Direct path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)"},
                         "file_path": {"type": "string", "description": "Relative path to the file"}
                     },
-                    "required": ["workflow_id", "file_path"]
+                    "required": ["file_path"]
                 }
             ),
             Tool(
                 name="editor_create_change",
-                description="Create a pending file change (create, update, or delete) for approval. Changes are not applied immediately.",
+                description="Create a pending file change (create, update, or delete) for approval in workflow or isolated workspace. Changes are not applied immediately.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository (required unless workspace_path provided)"},
+                        "workspace_path": {"type": "string", "description": "Direct path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)"},
                         "file_path": {"type": "string", "description": "Path to the file"},
                         "operation": {"type": "string", "enum": ["create", "update", "delete"], "description": "Operation type"},
                         "new_content": {"type": "string", "description": "New content for create/update operations"}
                     },
-                    "required": ["workflow_id", "file_path", "operation"]
+                    "required": ["file_path", "operation"]
                 }
             ),
             Tool(
@@ -810,16 +813,17 @@ class ClaudeWorkflowMCPServer:
             ),
             Tool(
                 name="editor_search_files",
-                description="Search for files by name pattern in the repository.",
+                description="Search for files by name pattern in the repository or isolated workspace.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository (required unless workspace_path provided)"},
+                        "workspace_path": {"type": "string", "description": "Direct path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)"},
                         "query": {"type": "string", "description": "Search query (supports wildcards)"},
                         "path": {"type": "string", "description": "Directory to search in", "default": ""},
                         "case_sensitive": {"type": "boolean", "description": "Case-sensitive search", "default": False}
                     },
-                    "required": ["workflow_id", "query"]
+                    "required": ["query"]
                 }
             ),
             Tool(
@@ -1081,27 +1085,40 @@ class ClaudeWorkflowMCPServer:
             # File Editor Tools
             elif name == "editor_browse_directory":
                 data = {
-                    "workflow_id": arguments["workflow_id"],
                     "path": arguments.get("path", ""),
                     "include_hidden": arguments.get("include_hidden", False)
                 }
+                # Support both workflow_id and workspace_path
+                if "workspace_path" in arguments:
+                    data["workspace_path"] = arguments["workspace_path"]
+                if "workflow_id" in arguments:
+                    data["workflow_id"] = arguments["workflow_id"]
+                
                 result = await self._make_request("POST", "/api/file-editor/browse", json=data)
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
             
             elif name == "editor_read_file":
                 data = {
-                    "workflow_id": arguments["workflow_id"],
                     "file_path": arguments["file_path"]
                 }
+                # Support both workflow_id and workspace_path
+                if "workspace_path" in arguments:
+                    data["workspace_path"] = arguments["workspace_path"]
+                if "workflow_id" in arguments:
+                    data["workflow_id"] = arguments["workflow_id"]
                 result = await self._make_request("POST", "/api/file-editor/read", json=data)
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
             
             elif name == "editor_create_change":
                 data = {
-                    "workflow_id": arguments["workflow_id"],
                     "file_path": arguments["file_path"],
                     "operation": arguments["operation"]
                 }
+                # Support both workflow_id and workspace_path
+                if "workspace_path" in arguments:
+                    data["workspace_path"] = arguments["workspace_path"]
+                if "workflow_id" in arguments:
+                    data["workflow_id"] = arguments["workflow_id"]
                 if "new_content" in arguments:
                     data["new_content"] = arguments["new_content"]
                 result = await self._make_request("POST", "/api/file-editor/create-change", json=data)
@@ -1157,11 +1174,16 @@ class ClaudeWorkflowMCPServer:
             
             elif name == "editor_search_files":
                 data = {
-                    "workflow_id": arguments["workflow_id"],
                     "query": arguments["query"],
                     "path": arguments.get("path", ""),
                     "case_sensitive": arguments.get("case_sensitive", False)
                 }
+                # Support both workflow_id and workspace_path
+                if "workspace_path" in arguments:
+                    data["workspace_path"] = arguments["workspace_path"]
+                if "workflow_id" in arguments:
+                    data["workflow_id"] = arguments["workflow_id"]
+                
                 result = await self._make_request("POST", "/api/file-editor/search", json=data)
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
             

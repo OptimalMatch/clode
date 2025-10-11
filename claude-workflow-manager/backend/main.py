@@ -3393,16 +3393,33 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
             
             orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
             
+            # Send workspace info to frontend if using isolated workspaces
+            if agent_dir_mapping:
+                workspace_info = {
+                    'type': 'workspace_info',
+                    'parent_dir': temp_dir,
+                    'agent_mapping': {name: os.path.join(temp_dir, rel_path) for name, rel_path in agent_dir_mapping.items()},
+                    'timestamp': datetime.now().isoformat()
+                }
+                yield f"data: {json.dumps(workspace_info)}\n\n"
+            
             # Add agents
             for agent in request.agents:
                 system_prompt = agent.system_prompt
                 
                 # If using isolated workspaces, prepend workspace instructions
                 if agent_dir_mapping and agent.name in agent_dir_mapping:
+                    full_workspace_path = os.path.join(cwd, agent_dir_mapping[agent.name])
                     workspace_instruction = (
-                        f"IMPORTANT: Your isolated working directory is './{agent_dir_mapping[agent.name]}/'.\n"
-                        f"All file operations (reading, writing, listing) must be performed relative to this directory.\n"
-                        f"Example: To list files, use 'ls ./{agent_dir_mapping[agent.name]}/' or cd into it first.\n\n"
+                        f"IMPORTANT: You are working in an ISOLATED WORKSPACE.\n"
+                        f"For shell commands: use relative path './{agent_dir_mapping[agent.name]}/'\n"
+                        f"For MCP editor tools: use workspace_path parameter '{full_workspace_path}'\n\n"
+                        f"MCP TOOL USAGE:\n"
+                        f"- editor_browse_directory(workspace_path='{full_workspace_path}', path='')\n"
+                        f"- editor_read_file(workspace_path='{full_workspace_path}', file_path='README.md')\n"
+                        f"- editor_create_change(workspace_path='{full_workspace_path}', file_path='file.py', operation='update', new_content='...')\n"
+                        f"- editor_search_files(workspace_path='{full_workspace_path}', query='*.py')\n\n"
+                        f"DO NOT use workflow_id parameter when workspace_path is provided.\n\n"
                     )
                     system_prompt = workspace_instruction + system_prompt
                 
@@ -4834,15 +4851,36 @@ async def init_file_editor(data: dict, user: Optional[User] = Depends(get_curren
 @app.post(
     "/api/file-editor/browse",
     summary="Browse Directory",
-    description="Browse files and directories in a repository",
+    description="Browse files and directories in a repository or isolated workspace",
     tags=["File Editor"]
 )
 async def browse_directory(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
-    """Browse a directory in the repository"""
+    """Browse a directory in the repository or isolated workspace"""
+    from file_editor import FileEditorManager
+    
     try:
         workflow_id = data.get("workflow_id")
+        workspace_path = data.get("workspace_path")  # NEW: Direct path to isolated workspace
         path = data.get("path", "")
         include_hidden = data.get("include_hidden", False)
+        
+        # Option 1: Direct workspace path (for isolated agent workspaces)
+        if workspace_path:
+            # Validate path is safe (must be orchestration temp directory)
+            if not workspace_path.startswith('/tmp/orchestration_isolated_'):
+                raise HTTPException(status_code=403, detail="Access denied: Invalid workspace path")
+            
+            if not os.path.exists(workspace_path):
+                raise HTTPException(status_code=404, detail="Workspace not found")
+            
+            # Create temporary manager for this workspace
+            manager = FileEditorManager(workspace_path)
+            result = manager.browse_directory(path, include_hidden)
+            return {"success": True, **result}
+        
+        # Option 2: Workflow-based (existing behavior)
+        if not workflow_id:
+            raise HTTPException(status_code=400, detail="Either workflow_id or workspace_path required")
         
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
@@ -4890,17 +4928,38 @@ async def get_directory_tree(data: dict, user: Optional[User] = Depends(get_curr
 @app.post(
     "/api/file-editor/read",
     summary="Read File",
-    description="Read the content of a file",
+    description="Read the content of a file from workflow or isolated workspace",
     tags=["File Editor"]
 )
 async def read_file_content(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
-    """Read a file's content"""
+    """Read a file's content from workflow or isolated workspace"""
+    from file_editor import FileEditorManager
+    
     try:
         workflow_id = data.get("workflow_id")
+        workspace_path = data.get("workspace_path")  # NEW: Direct path to isolated workspace
         file_path = data.get("file_path")
         
         if not file_path:
             raise HTTPException(status_code=400, detail="file_path is required")
+        
+        # Option 1: Direct workspace path (for isolated agent workspaces)
+        if workspace_path:
+            # Validate path is safe
+            if not workspace_path.startswith('/tmp/orchestration_isolated_'):
+                raise HTTPException(status_code=403, detail="Access denied: Invalid workspace path")
+            
+            if not os.path.exists(workspace_path):
+                raise HTTPException(status_code=404, detail="Workspace not found")
+            
+            # Create temporary manager for this workspace
+            manager = FileEditorManager(workspace_path)
+            result = manager.read_file(file_path)
+            return {"success": True, **result}
+        
+        # Option 2: Workflow-based (existing behavior)
+        if not workflow_id:
+            raise HTTPException(status_code=400, detail="Either workflow_id or workspace_path required")
         
         workflow = await get_cached_workflow(workflow_id, db)
         if not workflow:
@@ -4920,13 +4979,16 @@ async def read_file_content(data: dict, user: Optional[User] = Depends(get_curre
 @app.post(
     "/api/file-editor/create-change",
     summary="Create File Change",
-    description="Create a pending file change for approval",
+    description="Create a pending file change for approval (workflow or isolated workspace)",
     tags=["File Editor"]
 )
 async def create_file_change(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
-    """Create a pending file change"""
+    """Create a pending file change in workflow or isolated workspace"""
+    from file_editor import FileEditorManager
+    
     try:
         workflow_id = data.get("workflow_id")
+        workspace_path = data.get("workspace_path")  # NEW: Direct path to isolated workspace
         file_path = data.get("file_path")
         operation = data.get("operation")  # create, update, delete
         new_content = data.get("new_content")
@@ -4934,16 +4996,34 @@ async def create_file_change(data: dict, user: Optional[User] = Depends(get_curr
         if not file_path or not operation:
             raise HTTPException(status_code=400, detail="file_path and operation are required")
         
+        # Skip diff generation for performance test files (optimization)
+        is_perf_test = file_path.startswith("perf_test_")
+        generate_diff = not is_perf_test
+        
+        # Option 1: Direct workspace path (for isolated agent workspaces)
+        if workspace_path:
+            # Validate path is safe
+            if not workspace_path.startswith('/tmp/orchestration_isolated_'):
+                raise HTTPException(status_code=403, detail="Access denied: Invalid workspace path")
+            
+            if not os.path.exists(workspace_path):
+                raise HTTPException(status_code=404, detail="Workspace not found")
+            
+            # Create temporary manager for this workspace
+            manager = FileEditorManager(workspace_path)
+            change = manager.create_change(file_path, operation, new_content, generate_diff=generate_diff)
+            return {"success": True, "change": change.to_dict(include_diff=generate_diff)}
+        
+        # Option 2: Workflow-based (existing behavior)
+        if not workflow_id:
+            raise HTTPException(status_code=400, detail="Either workflow_id or workspace_path required")
+        
         workflow = await get_cached_workflow(workflow_id, db)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
         
         editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
         manager = editor_data["manager"]
-        
-        # Skip diff generation for performance test files (optimization)
-        is_perf_test = file_path.startswith("perf_test_")
-        generate_diff = not is_perf_test
         
         change = manager.create_change(file_path, operation, new_content, generate_diff=generate_diff)
         return {"success": True, "change": change.to_dict(include_diff=generate_diff)}
@@ -5134,19 +5214,40 @@ async def move_file_or_directory(data: dict, user: Optional[User] = Depends(get_
 @app.post(
     "/api/file-editor/search",
     summary="Search Files",
-    description="Search for files by name pattern",
+    description="Search for files by name pattern (workflow or isolated workspace)",
     tags=["File Editor"]
 )
 async def search_files(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
-    """Search for files"""
+    """Search for files in workflow or isolated workspace"""
+    from file_editor import FileEditorManager
+    
     try:
         workflow_id = data.get("workflow_id")
+        workspace_path = data.get("workspace_path")  # NEW: Direct path to isolated workspace
         query = data.get("query")
         path = data.get("path", "")
         case_sensitive = data.get("case_sensitive", False)
         
         if not query:
             raise HTTPException(status_code=400, detail="query is required")
+        
+        # Option 1: Direct workspace path (for isolated agent workspaces)
+        if workspace_path:
+            # Validate path is safe
+            if not workspace_path.startswith('/tmp/orchestration_isolated_'):
+                raise HTTPException(status_code=403, detail="Access denied: Invalid workspace path")
+            
+            if not os.path.exists(workspace_path):
+                raise HTTPException(status_code=404, detail="Workspace not found")
+            
+            # Create temporary manager for this workspace
+            manager = FileEditorManager(workspace_path)
+            matches = manager.search_files(query, path, case_sensitive)
+            return {"success": True, "matches": matches, "count": len(matches)}
+        
+        # Option 2: Workflow-based (existing behavior)
+        if not workflow_id:
+            raise HTTPException(status_code=400, detail="Either workflow_id or workspace_path required")
         
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
