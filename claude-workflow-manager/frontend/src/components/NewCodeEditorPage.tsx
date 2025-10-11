@@ -781,11 +781,35 @@ const NewCodeEditorPage: React.FC = () => {
     }
   };
   
+  // Expand parent folders for a file path
+  const expandParentFolders = async (filePath: string) => {
+    // Get all parent folder paths
+    const pathParts = filePath.split('/');
+    const folderPaths: string[] = [];
+    
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      const folderPath = pathParts.slice(0, i + 1).join('/');
+      folderPaths.push(folderPath);
+    }
+    
+    // Expand each parent folder
+    for (const folderPath of folderPaths) {
+      try {
+        await handleFolderExpand(folderPath);
+      } catch (error) {
+        console.error(`Failed to expand folder ${folderPath}:`, error);
+      }
+    }
+  };
+
   // Open file and scroll to line for performance testing
   const openFileAndScrollToLine = async (filePath: string, lineNumber: number) => {
     if (!selectedWorkflow) return;
     
     try {
+      // Expand parent folders to make the file visible in the tree
+      await expandParentFolders(filePath);
+      
       // Determine which pane to use
       const targetPane = perfTestCurrentPaneRef.current;
       console.log(`[PerfTest] Opening file "${filePath}" in ${targetPane} pane (${perfTestPaneCount} panes total)`);
