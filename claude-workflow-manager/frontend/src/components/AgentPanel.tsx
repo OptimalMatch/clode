@@ -147,20 +147,32 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
   // Load changes for files in this agent's workspace
   const loadChanges = async () => {
-    if (!workflowId) return;
+    if (!workflowId && !agent.workspacePath) return;
     
     try {
-      const response = await api.get('/api/file-editor/changes', {
-        params: { workflow_id: workflowId },
-      });
+      const requestData: any = {};
       
-      // Filter changes for this agent's work folder
-      const agentChanges = (response.data.changes || []).filter((change: FileChange) => {
-        if (!agent.workFolder) return true;
-        return change.file_path.startsWith(agent.workFolder);
-      });
+      // Option 1: Isolated workspace (use workspace_path)
+      if (agent.workspacePath) {
+        requestData.workspace_path = agent.workspacePath;
+      } 
+      // Option 2: Shared workspace (use workflow_id)
+      else {
+        requestData.workflow_id = workflowId;
+      }
       
-      setChanges(agentChanges);
+      const response = await api.post('/api/file-editor/changes', requestData);
+      
+      // If shared workspace, filter changes for this agent's work folder
+      if (!agent.workspacePath && agent.workFolder) {
+        const agentChanges = (response.data.changes || []).filter((change: FileChange) => {
+          return change.file_path.startsWith(agent.workFolder);
+        });
+        setChanges(agentChanges);
+      } else {
+        // For isolated workspaces, all changes are for this agent
+        setChanges(response.data.changes || []);
+      }
     } catch (error: any) {
       console.error('Error loading changes:', error);
       setChanges([]);
@@ -267,13 +279,24 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     }
   };
 
-  // Load initial directory
+  // Load initial directory and changes
   useEffect(() => {
-    if (workflowId) {
+    if (workflowId || agent.workspacePath) {
       loadDirectory();
       loadChanges();
     }
-  }, [workflowId, agent.workFolder]);
+  }, [workflowId, agent.workFolder, agent.workspacePath]);
+
+  // Poll for changes while agent is working
+  useEffect(() => {
+    if (agent.status === 'working' && (workflowId || agent.workspacePath)) {
+      const interval = setInterval(() => {
+        loadChanges();
+      }, 2000); // Poll every 2 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [agent.status, workflowId, agent.workspacePath]);
 
   return (
     <Box

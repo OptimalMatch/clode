@@ -5036,14 +5036,35 @@ async def create_file_change(data: dict, user: Optional[User] = Depends(get_curr
 @app.post(
     "/api/file-editor/changes",
     summary="Get Changes",
-    description="Get all pending changes",
+    description="Get all pending changes from workflow or isolated workspace",
     tags=["File Editor"]
 )
 async def get_file_changes(data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
-    """Get pending changes"""
+    """Get pending changes from workflow or isolated workspace"""
+    from file_editor import FileEditorManager
+    
     try:
         workflow_id = data.get("workflow_id")
+        workspace_path = data.get("workspace_path")  # NEW: Direct path to isolated workspace
         status = data.get("status")
+        
+        # Option 1: Direct workspace path (for isolated agent workspaces)
+        if workspace_path:
+            # Validate path is safe
+            if not workspace_path.startswith('/tmp/orchestration_isolated_'):
+                raise HTTPException(status_code=403, detail="Access denied: Invalid workspace path")
+            
+            if not os.path.exists(workspace_path):
+                raise HTTPException(status_code=404, detail="Workspace not found")
+            
+            # Create temporary manager for this workspace
+            manager = FileEditorManager(workspace_path)
+            changes = manager.get_changes(status)
+            return {"success": True, "changes": changes}
+        
+        # Option 2: Workflow-based (existing behavior)
+        if not workflow_id:
+            raise HTTPException(status_code=400, detail="Either workflow_id or workspace_path required")
         
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
