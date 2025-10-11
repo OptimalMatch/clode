@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   List,
@@ -221,10 +221,22 @@ const EnhancedFileTreeItem: React.FC<{
   const [newName, setNewName] = useState(item.name);
   const [children, setChildren] = useState<FileItem[]>(item.children || []);
   const [loading, setLoading] = useState(false);
+  const itemRef = useRef<HTMLDivElement>(null);
   
   const isDirectory = item.type === 'directory';
   const isSelected = selectedPath === item.path;
   const isOpen = openTabs?.includes(item.path);
+  
+  // Auto-scroll into view when selected
+  useEffect(() => {
+    if (isSelected && itemRef.current) {
+      itemRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'nearest'
+      });
+    }
+  }, [isSelected]);
   
   // Normalize paths for comparison
   const normalizePath = (path: string) => path.replace(/\\/g, '/');
@@ -286,6 +298,7 @@ const EnhancedFileTreeItem: React.FC<{
   return (
     <>
       <ListItemButton
+        ref={itemRef}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         onMouseEnter={() => setHovered(true)}
