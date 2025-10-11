@@ -698,12 +698,13 @@ class ClaudeWorkflowMCPServer:
             # File Editor Tools
             Tool(
                 name="editor_browse_directory",
-                description="Browse files and folders in a repository directory. For isolated workspaces, provide both workflow_id and workspace_path.",
+                description="Browse files and folders in a repository directory. For isolated workspaces, provide workflow_id with either workspace_id OR workspace_path.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "workflow_id": {"type": "string", "description": "Workflow ID (REQUIRED - provides context and security)"},
-                        "workspace_path": {"type": "string", "description": "Optional: Path to isolated workspace. Use with workflow_id for isolated agent workspaces."},
+                        "workspace_id": {"type": "string", "description": "Optional: Workspace ID for isolated workspace (alternative to workspace_path)"},
+                        "workspace_path": {"type": "string", "description": "Optional: Direct path to isolated workspace (alternative to workspace_id)"},
                         "path": {"type": "string", "description": "Relative path to browse (empty string for root)", "default": ""},
                         "include_hidden": {"type": "boolean", "description": "Include hidden files/directories", "default": False}
                     },
@@ -712,12 +713,13 @@ class ClaudeWorkflowMCPServer:
             ),
             Tool(
                 name="editor_read_file",
-                description="Read the content of a file from the repository. For isolated workspaces, provide both workflow_id and workspace_path.",
+                description="Read the content of a file from the repository. For isolated workspaces, provide workflow_id with either workspace_id OR workspace_path.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "workflow_id": {"type": "string", "description": "Workflow ID (REQUIRED - provides context and security)"},
-                        "workspace_path": {"type": "string", "description": "Optional: Path to isolated workspace. Use with workflow_id for isolated agent workspaces."},
+                        "workspace_id": {"type": "string", "description": "Optional: Workspace ID for isolated workspace (alternative to workspace_path)"},
+                        "workspace_path": {"type": "string", "description": "Optional: Direct path to isolated workspace (alternative to workspace_id)"},
                         "file_path": {"type": "string", "description": "Relative path to the file"}
                     },
                     "required": ["workflow_id", "file_path"]
@@ -725,12 +727,13 @@ class ClaudeWorkflowMCPServer:
             ),
             Tool(
                 name="editor_create_change",
-                description="Create a pending file change (create, update, or delete) for approval. For isolated workspaces, provide both workflow_id and workspace_path.",
+                description="Create a pending file change (create, update, or delete) for approval. For isolated workspaces, provide workflow_id with either workspace_id OR workspace_path.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "workflow_id": {"type": "string", "description": "Workflow ID (REQUIRED - provides context and security)"},
-                        "workspace_path": {"type": "string", "description": "Optional: Path to isolated workspace. Use with workflow_id for isolated agent workspaces."},
+                        "workspace_id": {"type": "string", "description": "Optional: Workspace ID for isolated workspace (alternative to workspace_path)"},
+                        "workspace_path": {"type": "string", "description": "Optional: Direct path to isolated workspace (alternative to workspace_id)"},
                         "file_path": {"type": "string", "description": "Path to the file"},
                         "operation": {"type": "string", "enum": ["create", "update", "delete"], "description": "Operation type"},
                         "new_content": {"type": "string", "description": "New content for create/update operations"}
@@ -740,12 +743,13 @@ class ClaudeWorkflowMCPServer:
             ),
             Tool(
                 name="editor_get_changes",
-                description="Get all pending file changes from workflow. For isolated workspaces, provide both workflow_id and workspace_path.",
+                description="Get all pending file changes from workflow. For isolated workspaces, provide workflow_id with either workspace_id OR workspace_path.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "workflow_id": {"type": "string", "description": "Workflow ID (REQUIRED - provides context and security)"},
-                        "workspace_path": {"type": "string", "description": "Optional: Path to isolated workspace. Use with workflow_id for isolated agent workspaces."},
+                        "workspace_id": {"type": "string", "description": "Optional: Workspace ID for isolated workspace (alternative to workspace_path)"},
+                        "workspace_path": {"type": "string", "description": "Optional: Direct path to isolated workspace (alternative to workspace_id)"},
                         "status": {"type": "string", "enum": ["pending", "approved", "rejected"], "description": "Filter by status"}
                     },
                     "required": ["workflow_id"]
@@ -814,12 +818,13 @@ class ClaudeWorkflowMCPServer:
             ),
             Tool(
                 name="editor_search_files",
-                description="Search for files by name pattern in the repository. For isolated workspaces, provide both workflow_id and workspace_path.",
+                description="Search for files by name pattern in the repository. For isolated workspaces, provide workflow_id with either workspace_id OR workspace_path.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "workflow_id": {"type": "string", "description": "Workflow ID (REQUIRED - provides context and security)"},
-                        "workspace_path": {"type": "string", "description": "Optional: Path to isolated workspace. Use with workflow_id for isolated agent workspaces."},
+                        "workspace_id": {"type": "string", "description": "Optional: Workspace ID for isolated workspace (alternative to workspace_path)"},
+                        "workspace_path": {"type": "string", "description": "Optional: Direct path to isolated workspace (alternative to workspace_id)"},
                         "query": {"type": "string", "description": "Search query (supports wildcards)"},
                         "path": {"type": "string", "description": "Directory to search in", "default": ""},
                         "case_sensitive": {"type": "boolean", "description": "Case-sensitive search", "default": False}
@@ -1089,9 +1094,14 @@ class ClaudeWorkflowMCPServer:
                     "path": arguments.get("path", ""),
                     "include_hidden": arguments.get("include_hidden", False)
                 }
-                # Support both workflow_id and workspace_path
-                if "workspace_path" in arguments:
+                # Resolve workspace_id to workspace_path if provided
+                if "workspace_id" in arguments and not "workspace_path" in arguments:
+                    workspace_data = await self._make_request("GET", f"/api/workspaces/{arguments['workspace_id']}")
+                    if workspace_data.get("success") and workspace_data.get("workspace"):
+                        data["workspace_path"] = workspace_data["workspace"]["workspace_path"]
+                elif "workspace_path" in arguments:
                     data["workspace_path"] = arguments["workspace_path"]
+                    
                 if "workflow_id" in arguments:
                     data["workflow_id"] = arguments["workflow_id"]
                 
@@ -1102,9 +1112,14 @@ class ClaudeWorkflowMCPServer:
                 data = {
                     "file_path": arguments["file_path"]
                 }
-                # Support both workflow_id and workspace_path
-                if "workspace_path" in arguments:
+                # Resolve workspace_id to workspace_path if provided
+                if "workspace_id" in arguments and not "workspace_path" in arguments:
+                    workspace_data = await self._make_request("GET", f"/api/workspaces/{arguments['workspace_id']}")
+                    if workspace_data.get("success") and workspace_data.get("workspace"):
+                        data["workspace_path"] = workspace_data["workspace"]["workspace_path"]
+                elif "workspace_path" in arguments:
                     data["workspace_path"] = arguments["workspace_path"]
+                    
                 if "workflow_id" in arguments:
                     data["workflow_id"] = arguments["workflow_id"]
                 result = await self._make_request("POST", "/api/file-editor/read", json=data)
@@ -1115,9 +1130,14 @@ class ClaudeWorkflowMCPServer:
                     "file_path": arguments["file_path"],
                     "operation": arguments["operation"]
                 }
-                # Support both workflow_id and workspace_path
-                if "workspace_path" in arguments:
+                # Resolve workspace_id to workspace_path if provided
+                if "workspace_id" in arguments and not "workspace_path" in arguments:
+                    workspace_data = await self._make_request("GET", f"/api/workspaces/{arguments['workspace_id']}")
+                    if workspace_data.get("success") and workspace_data.get("workspace"):
+                        data["workspace_path"] = workspace_data["workspace"]["workspace_path"]
+                elif "workspace_path" in arguments:
                     data["workspace_path"] = arguments["workspace_path"]
+                    
                 if "workflow_id" in arguments:
                     data["workflow_id"] = arguments["workflow_id"]
                 if "new_content" in arguments:
@@ -1127,9 +1147,14 @@ class ClaudeWorkflowMCPServer:
             
             elif name == "editor_get_changes":
                 data = {}
-                # Support both workflow_id and workspace_path
-                if "workspace_path" in arguments:
+                # Resolve workspace_id to workspace_path if provided
+                if "workspace_id" in arguments and not "workspace_path" in arguments:
+                    workspace_data = await self._make_request("GET", f"/api/workspaces/{arguments['workspace_id']}")
+                    if workspace_data.get("success") and workspace_data.get("workspace"):
+                        data["workspace_path"] = workspace_data["workspace"]["workspace_path"]
+                elif "workspace_path" in arguments:
                     data["workspace_path"] = arguments["workspace_path"]
+                    
                 if "workflow_id" in arguments:
                     data["workflow_id"] = arguments["workflow_id"]
                 if "status" in arguments:
@@ -1184,9 +1209,14 @@ class ClaudeWorkflowMCPServer:
                     "path": arguments.get("path", ""),
                     "case_sensitive": arguments.get("case_sensitive", False)
                 }
-                # Support both workflow_id and workspace_path
-                if "workspace_path" in arguments:
+                # Resolve workspace_id to workspace_path if provided
+                if "workspace_id" in arguments and not "workspace_path" in arguments:
+                    workspace_data = await self._make_request("GET", f"/api/workspaces/{arguments['workspace_id']}")
+                    if workspace_data.get("success") and workspace_data.get("workspace"):
+                        data["workspace_path"] = workspace_data["workspace"]["workspace_path"]
+                elif "workspace_path" in arguments:
                     data["workspace_path"] = arguments["workspace_path"]
+                    
                 if "workflow_id" in arguments:
                     data["workflow_id"] = arguments["workflow_id"]
                 

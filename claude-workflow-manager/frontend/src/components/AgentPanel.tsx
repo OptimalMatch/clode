@@ -47,6 +47,7 @@ export interface Agent {
   color: string;
   workFolder: string; // Relative path from workflow root (empty for isolated workspaces)
   workspacePath?: string; // Absolute path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)
+  workspace_id?: string; // ID of the persistent workspace in database
   status: 'idle' | 'working' | 'completed' | 'error';
 }
 
