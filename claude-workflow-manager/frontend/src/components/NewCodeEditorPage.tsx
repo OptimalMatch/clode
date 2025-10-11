@@ -302,6 +302,7 @@ const NewCodeEditorPage: React.FC = () => {
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>('');
   const [currentPath, setCurrentPath] = useState<string>('');
   const [items, setItems] = useState<FileItem[]>([]);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [originalContent, setOriginalContent] = useState<string>('');
@@ -752,6 +753,18 @@ const NewCodeEditorPage: React.FC = () => {
       return [];
     }
   };
+
+  const handleToggleExpand = (path: string, isExpanded: boolean) => {
+    setExpandedFolders(prev => {
+      const newSet = new Set(prev);
+      if (isExpanded) {
+        newSet.add(path);
+      } else {
+        newSet.delete(path);
+      }
+      return newSet;
+    });
+  };
   
   const loadChanges = async () => {
     if (!selectedWorkflow) return;
@@ -803,8 +816,14 @@ const NewCodeEditorPage: React.FC = () => {
     for (const folderPath of folderPaths) {
       try {
         console.log(`[PerfTest] Expanding folder: ${folderPath}`);
+        
+        // Add to expanded folders
+        setExpandedFolders(prev => new Set(prev).add(folderPath));
+        
+        // Load children
         const children = await handleFolderExpand(folderPath);
-        console.log(`[PerfTest] Folder ${folderPath} loaded with ${children.length} children`);
+        console.log(`[PerfTest] Folder ${folderPath} expanded with ${children.length} children`);
+        
         // Small delay to allow UI to update
         await new Promise(resolve => setTimeout(resolve, 50));
       } catch (error) {
@@ -3155,6 +3174,8 @@ const NewCodeEditorPage: React.FC = () => {
                             loadDirectory(currentPath);
                             loadChanges();
                           }}
+                          expandedFolders={expandedFolders}
+                          onToggleExpand={handleToggleExpand}
                         />
                         {items.length === 0 && !loading && (
                           <Box textAlign="center" py={4}>
