@@ -106,6 +106,8 @@ interface EnhancedFileTreeProps {
   pendingChanges?: Array<{ file_path: string }>;
   currentPath?: string;
   onRefresh?: () => void;
+  expandedFolders?: Set<string>;
+  onToggleExpand?: (path: string, isExpanded: boolean) => void;
 }
 
 // Helper to get file icon based on extension (VSCode-style icons)
@@ -214,8 +216,10 @@ const EnhancedFileTreeItem: React.FC<{
   pendingChanges?: Array<{ file_path: string }>;
   currentPath?: string;
   level: number;
-}> = ({ item, onItemClick, onFolderExpand, onRename, onDelete, selectedPath, openTabs, pendingChanges, currentPath, level }) => {
-  const [expanded, setExpanded] = useState(false);
+  expandedFolders?: Set<string>;
+  onToggleExpand?: (path: string, isExpanded: boolean) => void;
+}> = ({ item, onItemClick, onFolderExpand, onRename, onDelete, selectedPath, openTabs, pendingChanges, currentPath, level, expandedFolders, onToggleExpand }) => {
+  const expanded = expandedFolders?.has(item.path) ?? false;
   const [hovered, setHovered] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(item.name);
@@ -255,7 +259,7 @@ const EnhancedFileTreeItem: React.FC<{
     e.stopPropagation();
     if (isDirectory) {
       const willExpand = !expanded;
-      setExpanded(willExpand);
+      onToggleExpand?.(item.path, willExpand);
       
       // Load children if expanding and not already loaded
       if (willExpand && children.length === 0 && onFolderExpand) {
@@ -451,6 +455,8 @@ const EnhancedFileTreeItem: React.FC<{
                 pendingChanges={pendingChanges}
                 currentPath={currentPath}
                 level={level + 1}
+                expandedFolders={expandedFolders}
+                onToggleExpand={onToggleExpand}
               />
             ))
           ) : (
@@ -479,6 +485,8 @@ const EnhancedFileTree: React.FC<EnhancedFileTreeProps> = ({
   pendingChanges,
   currentPath,
   onRefresh,
+  expandedFolders,
+  onToggleExpand,
 }) => {
   const [headerHovered, setHeaderHovered] = useState(false);
   const [createDialog, setCreateDialog] = useState<'file' | 'folder' | null>(null);
@@ -602,6 +610,8 @@ const EnhancedFileTree: React.FC<EnhancedFileTreeProps> = ({
             pendingChanges={pendingChanges}
             currentPath={currentPath}
             level={1}
+            expandedFolders={expandedFolders}
+            onToggleExpand={onToggleExpand}
           />
         ))}
       </List>
