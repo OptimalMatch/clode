@@ -1116,13 +1116,14 @@ const NewCodeEditorPage: React.FC = () => {
       return;
     }
     
-    // Run performance test
+    // Run performance test with concurrent requests
     const delayBetweenCalls = 1000 / perfTestSpeed; // milliseconds
+    const fileLocks = new Map<string, Promise<void>>(); // Track ongoing operations per file
     
-    for (let i = 0; i < perfTestCallCount; i++) {
+    // Function to execute a single test operation
+    const executeTestOperation = async (callIndex: number) => {
       if (!perfTestRunningRef.current) {
-        addLog('Test stopped by user');
-        break;
+        return;
       }
       
       const operationType = Math.random();
@@ -1133,12 +1134,20 @@ const NewCodeEditorPage: React.FC = () => {
         const readThreshold = perfTestReadPercent / 100;
         const modifyThreshold = readThreshold + (perfTestModifyPercent / 100);
         
+        let targetFile = '';
+        
         if (operationType < readThreshold) {
           // Read file operation
-          const randomFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
+          targetFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
+          
+          // Wait for any pending operations on this file
+          if (fileLocks.has(targetFile)) {
+            await fileLocks.get(targetFile);
+          }
+          
           await api.post('/api/file-editor/read', {
             workflow_id: selectedWorkflow,
-            file_path: randomFile,
+            file_path: targetFile,
           });
           
           const endTime = Date.now();
@@ -1147,65 +1156,81 @@ const NewCodeEditorPage: React.FC = () => {
           successCount++;
           completedCalls++;
           
-          if (i % 10 === 0) { // Log every 10th operation
-            addLog(`Read file: ${randomFile} (${responseTime}ms)`);
+          if (callIndex % 10 === 0) { // Log every 10th operation
+            addLog(`Read file: ${targetFile} (${responseTime}ms)`);
           }
         } else if (operationType < modifyThreshold) {
           // Modify existing file
-          const randomFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
+          targetFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
           
-          // Read the file first
-          const readResponse = await api.post('/api/file-editor/read', {
-            workflow_id: selectedWorkflow,
-            file_path: randomFile,
-          });
-          
-          let content = readResponse.data.content || '';
-          const lines = content.split('\n');
-          
-          // Random modification: remove, change, or add lines
-          let changedLineNumber = 1;
-          const modType = Math.random();
-          if (modType < 0.33 && lines.length > 1) {
-            // Remove a random line
-            const lineToRemove = Math.floor(Math.random() * lines.length);
-            changedLineNumber = lineToRemove + 1;
-            lines.splice(lineToRemove, 1);
-          } else if (modType < 0.66 && lines.length > 0) {
-            // Change a random line
-            const lineToChange = Math.floor(Math.random() * lines.length);
-            changedLineNumber = lineToChange + 1;
-            lines[lineToChange] = `// Modified at ${new Date().toISOString()}`;
-          } else {
-            // Add a new line
-            const lineToInsert = Math.floor(Math.random() * lines.length);
-            changedLineNumber = lineToInsert + 1;
-            lines.splice(lineToInsert, 0, `// Added line at ${new Date().toISOString()}`);
+          // Wait for any pending operations on this file
+          if (fileLocks.has(targetFile)) {
+            await fileLocks.get(targetFile);
           }
           
-          const newContent = lines.join('\n');
+          // Create a lock promise for this file
+          let releaseLock: () => void;
+          const lockPromise = new Promise<void>(resolve => { releaseLock = resolve; });
+          fileLocks.set(targetFile, lockPromise);
           
-          await api.post('/api/file-editor/create-change', {
-            workflow_id: selectedWorkflow,
-            file_path: randomFile,
-            operation: 'update',
-            new_content: newContent,
-          });
-          
-          // Capture pane info before opening (as opening cycles to next pane)
-          const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPaneRef.current} pane]` : '';
-          
-          // Open file and scroll to changed line
-          await openFileAndScrollToLine(randomFile, changedLineNumber);
-          
-          const endTime = Date.now();
-          const responseTime = endTime - startTime;
-          responseTimes.push(responseTime);
-          successCount++;
-          completedCalls++;
-          
-          if (i % 10 === 0) {
-            addLog(`Modified file: ${randomFile} line ${changedLineNumber}${paneInfo} (${responseTime}ms)`);
+          try {
+            // Read the file first
+            const readResponse = await api.post('/api/file-editor/read', {
+              workflow_id: selectedWorkflow,
+              file_path: targetFile,
+            });
+            
+            let content = readResponse.data.content || '';
+            const lines = content.split('\n');
+            
+            // Random modification: remove, change, or add lines
+            let changedLineNumber = 1;
+            const modType = Math.random();
+            if (modType < 0.33 && lines.length > 1) {
+              // Remove a random line
+              const lineToRemove = Math.floor(Math.random() * lines.length);
+              changedLineNumber = lineToRemove + 1;
+              lines.splice(lineToRemove, 1);
+            } else if (modType < 0.66 && lines.length > 0) {
+              // Change a random line
+              const lineToChange = Math.floor(Math.random() * lines.length);
+              changedLineNumber = lineToChange + 1;
+              lines[lineToChange] = `// Modified at ${new Date().toISOString()}`;
+            } else {
+              // Add a new line
+              const lineToInsert = Math.floor(Math.random() * lines.length);
+              changedLineNumber = lineToInsert + 1;
+              lines.splice(lineToInsert, 0, `// Added line at ${new Date().toISOString()}`);
+            }
+            
+            const newContent = lines.join('\n');
+            
+            await api.post('/api/file-editor/create-change', {
+              workflow_id: selectedWorkflow,
+              file_path: targetFile,
+              operation: 'update',
+              new_content: newContent,
+            });
+            
+            // Capture pane info before opening (as opening cycles to next pane)
+            const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPaneRef.current} pane]` : '';
+            
+            // Open file and scroll to changed line
+            await openFileAndScrollToLine(targetFile, changedLineNumber);
+            
+            const endTime = Date.now();
+            const responseTime = endTime - startTime;
+            responseTimes.push(responseTime);
+            successCount++;
+            completedCalls++;
+            
+            if (callIndex % 10 === 0) {
+              addLog(`Modified file: ${targetFile} line ${changedLineNumber}${paneInfo} (${responseTime}ms)`);
+            }
+          } finally {
+            // Release the lock
+            releaseLock!();
+            fileLocks.delete(targetFile);
           }
         } else {
           // Create new file
@@ -1234,7 +1259,7 @@ const NewCodeEditorPage: React.FC = () => {
           successCount++;
           completedCalls++;
           
-          if (i % 10 === 0) {
+          if (callIndex % 10 === 0) {
             addLog(`Created file: ${newFileName}${paneInfo} (${responseTime}ms)`);
           }
         }
@@ -1245,7 +1270,7 @@ const NewCodeEditorPage: React.FC = () => {
         failureCount++;
         completedCalls++;
         
-        if (i % 10 === 0) {
+        if (callIndex % 10 === 0) {
           addLog(`Operation failed: ${error.response?.data?.detail || error.message}`);
         }
       }
@@ -1278,10 +1303,23 @@ const NewCodeEditorPage: React.FC = () => {
       if (completedCalls % Math.max(1, Math.floor(perfTestCallCount / 50)) === 0) {
         setPerfTestChartData(prev => [...prev, { time: elapsedSeconds, rate: actualRate }]);
       }
-      
-      // Delay to match desired speed
-      await new Promise(resolve => setTimeout(resolve, delayBetweenCalls));
+    };
+    
+    // Schedule all operations at the target rate (concurrent execution)
+    const promises: Promise<void>[] = [];
+    for (let i = 0; i < perfTestCallCount; i++) {
+      const delay = i * delayBetweenCalls;
+      const promise = new Promise<void>(resolve => {
+        setTimeout(async () => {
+          await executeTestOperation(i);
+          resolve();
+        }, delay);
+      });
+      promises.push(promise);
     }
+    
+    // Wait for all operations to complete
+    await Promise.all(promises);
     
     const testEndTime = Date.now();
     const totalTime = (testEndTime - testStartTime) / 1000; // seconds
