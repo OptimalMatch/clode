@@ -1218,14 +1218,16 @@ const NewCodeEditorPage: React.FC = () => {
             // Capture pane info before opening (as opening cycles to next pane)
             const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPaneRef.current} pane]` : '';
             
-            // Throttle UI updates to perfTestUIUpdateRate per second
+            // Throttle UI updates to perfTestUIUpdateRate per second (non-blocking)
             const currentTime = Date.now();
             const timeSinceLastUpdate = currentTime - perfTestLastUIUpdateRef.current;
             const minUpdateInterval = 1000 / perfTestUIUpdateRate; // ms between updates
             
             if (timeSinceLastUpdate >= minUpdateInterval) {
-              // Time for a UI update
-              await openFileAndScrollToLine(targetFile, changedLineNumber);
+              // Time for a UI update - run in background without blocking test
+              openFileAndScrollToLine(targetFile, changedLineNumber).catch(err => {
+                console.warn('UI update failed:', err);
+              });
               perfTestLastUIUpdateRef.current = currentTime;
             }
             
@@ -1261,14 +1263,16 @@ const NewCodeEditorPage: React.FC = () => {
           // Capture pane info before opening (as opening cycles to next pane)
           const paneInfo = perfTestPaneCount > 1 ? ` [${perfTestCurrentPaneRef.current} pane]` : '';
           
-          // Throttle UI updates to perfTestUIUpdateRate per second
+          // Throttle UI updates to perfTestUIUpdateRate per second (non-blocking)
           const currentTime = Date.now();
           const timeSinceLastUpdate = currentTime - perfTestLastUIUpdateRef.current;
           const minUpdateInterval = 1000 / perfTestUIUpdateRate; // ms between updates
           
           if (timeSinceLastUpdate >= minUpdateInterval) {
-            // Time for a UI update
-            await openFileAndScrollToLine(newFileName, 1);
+            // Time for a UI update - run in background without blocking test
+            openFileAndScrollToLine(newFileName, 1).catch(err => {
+              console.warn('UI update failed:', err);
+            });
             perfTestLastUIUpdateRef.current = currentTime;
           }
           
