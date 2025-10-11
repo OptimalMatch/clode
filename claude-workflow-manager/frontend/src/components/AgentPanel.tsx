@@ -17,6 +17,8 @@ import {
   Edit,
   SmartToy,
   Circle,
+  CheckCircle,
+  Cancel,
 } from '@mui/icons-material';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import EnhancedFileTree, { getFileIcon } from './EnhancedFileTree';
@@ -325,6 +327,42 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     });
   };
 
+  // Handle approving a change
+  const handleApproveChange = async (changeId: string) => {
+    try {
+      await api.post('/api/file-editor/approve', {
+        workflow_id: workflowId,
+        change_id: changeId,
+      });
+      
+      // Reload changes and file content
+      await loadChanges();
+      if (selectedFile) {
+        await handleItemClick(selectedFile);
+      }
+    } catch (error) {
+      console.error('Error approving change:', error);
+    }
+  };
+  
+  // Handle rejecting a change
+  const handleRejectChange = async (changeId: string) => {
+    try {
+      await api.post('/api/file-editor/reject', {
+        workflow_id: workflowId,
+        change_id: changeId,
+      });
+      
+      // Reload changes and file content
+      await loadChanges();
+      if (selectedFile) {
+        await handleItemClick(selectedFile);
+      }
+    } catch (error) {
+      console.error('Error rejecting change:', error);
+    }
+  };
+
   // Get pending changes count for this agent
   const pendingChanges = changes.filter(c => c.status === 'pending');
 
@@ -608,28 +646,90 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {loading && <LinearProgress />}
         
-        {selectedFile ? (
-          <Editor
-            height="100%"
-            language={getLanguageFromFilename(selectedFile.name)}
-            value={fileContent}
-            onChange={(value) => setFileContent(value || '')}
-            onMount={(editor) => { editorRef.current = editor; }}
-            theme={selectedTheme}
-            options={{
-              readOnly: fileContent === '[Binary file]',
-              minimap: { enabled: false },
-              fontSize: 11,
-              lineNumbers: 'on',
-              renderWhitespace: 'selection',
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              tabSize: 2,
-              wordWrap: 'on',
-              folding: true,
-            }}
-          />
-        ) : (
+        {selectedFile ? (() => {
+          // Find pending changes for this file
+          const fileChange = pendingChanges.find(c => c.file_path === selectedFile.path);
+          
+          return fileChange ? (
+            // Show diff view with accept/decline buttons
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              {/* Action buttons */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 1,
+                  p: 1,
+                  bgcolor: 'rgba(0, 0, 0, 0.2)',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                  alignItems: 'center',
+                }}
+              >
+                <Typography sx={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)', flex: 1 }}>
+                  Pending Change
+                </Typography>
+                <Tooltip title="Reject Change">
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={() => handleRejectChange(fileChange.change_id)}
+                    sx={{ p: 0.5, color: 'rgba(255, 100, 100, 0.9)' }}
+                  >
+                    <Cancel sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Accept Change">
+                  <IconButton
+                    size="small"
+                    onClick={() => handleApproveChange(fileChange.change_id)}
+                    sx={{ p: 0.5, color: 'rgba(100, 255, 100, 0.9)' }}
+                  >
+                    <CheckCircle sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+              
+              {/* Diff Editor */}
+              <Box sx={{ flex: 1 }}>
+                <DiffEditor
+                  height="100%"
+                  language={getLanguageFromFilename(selectedFile.name)}
+                  original={fileChange.old_content || ''}
+                  modified={fileChange.new_content || ''}
+                  theme={selectedTheme}
+                  options={{
+                    readOnly: true,
+                    minimap: { enabled: false },
+                    fontSize: 11,
+                    renderSideBySide: true,
+                    ignoreTrimWhitespace: false,
+                  }}
+                />
+              </Box>
+            </Box>
+          ) : (
+            // Show regular editor (no changes)
+            <Editor
+              height="100%"
+              language={getLanguageFromFilename(selectedFile.name)}
+              value={fileContent}
+              onChange={(value) => setFileContent(value || '')}
+              onMount={(editor) => { editorRef.current = editor; }}
+              theme={selectedTheme}
+              options={{
+                readOnly: fileContent === '[Binary file]',
+                minimap: { enabled: false },
+                fontSize: 11,
+                lineNumbers: 'on',
+                renderWhitespace: 'selection',
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                tabSize: 2,
+                wordWrap: 'on',
+                folding: true,
+              }}
+            />
+          );
+        })() : (
           <Box
             display="flex"
             alignItems="center"
