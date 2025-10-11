@@ -3514,6 +3514,42 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
         finally:
+            # Copy changes from isolated workspaces to main workflow before cleanup
+            if agent_dir_mapping and request.git_repo:
+                try:
+                    from file_editor import FileEditorManager
+                    
+                    # Get or create main workflow FileEditorManager
+                    workflow_id = request.workflow_id
+                    if workflow_id:
+                        workflow = await db.get_workflow(workflow_id)
+                        if workflow:
+                            print(f"📋 Copying changes from isolated workspaces to workflow {workflow_id}")
+                            editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+                            main_manager = editor_data["manager"]
+                            
+                            # Copy changes from each agent's isolated workspace
+                            for agent_name, rel_path in agent_dir_mapping.items():
+                                agent_workspace = os.path.join(temp_dir, rel_path)
+                                if os.path.exists(agent_workspace):
+                                    agent_manager = FileEditorManager(agent_workspace)
+                                    agent_changes = agent_manager.get_changes()
+                                    
+                                    print(f"  📝 Agent '{agent_name}': Found {len(agent_changes)} changes")
+                                    
+                                    # Copy each change to main manager
+                                    for change in agent_changes:
+                                        main_manager.create_change(
+                                            file_path=change.file_path,
+                                            operation=change.operation,
+                                            new_content=change.new_content,
+                                            generate_diff=True
+                                        )
+                                    
+                            print(f"✅ Successfully copied changes to main workflow")
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not copy changes from isolated workspaces: {e}")
+            
             # Clean up temporary directory
             if temp_dir and os.path.exists(temp_dir):
                 try:
