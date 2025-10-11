@@ -3833,9 +3833,11 @@ const NewCodeEditorPage: React.FC = () => {
             <Panel 
               ref={editorPanelRef}
               defaultSize={sidebarCollapsed ? 100 : 80}
-              minSize={50}
+              minSize={10}
               collapsible={true}
               collapsedSize={3}
+              onCollapse={() => setEditorMinimized(true)}
+              onExpand={() => setEditorMinimized(false)}
             >
               <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#1e1e1e' }}>
                 {/* Tab Bar - Single view or Split view */}
@@ -3952,7 +3954,6 @@ const NewCodeEditorPage: React.FC = () => {
                             } else {
                               editorPanelRef.current.collapse();
                             }
-                            setEditorMinimized(!editorMinimized);
                           }
                         }}
                         sx={{
