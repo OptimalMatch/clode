@@ -2355,8 +2355,17 @@ const NewCodeEditorPage: React.FC = () => {
   const executeBlockParallel = async (agents: any[], task: string, gitRepo: string, signal: AbortSignal, block?: any) => {
     // If this block has isolate_agent_workspaces enabled, create AgentPanels
     if (block?.data?.isolate_agent_workspaces && agents.length > 0) {
-      const spawnedAgents = spawnAgentPanels(agents, agents.length);
+      const spawnedAgents = spawnAgentPanels(agents, agents.length, true); // true = isolated workspaces
       const agentIds = spawnedAgents.map(a => a.id);
+      
+      // Add info message about isolated workspaces
+      const infoMessage: ChatMessage = {
+        id: `msg-${Date.now()}-isolated`,
+        type: 'system',
+        content: `🔒 Agents are working in isolated workspaces. File changes will appear in the Changes panel when complete.`,
+        timestamp: new Date(),
+      };
+      setChatMessages(prev => [...prev, infoMessage]);
       
       try {
         const result = await executeParallelWithStreaming({
@@ -2371,6 +2380,10 @@ const NewCodeEditorPage: React.FC = () => {
         
         // Mark agents as completed
         updateAgentPanelStatus(agentIds, 'completed');
+        
+        // Reload changes to show what agents did
+        await loadChanges();
+        
         return result;
       } catch (error) {
         // Mark agents as error
@@ -2395,8 +2408,17 @@ const NewCodeEditorPage: React.FC = () => {
     // If this block has isolate_agent_workspaces enabled, create AgentPanels for all agents
     if (block?.data?.isolate_agent_workspaces && specialists.length > 0) {
       const allAgents = [router, ...specialists];
-      const spawnedAgents = spawnAgentPanels(allAgents, agents.length);
+      const spawnedAgents = spawnAgentPanels(allAgents, agents.length, true); // true = isolated workspaces
       const agentIds = spawnedAgents.map(a => a.id);
+      
+      // Add info message
+      const infoMessage: ChatMessage = {
+        id: `msg-${Date.now()}-isolated`,
+        type: 'system',
+        content: `🔒 Agents are working in isolated workspaces. File changes will appear in the Changes panel when complete.`,
+        timestamp: new Date(),
+      };
+      setChatMessages(prev => [...prev, infoMessage]);
       
       try {
         const result = await executeRoutingWithStreaming({
@@ -2410,6 +2432,7 @@ const NewCodeEditorPage: React.FC = () => {
         }, signal);
         
         updateAgentPanelStatus(agentIds, 'completed');
+        await loadChanges();
         return result;
       } catch (error) {
         updateAgentPanelStatus(agentIds, 'error');
@@ -2867,12 +2890,14 @@ const NewCodeEditorPage: React.FC = () => {
   };
   
   // Spawn AgentPanels for orchestration agents
-  const spawnAgentPanels = (agentConfigs: any[], baseIndex: number = 0) => {
+  const spawnAgentPanels = (agentConfigs: any[], baseIndex: number = 0, useIsolatedWorkspaces: boolean = false) => {
     const newAgents: Agent[] = agentConfigs.map((agent: any, index: number) => ({
       id: `agent-${Date.now()}-${index}`,
       name: agent.name,
       color: generateAgentColor(baseIndex + index),
-      workFolder: agent.name.replace(/\s+/g, '_'), // Use agent name as folder (matches backend)
+      // For isolated workspaces, don't set workFolder (agents work in temp dirs that aren't browsable via workflow API)
+      // Instead, the panel will show changes only
+      workFolder: useIsolatedWorkspaces ? '' : agent.name.replace(/\s+/g, '_'),
       status: 'working' as const,
     }));
     
