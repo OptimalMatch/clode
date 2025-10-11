@@ -3833,9 +3833,9 @@ const NewCodeEditorPage: React.FC = () => {
             <Panel 
               key={`editor-panel-${editorMinimized}`}
               ref={editorPanelRef}
-              defaultSize={editorMinimized ? 5 : (sidebarCollapsed ? 100 : 80)}
-              minSize={2}
-              maxSize={editorMinimized ? 5 : 100}
+              defaultSize={editorMinimized ? 1 : (sidebarCollapsed ? 100 : 80)}
+              minSize={1}
+              maxSize={editorMinimized ? 1 : 100}
             >
               {editorMinimized ? (
                 <Box sx={{ 
