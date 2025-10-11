@@ -2697,7 +2697,13 @@ const NewCodeEditorPage: React.FC = () => {
           try {
             const event = JSON.parse(line.slice(6));
             
-            if (event.type === 'status' && event.agent) {
+            if (event.type === 'workspace_info') {
+              // Update agent panels with workspace paths
+              console.log('[Code Editor] Received workspace info:', event);
+              if (event.agent_mapping) {
+                updateAgentWorkspacePaths(event.agent_mapping);
+              }
+            } else if (event.type === 'status' && event.agent) {
               setExecutionStatus({
                 executing: true,
                 currentAgent: event.agent,
@@ -2910,6 +2916,18 @@ const NewCodeEditorPage: React.FC = () => {
   // Update agent panel statuses after execution
   const updateAgentPanelStatus = (agentIds: string[], status: Agent['status']) => {
     agentIds.forEach(id => handleAgentStatusChange(id, status));
+  };
+  
+  // Update agent workspace paths (for isolated workspaces)
+  const updateAgentWorkspacePaths = (agentMapping: Record<string, string>) => {
+    setAgents(prev => prev.map(agent => {
+      const workspacePath = agentMapping[agent.name];
+      if (workspacePath) {
+        console.log(`[Code Editor] Updated agent ${agent.name} workspace path: ${workspacePath}`);
+        return { ...agent, workspacePath };
+      }
+      return agent;
+    }));
   };
   
   const pendingChanges = changes.filter((c: FileChange) => c.status === 'pending');

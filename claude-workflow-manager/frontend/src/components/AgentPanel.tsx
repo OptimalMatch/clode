@@ -45,7 +45,8 @@ export interface Agent {
   id: string;
   name: string;
   color: string;
-  workFolder: string; // Relative path from workflow root
+  workFolder: string; // Relative path from workflow root (empty for isolated workspaces)
+  workspacePath?: string; // Absolute path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)
   status: 'idle' | 'working' | 'completed' | 'error';
 }
 
@@ -114,19 +115,26 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
   // Load directory for this agent's work folder
   const loadDirectory = async (path: string = '') => {
-    if (!workflowId) return;
+    if (!workflowId && !agent.workspacePath) return;
     
     setLoading(true);
     try {
-      // Combine agent's work folder with requested path
-      const fullPath = agent.workFolder 
-        ? (path ? `${agent.workFolder}/${path}` : agent.workFolder)
-        : path;
+      const requestData: any = { path };
       
-      const response = await api.post('/api/file-editor/browse', {
-        workflow_id: workflowId,
-        path: fullPath,
-      });
+      // Option 1: Isolated workspace (use workspace_path)
+      if (agent.workspacePath) {
+        requestData.workspace_path = agent.workspacePath;
+      } 
+      // Option 2: Shared workspace (use workflow_id)
+      else {
+        const fullPath = agent.workFolder 
+          ? (path ? `${agent.workFolder}/${path}` : agent.workFolder)
+          : path;
+        requestData.workflow_id = workflowId;
+        requestData.path = fullPath;
+      }
+      
+      const response = await api.post('/api/file-editor/browse', requestData);
       
       setItems(response.data.items || []);
     } catch (error: any) {
@@ -202,14 +210,22 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     if (item.type === 'file') {
       setLoading(true);
       try {
-        const fullPath = agent.workFolder 
-          ? `${agent.workFolder}/${item.path}`
-          : item.path;
+        const requestData: any = { file_path: item.path };
         
-        const response = await api.post('/api/file-editor/read', {
-          workflow_id: workflowId,
-          file_path: fullPath,
-        });
+        // Option 1: Isolated workspace (use workspace_path)
+        if (agent.workspacePath) {
+          requestData.workspace_path = agent.workspacePath;
+        } 
+        // Option 2: Shared workspace (use workflow_id)
+        else {
+          const fullPath = agent.workFolder 
+            ? `${agent.workFolder}/${item.path}`
+            : item.path;
+          requestData.workflow_id = workflowId;
+          requestData.file_path = fullPath;
+        }
+        
+        const response = await api.post('/api/file-editor/read', requestData);
         
         setFileContent(response.data.content || '');
         setOriginalContent(response.data.content || '');
@@ -369,10 +385,10 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         </Box>
       </Box>
 
-      {/* File Explorer or Isolated Workspace Message */}
+      {/* File Explorer */}
       <Box sx={{ height: '40%', overflow: 'auto', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-        {!agent.workFolder ? (
-          // Isolated workspace mode - show message instead of file tree
+        {!agent.workFolder && !agent.workspacePath ? (
+          // Waiting for workspace info
           <Box textAlign="center" py={4} px={2}>
             <FolderOpen sx={{ fontSize: 48, color: agent.color, mb: 2, opacity: 0.7 }} />
             <Typography
@@ -392,8 +408,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 mb: 2,
               }}
             >
-              This agent is working in a temporary isolated clone.
-              Changes will appear in the main Changes panel.
+              Waiting for workspace initialization...
             </Typography>
             <Chip
               label={`${pendingChanges.length} changes`}
@@ -414,7 +429,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
               selectedPath={selectedFile?.path}
               openTabs={openTabs.map(tab => tab.path)}
               pendingChanges={pendingChanges}
-              currentPath={agent.workFolder}
+              currentPath={agent.workspacePath || agent.workFolder}
               onRefresh={() => {
                 loadDirectory();
                 loadChanges();
