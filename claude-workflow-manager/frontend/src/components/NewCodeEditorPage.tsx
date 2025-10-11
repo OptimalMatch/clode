@@ -3484,7 +3484,7 @@ const NewCodeEditorPage: React.FC = () => {
         
         {/* Resizable Panels */}
         {selectedWorkflow ? (
-          <PanelGroup key={`panel-group-${sidebarCollapsed}-${editorMinimized}`} direction="horizontal" style={{ flex: 1 }}>
+          <PanelGroup key={`panel-group-${sidebarCollapsed}`} direction="horizontal" style={{ flex: 1 }}>
             {/* Sidebar Panel - Only show when not collapsed */}
             {!sidebarCollapsed && (
               <>
