@@ -87,7 +87,7 @@ import {
 import { useSnackbar } from 'notistack';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle } from 'react-resizable-panels';
 import Editor, { DiffEditor, loader } from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
@@ -427,6 +427,7 @@ const NewCodeEditorPage: React.FC = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const perfTestRunningRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const changesPollingIntervalRef = useRef<any>(null);
   const autoRefreshIntervalRef = useRef<any>(null);
   const editorRef = useRef<any>(null); // Monaco editor instance for scrolling to lines (single pane)
@@ -3830,9 +3831,11 @@ const NewCodeEditorPage: React.FC = () => {
             
             {/* Main Editor Panel - Always show when workflow is selected */}
             <Panel 
-              defaultSize={editorMinimized ? 3 : (sidebarCollapsed ? 100 : 80)} 
-              minSize={editorMinimized ? 3 : 50}
-              maxSize={editorMinimized ? 3 : undefined}
+              ref={editorPanelRef}
+              defaultSize={sidebarCollapsed ? 100 : 80}
+              minSize={50}
+              collapsible={true}
+              collapsedSize={3}
             >
               <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#1e1e1e' }}>
                 {/* Tab Bar - Single view or Split view */}
@@ -3942,7 +3945,16 @@ const NewCodeEditorPage: React.FC = () => {
                     <Tooltip title={editorMinimized ? "Expand Editor" : "Minimize Editor"}>
                       <IconButton
                         size="small"
-                        onClick={() => setEditorMinimized(!editorMinimized)}
+                        onClick={() => {
+                          if (editorPanelRef.current) {
+                            if (editorMinimized) {
+                              editorPanelRef.current.expand();
+                            } else {
+                              editorPanelRef.current.collapse();
+                            }
+                            setEditorMinimized(!editorMinimized);
+                          }
+                        }}
                         sx={{
                           p: 0.5,
                           color: 'rgba(255, 255, 255, 0.6)',
