@@ -3831,9 +3831,11 @@ const NewCodeEditorPage: React.FC = () => {
             
             {/* Main Editor Panel - Always show when workflow is selected */}
             <Panel 
+              key={`editor-panel-${editorMinimized}`}
               ref={editorPanelRef}
-              defaultSize={sidebarCollapsed ? 100 : 80}
-              minSize={3}
+              defaultSize={editorMinimized ? 5 : (sidebarCollapsed ? 100 : 80)}
+              minSize={2}
+              maxSize={editorMinimized ? 5 : 100}
             >
               {editorMinimized ? (
                 <Box sx={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#1e1e1e', writingMode: 'vertical-lr', p: 1, overflow: 'hidden' }}>
@@ -3951,15 +3953,7 @@ const NewCodeEditorPage: React.FC = () => {
                       <IconButton
                         size="small"
                         onClick={() => {
-                          if (editorPanelRef.current) {
-                            if (editorMinimized) {
-                              editorPanelRef.current.resize(sidebarCollapsed ? 100 : 80);
-                              setEditorMinimized(false);
-                            } else {
-                              editorPanelRef.current.resize(5);
-                              setEditorMinimized(true);
-                            }
-                          }
+                          setEditorMinimized(!editorMinimized);
                         }}
                         sx={{
                           p: 0.5,
