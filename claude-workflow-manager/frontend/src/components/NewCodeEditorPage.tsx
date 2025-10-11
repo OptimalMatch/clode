@@ -3483,7 +3483,7 @@ const NewCodeEditorPage: React.FC = () => {
         
         {/* Resizable Panels */}
         {selectedWorkflow ? (
-          <PanelGroup key={`panel-group-${sidebarCollapsed}`} direction="horizontal" style={{ flex: 1 }}>
+          <PanelGroup key={`panel-group-${sidebarCollapsed}-${editorMinimized}`} direction="horizontal" style={{ flex: 1 }}>
             {/* Sidebar Panel - Only show when not collapsed */}
             {!sidebarCollapsed && (
               <>
@@ -3830,7 +3830,6 @@ const NewCodeEditorPage: React.FC = () => {
             
             {/* Main Editor Panel - Always show when workflow is selected */}
             <Panel 
-              key={`editor-${editorMinimized}-${sidebarCollapsed}`}
               defaultSize={editorMinimized ? 3 : (sidebarCollapsed ? 100 : 80)} 
               minSize={editorMinimized ? 3 : 50}
               maxSize={editorMinimized ? 3 : undefined}
