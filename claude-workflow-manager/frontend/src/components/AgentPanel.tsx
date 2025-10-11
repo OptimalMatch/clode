@@ -115,22 +115,24 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
   // Load directory for this agent's work folder
   const loadDirectory = async (path: string = '') => {
-    if (!workflowId && !agent.workspacePath) return;
+    if (!workflowId) return;
     
     setLoading(true);
     try {
-      const requestData: any = { path };
+      const requestData: any = {
+        workflow_id: workflowId  // Always required for context and security
+      };
       
-      // Option 1: Isolated workspace (use workspace_path)
+      // If using isolated workspace, add workspace_path
       if (agent.workspacePath) {
         requestData.workspace_path = agent.workspacePath;
+        requestData.path = path;
       } 
-      // Option 2: Shared workspace (use workflow_id)
+      // If using shared workspace with work folder
       else {
         const fullPath = agent.workFolder 
           ? (path ? `${agent.workFolder}/${path}` : agent.workFolder)
           : path;
-        requestData.workflow_id = workflowId;
         requestData.path = fullPath;
       }
       
@@ -147,18 +149,16 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
   // Load changes for files in this agent's workspace
   const loadChanges = async () => {
-    if (!workflowId && !agent.workspacePath) return;
+    if (!workflowId) return;
     
     try {
-      const requestData: any = {};
+      const requestData: any = {
+        workflow_id: workflowId  // Always required for context and security
+      };
       
-      // Option 1: Isolated workspace (use workspace_path)
+      // If using isolated workspace, add workspace_path
       if (agent.workspacePath) {
         requestData.workspace_path = agent.workspacePath;
-      } 
-      // Option 2: Shared workspace (use workflow_id)
-      else {
-        requestData.workflow_id = workflowId;
       }
       
       const response = await api.post('/api/file-editor/changes', requestData);
@@ -182,14 +182,24 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
   // Load folder contents
   const handleFolderExpand = async (folderPath: string): Promise<FileItem[]> => {
     try {
-      const fullPath = agent.workFolder 
-        ? `${agent.workFolder}/${folderPath}`
-        : folderPath;
+      const requestData: any = {
+        workflow_id: workflowId  // Always required for context and security
+      };
       
-      const response = await api.post('/api/file-editor/browse', {
-        workflow_id: workflowId,
-        path: fullPath,
-      });
+      // If using isolated workspace, add workspace_path
+      if (agent.workspacePath) {
+        requestData.workspace_path = agent.workspacePath;
+        requestData.path = folderPath;
+      } 
+      // If using shared workspace with work folder
+      else {
+        const fullPath = agent.workFolder 
+          ? `${agent.workFolder}/${folderPath}`
+          : folderPath;
+        requestData.path = fullPath;
+      }
+      
+      const response = await api.post('/api/file-editor/browse', requestData);
       
       return response.data.items || [];
     } catch (error) {
@@ -222,18 +232,20 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     if (item.type === 'file') {
       setLoading(true);
       try {
-        const requestData: any = { file_path: item.path };
+        const requestData: any = {
+          workflow_id: workflowId  // Always required for context and security
+        };
         
-        // Option 1: Isolated workspace (use workspace_path)
+        // If using isolated workspace, add workspace_path
         if (agent.workspacePath) {
           requestData.workspace_path = agent.workspacePath;
+          requestData.file_path = item.path;
         } 
-        // Option 2: Shared workspace (use workflow_id)
+        // If using shared workspace with work folder
         else {
           const fullPath = agent.workFolder 
             ? `${agent.workFolder}/${item.path}`
             : item.path;
-          requestData.workflow_id = workflowId;
           requestData.file_path = fullPath;
         }
         
@@ -281,7 +293,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
   // Load initial directory and changes
   useEffect(() => {
-    if (workflowId || agent.workspacePath) {
+    if (workflowId) {
       loadDirectory();
       loadChanges();
     }
@@ -289,7 +301,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
   // Poll for changes while agent is working
   useEffect(() => {
-    if (agent.status === 'working' && (workflowId || agent.workspacePath)) {
+    if (agent.status === 'working' && workflowId) {
       const interval = setInterval(() => {
         loadChanges();
       }, 2000); // Poll every 2 seconds
