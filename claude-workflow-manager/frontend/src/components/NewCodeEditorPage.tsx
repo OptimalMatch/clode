@@ -58,6 +58,8 @@ import {
   ViewStream,
   KeyboardArrowUp,
   KeyboardArrowDown,
+  ChevronLeft,
+  ChevronRight,
   ViewAgenda,
   CallMerge,
   Save,
@@ -419,6 +421,7 @@ const NewCodeEditorPage: React.FC = () => {
   const [addAgentDialog, setAddAgentDialog] = useState(false);
   const [newAgentName, setNewAgentName] = useState('');
   const [newAgentFolder, setNewAgentFolder] = useState('');
+  const [editorMinimized, setEditorMinimized] = useState(false);
   
   // Refs
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -3826,7 +3829,11 @@ const NewCodeEditorPage: React.FC = () => {
             )}
             
             {/* Main Editor Panel - Always show when workflow is selected */}
-            <Panel defaultSize={sidebarCollapsed ? 100 : 80} minSize={50}>
+            <Panel 
+              defaultSize={editorMinimized ? 3 : (sidebarCollapsed ? 100 : 80)} 
+              minSize={editorMinimized ? 3 : 50}
+              maxSize={editorMinimized ? 3 : undefined}
+            >
               <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#1e1e1e' }}>
                 {/* Tab Bar - Single view or Split view */}
                 {!splitViewEnabled && (
@@ -3930,6 +3937,21 @@ const NewCodeEditorPage: React.FC = () => {
                         }}
                       >
                         <SplitEditorIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={editorMinimized ? "Expand Editor" : "Minimize Editor"}>
+                      <IconButton
+                        size="small"
+                        onClick={() => setEditorMinimized(!editorMinimized)}
+                        sx={{
+                          p: 0.5,
+                          color: 'rgba(255, 255, 255, 0.6)',
+                          '&:hover': {
+                            bgcolor: 'rgba(255, 255, 255, 0.1)',
+                          },
+                        }}
+                      >
+                        {editorMinimized ? <ChevronRight sx={{ fontSize: 16 }} /> : <ChevronLeft sx={{ fontSize: 16 }} />}
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="More Actions">
@@ -4803,6 +4825,82 @@ const NewCodeEditorPage: React.FC = () => {
                 </Box>
               </Box>
             </Panel>
+            
+            {/* Agent Panels - Show when enabled and agents exist */}
+            {showAgentPanels && agents.length > 0 && (
+              <>
+                <PanelResizeHandle style={resizeHandleStyles} />
+                <Panel defaultSize={30} minSize={20} maxSize={50}>
+                  <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    {/* Agent Tabs */}
+                    {agents.length > 1 && (
+                      <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: themeColors?.sidebarBg || '#252526' }}>
+                        <Tabs
+                          value={selectedAgentTab}
+                          onChange={(e, newValue) => setSelectedAgentTab(newValue)}
+                          variant="scrollable"
+                          scrollButtons="auto"
+                          sx={{
+                            minHeight: 36,
+                            '& .MuiTab-root': {
+                              minHeight: 36,
+                              fontSize: 11,
+                              textTransform: 'none',
+                              color: 'rgba(255, 255, 255, 0.6)',
+                              '&.Mui-selected': {
+                                color: 'rgba(255, 255, 255, 0.9)',
+                              },
+                            },
+                            '& .MuiTabs-indicator': {
+                              height: 2,
+                            },
+                          }}
+                        >
+                          {agents.map((agent, index) => (
+                            <Tab
+                              key={agent.id}
+                              label={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Box
+                                    sx={{
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: '50%',
+                                      bgcolor: agent.color,
+                                    }}
+                                  />
+                                  <Typography sx={{ fontSize: 11 }}>{agent.name}</Typography>
+                                  {agent.status === 'working' && (
+                                    <CircularProgress size={10} sx={{ color: agent.color }} />
+                                  )}
+                                </Box>
+                              }
+                              sx={{
+                                borderLeft: index === 0 ? 'none' : `1px solid ${agent.color}30`,
+                              }}
+                            />
+                          ))}
+                        </Tabs>
+                      </Box>
+                    )}
+                    
+                    {/* Selected Agent Panel */}
+                    <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                      {agents.length > 0 && agents[selectedAgentTab] && (
+                        <AgentPanel
+                          agent={agents[selectedAgentTab]}
+                          workflowId={selectedWorkflow}
+                          onClose={() => handleRemoveAgent(agents[selectedAgentTab].id)}
+                          selectedTheme={selectedTheme}
+                          themeColors={themeColors}
+                          onAgentStatusChange={handleAgentStatusChange}
+                        />
+                      )}
+                    </Box>
+                  </Box>
+                </Panel>
+              </>
+            )}
             
             {/* Right Panel for AI Assistant or Performance Testing */}
             {rightPanelOpen && (
@@ -5753,82 +5851,6 @@ const NewCodeEditorPage: React.FC = () => {
                         </Box>
                       </>
                     )}
-                  </Box>
-                </Panel>
-              </>
-            )}
-            
-            {/* Agent Panels - Show when enabled and agents exist */}
-            {showAgentPanels && agents.length > 0 && (
-              <>
-                <PanelResizeHandle style={resizeHandleStyles} />
-                <Panel defaultSize={30} minSize={20} maxSize={50}>
-                  <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                    {/* Agent Tabs */}
-                    {agents.length > 1 && (
-                      <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: themeColors?.sidebarBg || '#252526' }}>
-                        <Tabs
-                          value={selectedAgentTab}
-                          onChange={(e, newValue) => setSelectedAgentTab(newValue)}
-                          variant="scrollable"
-                          scrollButtons="auto"
-                          sx={{
-                            minHeight: 36,
-                            '& .MuiTab-root': {
-                              minHeight: 36,
-                              fontSize: 11,
-                              textTransform: 'none',
-                              color: 'rgba(255, 255, 255, 0.6)',
-                              '&.Mui-selected': {
-                                color: 'rgba(255, 255, 255, 0.9)',
-                              },
-                            },
-                            '& .MuiTabs-indicator': {
-                              height: 2,
-                            },
-                          }}
-                        >
-                          {agents.map((agent, index) => (
-                            <Tab
-                              key={agent.id}
-                              label={
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <Box
-                                    sx={{
-                                      width: 8,
-                                      height: 8,
-                                      borderRadius: '50%',
-                                      bgcolor: agent.color,
-                                    }}
-                                  />
-                                  <Typography sx={{ fontSize: 11 }}>{agent.name}</Typography>
-                                  {agent.status === 'working' && (
-                                    <CircularProgress size={10} sx={{ color: agent.color }} />
-                                  )}
-                                </Box>
-                              }
-                              sx={{
-                                borderLeft: index === 0 ? 'none' : `1px solid ${agent.color}30`,
-                              }}
-                            />
-                          ))}
-                        </Tabs>
-                      </Box>
-                    )}
-                    
-                    {/* Selected Agent Panel */}
-                    <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                      {agents.length > 0 && agents[selectedAgentTab] && (
-                        <AgentPanel
-                          agent={agents[selectedAgentTab]}
-                          workflowId={selectedWorkflow}
-                          onClose={() => handleRemoveAgent(agents[selectedAgentTab].id)}
-                          selectedTheme={selectedTheme}
-                          themeColors={themeColors}
-                          onAgentStatusChange={handleAgentStatusChange}
-                        />
-                      )}
-                    </Box>
                   </Box>
                 </Panel>
               </>
