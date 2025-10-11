@@ -3956,7 +3956,7 @@ const NewCodeEditorPage: React.FC = () => {
                               editorPanelRef.current.resize(sidebarCollapsed ? 100 : 80);
                               setEditorMinimized(false);
                             } else {
-                              editorPanelRef.current.resize(3);
+                              editorPanelRef.current.resize(5);
                               setEditorMinimized(true);
                             }
                           }
