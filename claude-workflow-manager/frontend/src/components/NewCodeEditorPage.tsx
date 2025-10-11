@@ -363,7 +363,7 @@ const NewCodeEditorPage: React.FC = () => {
   const perfTestCurrentPaneRef = useRef<'left' | 'middle' | 'right'>('left'); // Current pane for next file
   const [perfTestUIUpdateRate, setPerfTestUIUpdateRate] = useState(10); // UI updates per second (max visible rate)
   const perfTestLastUIUpdateRef = useRef<number>(0); // Timestamp of last UI update for throttling
-  const [perfTestMaxConcurrent, setPerfTestMaxConcurrent] = useState(6); // Max concurrent API calls (connection pool limit)
+  const [perfTestMaxConcurrent, setPerfTestMaxConcurrent] = useState(20); // Max concurrent API calls (connection pool limit)
   
   // Tab system state
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
@@ -1128,14 +1128,28 @@ const NewCodeEditorPage: React.FC = () => {
     let activeCalls = 0;
     const semaphoreQueue: (() => void)[] = [];
     
-    const acquireSemaphore = async (): Promise<void> => {
+    const acquireSemaphore = async (): Promise<boolean> => {
+      // Check if test was stopped before acquiring
+      if (!perfTestRunningRef.current) {
+        return false;
+      }
+      
       if (activeCalls < perfTestMaxConcurrent) {
         activeCalls++;
-        return;
+        return true;
       }
+      
       // Wait for a slot to become available
       return new Promise(resolve => {
-        semaphoreQueue.push(resolve);
+        semaphoreQueue.push(() => {
+          // Check again when slot becomes available
+          if (perfTestRunningRef.current) {
+            resolve(true);
+          } else {
+            activeCalls--; // Don't consume slot if test stopped
+            resolve(false);
+          }
+        });
       });
     };
     
@@ -1148,6 +1162,15 @@ const NewCodeEditorPage: React.FC = () => {
       }
     };
     
+    const clearSemaphoreQueue = () => {
+      // Release all waiting requests
+      while (semaphoreQueue.length > 0) {
+        const next = semaphoreQueue.shift();
+        if (next) next();
+      }
+      activeCalls = 0;
+    };
+    
     // Function to execute a single test operation
     const executeTestOperation = async (callIndex: number) => {
       if (!perfTestRunningRef.current) {
@@ -1156,11 +1179,9 @@ const NewCodeEditorPage: React.FC = () => {
       
       const operationType = Math.random();
       const startTime = Date.now();
+      let needsSemaphore = false; // Track if semaphore was acquired (for proper release)
       
       try {
-        // Acquire semaphore slot (limit concurrent connections)
-        await acquireSemaphore();
-        
         // Calculate thresholds based on user-defined percentages
         const readThreshold = perfTestReadPercent / 100;
         const modifyThreshold = readThreshold + (perfTestModifyPercent / 100);
@@ -1168,10 +1189,8 @@ const NewCodeEditorPage: React.FC = () => {
         let targetFile = '';
         
         if (operationType < readThreshold) {
-          // Read file operation
+          // Read file operation - no semaphore needed (reads are safe concurrent)
           targetFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
-          
-          // No need to wait for file locks on read operations
           
           await api.post('/api/file-editor/read', {
             workflow_id: selectedWorkflow,
@@ -1188,6 +1207,15 @@ const NewCodeEditorPage: React.FC = () => {
             addLog(`Read file: ${targetFile} (${responseTime}ms)`);
           }
         } else if (operationType < modifyThreshold) {
+          // Modify operation needs semaphore
+          needsSemaphore = true;
+          
+          // Acquire semaphore slot (limit concurrent writes)
+          const acquired = await acquireSemaphore();
+          if (!acquired || !perfTestRunningRef.current) {
+            // Test was stopped while waiting for semaphore
+            return;
+          }
           // Modify existing file
           targetFile = filesInRepo[Math.floor(Math.random() * filesInRepo.length)];
           
@@ -1271,7 +1299,16 @@ const NewCodeEditorPage: React.FC = () => {
             fileLocks.delete(targetFile);
           }
         } else {
-          // Create new file
+          // Create new file - needs semaphore
+          needsSemaphore = true;
+          
+          // Acquire semaphore slot (limit concurrent writes)
+          const acquired = await acquireSemaphore();
+          if (!acquired || !perfTestRunningRef.current) {
+            // Test was stopped while waiting for semaphore
+            return;
+          }
+          
           const newFileName = `perf_test_${Date.now()}_${Math.random().toString(36).substring(7)}.txt`;
           const newContent = `Performance test file created at ${new Date().toISOString()}`;
           
@@ -1312,12 +1349,16 @@ const NewCodeEditorPage: React.FC = () => {
           }
         }
         
-        // Release semaphore slot
-        releaseSemaphore();
+        // Release semaphore slot only if it was acquired (writes only)
+        if (needsSemaphore) {
+          releaseSemaphore();
+        }
         
       } catch (error: any) {
-        // Release semaphore slot on error
-        releaseSemaphore();
+        // Release semaphore slot on error (only if it was acquired)
+        if (needsSemaphore) {
+          releaseSemaphore();
+        }
         
         const endTime = Date.now();
         const responseTime = endTime - startTime;
@@ -5013,7 +5054,7 @@ const NewCodeEditorPage: React.FC = () => {
                               />
                             </Box>
                             <Typography variant="caption" sx={{ fontSize: 9, color: 'rgba(255, 255, 255, 0.5)', mt: 0.5, display: 'block' }}>
-                              Limits concurrent HTTP requests (prevents ERR_INSUFFICIENT_RESOURCES)
+                              Limits concurrent write operations (reads are unlimited)
                             </Typography>
                           </Box>
                           
