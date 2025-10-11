@@ -415,6 +415,7 @@ const NewCodeEditorPage: React.FC = () => {
   // Multi-Agent System State
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showAgentPanels, setShowAgentPanels] = useState(false);
+  const [selectedAgentTab, setSelectedAgentTab] = useState(0);
   const [addAgentDialog, setAddAgentDialog] = useState(false);
   const [newAgentName, setNewAgentName] = useState('');
   const [newAgentFolder, setNewAgentFolder] = useState('');
@@ -2889,7 +2890,19 @@ const NewCodeEditorPage: React.FC = () => {
   };
   
   const handleRemoveAgent = (agentId: string) => {
-    setAgents(prev => prev.filter(a => a.id !== agentId));
+    setAgents(prev => {
+      const removedIndex = prev.findIndex(a => a.id === agentId);
+      const filtered = prev.filter(a => a.id !== agentId);
+      
+      // Adjust selected tab if removing the currently selected agent
+      if (removedIndex === selectedAgentTab && filtered.length > 0) {
+        setSelectedAgentTab(Math.min(selectedAgentTab, filtered.length - 1));
+      } else if (filtered.length === 0) {
+        setSelectedAgentTab(0);
+      }
+      
+      return filtered;
+    });
     enqueueSnackbar('Agent removed', { variant: 'info' });
   };
   
@@ -2909,7 +2922,12 @@ const NewCodeEditorPage: React.FC = () => {
       status: 'working' as const,
     }));
     
-    setAgents(prev => [...prev, ...newAgents]);
+    setAgents(prev => {
+      const updated = [...prev, ...newAgents];
+      // Reset to first tab when spawning new agents
+      setSelectedAgentTab(0);
+      return updated;
+    });
     setShowAgentPanels(true);
     
     return newAgents;
@@ -5745,28 +5763,72 @@ const NewCodeEditorPage: React.FC = () => {
               <>
                 <PanelResizeHandle style={resizeHandleStyles} />
                 <Panel defaultSize={30} minSize={20} maxSize={50}>
-                  <Box sx={{ height: '100%', display: 'flex', flexDirection: 'row', gap: 0 }}>
-                    {agents.map((agent, index) => (
-                      <Box
-                        key={agent.id}
-                        sx={{
-                          flex: 1,
-                          minWidth: 250,
-                          maxWidth: agents.length === 1 ? '100%' : `${100 / agents.length}%`,
-                          height: '100%',
-                          borderRight: index < agents.length - 1 ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
-                        }}
-                      >
+                  <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    {/* Agent Tabs */}
+                    {agents.length > 1 && (
+                      <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: themeColors?.sidebarBg || '#252526' }}>
+                        <Tabs
+                          value={selectedAgentTab}
+                          onChange={(e, newValue) => setSelectedAgentTab(newValue)}
+                          variant="scrollable"
+                          scrollButtons="auto"
+                          sx={{
+                            minHeight: 36,
+                            '& .MuiTab-root': {
+                              minHeight: 36,
+                              fontSize: 11,
+                              textTransform: 'none',
+                              color: 'rgba(255, 255, 255, 0.6)',
+                              '&.Mui-selected': {
+                                color: 'rgba(255, 255, 255, 0.9)',
+                              },
+                            },
+                            '& .MuiTabs-indicator': {
+                              height: 2,
+                            },
+                          }}
+                        >
+                          {agents.map((agent, index) => (
+                            <Tab
+                              key={agent.id}
+                              label={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Box
+                                    sx={{
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: '50%',
+                                      bgcolor: agent.color,
+                                    }}
+                                  />
+                                  <Typography sx={{ fontSize: 11 }}>{agent.name}</Typography>
+                                  {agent.status === 'working' && (
+                                    <CircularProgress size={10} sx={{ color: agent.color }} />
+                                  )}
+                                </Box>
+                              }
+                              sx={{
+                                borderLeft: index === 0 ? 'none' : `1px solid ${agent.color}30`,
+                              }}
+                            />
+                          ))}
+                        </Tabs>
+                      </Box>
+                    )}
+                    
+                    {/* Selected Agent Panel */}
+                    <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                      {agents.length > 0 && agents[selectedAgentTab] && (
                         <AgentPanel
-                          agent={agent}
+                          agent={agents[selectedAgentTab]}
                           workflowId={selectedWorkflow}
-                          onClose={() => handleRemoveAgent(agent.id)}
+                          onClose={() => handleRemoveAgent(agents[selectedAgentTab].id)}
                           selectedTheme={selectedTheme}
                           themeColors={themeColors}
                           onAgentStatusChange={handleAgentStatusChange}
                         />
-                      </Box>
-                    ))}
+                      )}
+                    </Box>
                   </Box>
                 </Panel>
               </>
