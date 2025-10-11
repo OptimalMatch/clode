@@ -3413,13 +3413,13 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
                     workspace_instruction = (
                         f"IMPORTANT: You are working in an ISOLATED WORKSPACE.\n"
                         f"For shell commands: use relative path './{agent_dir_mapping[agent.name]}/'\n"
-                        f"For MCP editor tools: use workspace_path parameter '{full_workspace_path}'\n\n"
-                        f"MCP TOOL USAGE:\n"
-                        f"- editor_browse_directory(workspace_path='{full_workspace_path}', path='')\n"
-                        f"- editor_read_file(workspace_path='{full_workspace_path}', file_path='README.md')\n"
-                        f"- editor_create_change(workspace_path='{full_workspace_path}', file_path='file.py', operation='update', new_content='...')\n"
-                        f"- editor_search_files(workspace_path='{full_workspace_path}', query='*.py')\n\n"
-                        f"DO NOT use workflow_id parameter when workspace_path is provided.\n\n"
+                        f"For MCP editor tools: use BOTH workflow_id AND workspace_path parameters:\n\n"
+                        f"MCP TOOL USAGE (use BOTH parameters):\n"
+                        f"- editor_browse_directory(workflow_id, workspace_path='{full_workspace_path}', path='')\n"
+                        f"- editor_read_file(workflow_id, workspace_path='{full_workspace_path}', file_path='README.md')\n"
+                        f"- editor_create_change(workflow_id, workspace_path='{full_workspace_path}', file_path='file.py', operation='update', new_content='...')\n"
+                        f"- editor_search_files(workflow_id, workspace_path='{full_workspace_path}', query='*.py')\n\n"
+                        f"The workflow_id provides context and tracking, workspace_path specifies your isolated directory.\n\n"
                     )
                     system_prompt = workspace_instruction + system_prompt
                 
@@ -4864,8 +4864,17 @@ async def browse_directory(data: dict, user: Optional[User] = Depends(get_curren
         path = data.get("path", "")
         include_hidden = data.get("include_hidden", False)
         
-        # Option 1: Direct workspace path (for isolated agent workspaces)
+        # Option 1: Isolated workspace (requires BOTH workflow_id and workspace_path)
         if workspace_path:
+            # MUST have workflow_id for context and validation
+            if not workflow_id:
+                raise HTTPException(status_code=400, detail="workflow_id required when using workspace_path")
+            
+            # Validate user has access to this workflow
+            workflow = await db.get_workflow(workflow_id)
+            if not workflow:
+                raise HTTPException(status_code=404, detail="Workflow not found")
+            
             # Validate path is safe (must be orchestration temp directory)
             if not workspace_path.startswith('/tmp/orchestration_isolated_'):
                 raise HTTPException(status_code=403, detail="Access denied: Invalid workspace path")
@@ -4874,13 +4883,14 @@ async def browse_directory(data: dict, user: Optional[User] = Depends(get_curren
                 raise HTTPException(status_code=404, detail="Workspace not found")
             
             # Create temporary manager for this workspace
+            # Note: workflow_id provides context, workspace_path specifies location
             manager = FileEditorManager(workspace_path)
             result = manager.browse_directory(path, include_hidden)
-            return {"success": True, **result}
+            return {"success": True, **result, "workflow_id": workflow_id}  # Include workflow_id in response
         
-        # Option 2: Workflow-based (existing behavior)
+        # Option 2: Shared workspace (workflow_id only)
         if not workflow_id:
-            raise HTTPException(status_code=400, detail="Either workflow_id or workspace_path required")
+            raise HTTPException(status_code=400, detail="workflow_id required")
         
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
@@ -4943,8 +4953,17 @@ async def read_file_content(data: dict, user: Optional[User] = Depends(get_curre
         if not file_path:
             raise HTTPException(status_code=400, detail="file_path is required")
         
-        # Option 1: Direct workspace path (for isolated agent workspaces)
+        # Option 1: Isolated workspace (requires BOTH workflow_id and workspace_path)
         if workspace_path:
+            # MUST have workflow_id for context and validation
+            if not workflow_id:
+                raise HTTPException(status_code=400, detail="workflow_id required when using workspace_path")
+            
+            # Validate user has access to this workflow
+            workflow = await db.get_workflow(workflow_id)
+            if not workflow:
+                raise HTTPException(status_code=404, detail="Workflow not found")
+            
             # Validate path is safe
             if not workspace_path.startswith('/tmp/orchestration_isolated_'):
                 raise HTTPException(status_code=403, detail="Access denied: Invalid workspace path")
@@ -4955,11 +4974,11 @@ async def read_file_content(data: dict, user: Optional[User] = Depends(get_curre
             # Create temporary manager for this workspace
             manager = FileEditorManager(workspace_path)
             result = manager.read_file(file_path)
-            return {"success": True, **result}
+            return {"success": True, **result, "workflow_id": workflow_id}
         
-        # Option 2: Workflow-based (existing behavior)
+        # Option 2: Shared workspace (workflow_id only)
         if not workflow_id:
-            raise HTTPException(status_code=400, detail="Either workflow_id or workspace_path required")
+            raise HTTPException(status_code=400, detail="workflow_id required")
         
         workflow = await get_cached_workflow(workflow_id, db)
         if not workflow:
@@ -5000,8 +5019,17 @@ async def create_file_change(data: dict, user: Optional[User] = Depends(get_curr
         is_perf_test = file_path.startswith("perf_test_")
         generate_diff = not is_perf_test
         
-        # Option 1: Direct workspace path (for isolated agent workspaces)
+        # Option 1: Isolated workspace (requires BOTH workflow_id and workspace_path)
         if workspace_path:
+            # MUST have workflow_id for context and validation
+            if not workflow_id:
+                raise HTTPException(status_code=400, detail="workflow_id required when using workspace_path")
+            
+            # Validate user has access to this workflow
+            workflow = await db.get_workflow(workflow_id)
+            if not workflow:
+                raise HTTPException(status_code=404, detail="Workflow not found")
+            
             # Validate path is safe
             if not workspace_path.startswith('/tmp/orchestration_isolated_'):
                 raise HTTPException(status_code=403, detail="Access denied: Invalid workspace path")
@@ -5012,11 +5040,11 @@ async def create_file_change(data: dict, user: Optional[User] = Depends(get_curr
             # Create temporary manager for this workspace
             manager = FileEditorManager(workspace_path)
             change = manager.create_change(file_path, operation, new_content, generate_diff=generate_diff)
-            return {"success": True, "change": change.to_dict(include_diff=generate_diff)}
+            return {"success": True, "change": change.to_dict(include_diff=generate_diff), "workflow_id": workflow_id}
         
-        # Option 2: Workflow-based (existing behavior)
+        # Option 2: Shared workspace (workflow_id only)
         if not workflow_id:
-            raise HTTPException(status_code=400, detail="Either workflow_id or workspace_path required")
+            raise HTTPException(status_code=400, detail="workflow_id required")
         
         workflow = await get_cached_workflow(workflow_id, db)
         if not workflow:
@@ -5048,8 +5076,17 @@ async def get_file_changes(data: dict, user: Optional[User] = Depends(get_curren
         workspace_path = data.get("workspace_path")  # NEW: Direct path to isolated workspace
         status = data.get("status")
         
-        # Option 1: Direct workspace path (for isolated agent workspaces)
+        # Option 1: Isolated workspace (requires BOTH workflow_id and workspace_path)
         if workspace_path:
+            # MUST have workflow_id for context and validation
+            if not workflow_id:
+                raise HTTPException(status_code=400, detail="workflow_id required when using workspace_path")
+            
+            # Validate user has access to this workflow
+            workflow = await db.get_workflow(workflow_id)
+            if not workflow:
+                raise HTTPException(status_code=404, detail="Workflow not found")
+            
             # Validate path is safe
             if not workspace_path.startswith('/tmp/orchestration_isolated_'):
                 raise HTTPException(status_code=403, detail="Access denied: Invalid workspace path")
@@ -5060,11 +5097,11 @@ async def get_file_changes(data: dict, user: Optional[User] = Depends(get_curren
             # Create temporary manager for this workspace
             manager = FileEditorManager(workspace_path)
             changes = manager.get_changes(status)
-            return {"success": True, "changes": changes}
+            return {"success": True, "changes": changes, "workflow_id": workflow_id}
         
-        # Option 2: Workflow-based (existing behavior)
+        # Option 2: Shared workspace (workflow_id only)
         if not workflow_id:
-            raise HTTPException(status_code=400, detail="Either workflow_id or workspace_path required")
+            raise HTTPException(status_code=400, detail="workflow_id required")
         
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
@@ -5252,8 +5289,17 @@ async def search_files(data: dict, user: Optional[User] = Depends(get_current_us
         if not query:
             raise HTTPException(status_code=400, detail="query is required")
         
-        # Option 1: Direct workspace path (for isolated agent workspaces)
+        # Option 1: Isolated workspace (requires BOTH workflow_id and workspace_path)
         if workspace_path:
+            # MUST have workflow_id for context and validation
+            if not workflow_id:
+                raise HTTPException(status_code=400, detail="workflow_id required when using workspace_path")
+            
+            # Validate user has access to this workflow
+            workflow = await db.get_workflow(workflow_id)
+            if not workflow:
+                raise HTTPException(status_code=404, detail="Workflow not found")
+            
             # Validate path is safe
             if not workspace_path.startswith('/tmp/orchestration_isolated_'):
                 raise HTTPException(status_code=403, detail="Access denied: Invalid workspace path")
@@ -5264,11 +5310,11 @@ async def search_files(data: dict, user: Optional[User] = Depends(get_current_us
             # Create temporary manager for this workspace
             manager = FileEditorManager(workspace_path)
             matches = manager.search_files(query, path, case_sensitive)
-            return {"success": True, "matches": matches, "count": len(matches)}
+            return {"success": True, "matches": matches, "count": len(matches), "workflow_id": workflow_id}
         
-        # Option 2: Workflow-based (existing behavior)
+        # Option 2: Shared workspace (workflow_id only)
         if not workflow_id:
-            raise HTTPException(status_code=400, detail="Either workflow_id or workspace_path required")
+            raise HTTPException(status_code=400, detail="workflow_id required")
         
         workflow = await db.get_workflow(workflow_id)
         if not workflow:

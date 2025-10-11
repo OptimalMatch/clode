@@ -2226,15 +2226,8 @@ const NewCodeEditorPage: React.FC = () => {
       
       console.log(`[Code Editor] Executing block ${blockId} (type: ${block.type})`);
       
-      // Inject workflow context into task - conditionally based on block configuration
-      let contextualTask: string;
-      if (block.data.isolate_agent_workspaces) {
-        // For isolated workspaces, don't mention workflow_id (backend will inject workspace_path)
-        contextualTask = `Working with repository: ${gitRepo || 'project'}\n\nIMPORTANT: You will receive instructions about which workspace_path to use for MCP editor tools.\n\n${task}`;
-      } else {
-        // For shared workspace, add workflow_id instructions
-        contextualTask = `Working with workflow ID: ${selectedWorkflow}\n\nIMPORTANT: You MUST use the editor_* MCP tools (editor_read_file, editor_create_change, editor_browse_directory, etc.) with workflow_id="${selectedWorkflow}" for all file operations. These tools access the repository shown in the file explorer.\n\n${task}`;
-      }
+      // Inject workflow context into task
+      const contextualTask = `Working with workflow ID: ${selectedWorkflow}\n\nIMPORTANT: You MUST use the editor_* MCP tools with workflow_id="${selectedWorkflow}" for all file operations.\n${block.data.isolate_agent_workspaces ? 'You will also receive a workspace_path parameter - use BOTH workflow_id AND workspace_path together.\n' : ''}\n${task}`;
       
       // Get inputs from connected blocks
       const blockInputs = getBlockInputs(blockId, design.connections || [], results);
@@ -2243,21 +2236,10 @@ const NewCodeEditorPage: React.FC = () => {
         : contextualTask;
       
       // Update agent system prompts to include editor tool instructions
-      // NOTE: Don't add workflow_id instructions if using isolated workspaces
-      // (backend will inject workspace_path instructions instead)
-      const contextualAgents = block.data.agents.map((agent: any) => {
-        if (block.data.isolate_agent_workspaces) {
-          // For isolated workspaces, backend will inject workspace_path instructions
-          // Don't add conflicting workflow_id instructions
-          return agent;
-        } else {
-          // For shared workspace, add workflow_id instructions
-          return {
-            ...agent,
-            system_prompt: `${agent.system_prompt}\n\nCRITICAL: Always use editor_* tools with workflow_id="${selectedWorkflow}":\n- editor_browse_directory(workflow_id, path) - Browse directory\n- editor_read_file(workflow_id, file_path) - Read file\n- editor_create_change(workflow_id, file_path, operation, new_content) - Create/update/delete file\n- editor_get_changes(workflow_id) - List pending changes\n- editor_search_files(workflow_id, query) - Search files\n\nNEVER use generic file tools. ALWAYS use editor_* tools.`
-          };
-        }
-      });
+      const contextualAgents = block.data.agents.map((agent: any) => ({
+        ...agent,
+        system_prompt: `${agent.system_prompt}\n\nCRITICAL: Always use editor_* tools with workflow_id="${selectedWorkflow}":\n- editor_browse_directory(workflow_id, path) - Browse directory\n- editor_read_file(workflow_id, file_path) - Read file\n- editor_create_change(workflow_id, file_path, operation, new_content) - Create/update/delete file\n- editor_get_changes(workflow_id) - List pending changes\n- editor_search_files(workflow_id, query) - Search files\n${block.data.isolate_agent_workspaces ? '\nIMPORTANT: You will also receive a workspace_path parameter from the system.\nFor isolated workspace operations, use BOTH parameters together:\n- editor_create_change(workflow_id, workspace_path, file_path, operation, new_content)\n' : ''}\nNEVER use generic file tools. ALWAYS use editor_* tools.`
+      }));
       
       // Execute block based on its type
       let result;

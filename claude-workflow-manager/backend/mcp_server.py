@@ -698,57 +698,57 @@ class ClaudeWorkflowMCPServer:
             # File Editor Tools
             Tool(
                 name="editor_browse_directory",
-                description="Browse files and folders in a repository directory or isolated workspace. Returns a list of items with their metadata.",
+                description="Browse files and folders in a repository directory. For isolated workspaces, provide both workflow_id and workspace_path.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository (required unless workspace_path provided)"},
-                        "workspace_path": {"type": "string", "description": "Direct path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)"},
+                        "workflow_id": {"type": "string", "description": "Workflow ID (REQUIRED - provides context and security)"},
+                        "workspace_path": {"type": "string", "description": "Optional: Path to isolated workspace. Use with workflow_id for isolated agent workspaces."},
                         "path": {"type": "string", "description": "Relative path to browse (empty string for root)", "default": ""},
                         "include_hidden": {"type": "boolean", "description": "Include hidden files/directories", "default": False}
                     },
-                    "required": []
+                    "required": ["workflow_id"]
                 }
             ),
             Tool(
                 name="editor_read_file",
-                description="Read the content of a file from the repository or isolated workspace. Returns file content and metadata.",
+                description="Read the content of a file from the repository. For isolated workspaces, provide both workflow_id and workspace_path.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository (required unless workspace_path provided)"},
-                        "workspace_path": {"type": "string", "description": "Direct path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)"},
+                        "workflow_id": {"type": "string", "description": "Workflow ID (REQUIRED - provides context and security)"},
+                        "workspace_path": {"type": "string", "description": "Optional: Path to isolated workspace. Use with workflow_id for isolated agent workspaces."},
                         "file_path": {"type": "string", "description": "Relative path to the file"}
                     },
-                    "required": ["file_path"]
+                    "required": ["workflow_id", "file_path"]
                 }
             ),
             Tool(
                 name="editor_create_change",
-                description="Create a pending file change (create, update, or delete) for approval in workflow or isolated workspace. Changes are not applied immediately.",
+                description="Create a pending file change (create, update, or delete) for approval. For isolated workspaces, provide both workflow_id and workspace_path.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository (required unless workspace_path provided)"},
-                        "workspace_path": {"type": "string", "description": "Direct path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)"},
+                        "workflow_id": {"type": "string", "description": "Workflow ID (REQUIRED - provides context and security)"},
+                        "workspace_path": {"type": "string", "description": "Optional: Path to isolated workspace. Use with workflow_id for isolated agent workspaces."},
                         "file_path": {"type": "string", "description": "Path to the file"},
                         "operation": {"type": "string", "enum": ["create", "update", "delete"], "description": "Operation type"},
                         "new_content": {"type": "string", "description": "New content for create/update operations"}
                     },
-                    "required": ["file_path", "operation"]
+                    "required": ["workflow_id", "file_path", "operation"]
                 }
             ),
             Tool(
                 name="editor_get_changes",
-                description="Get all pending file changes from workflow or isolated workspace, optionally filtered by status.",
+                description="Get all pending file changes from workflow. For isolated workspaces, provide both workflow_id and workspace_path.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository (required unless workspace_path provided)"},
-                        "workspace_path": {"type": "string", "description": "Direct path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)"},
+                        "workflow_id": {"type": "string", "description": "Workflow ID (REQUIRED - provides context and security)"},
+                        "workspace_path": {"type": "string", "description": "Optional: Path to isolated workspace. Use with workflow_id for isolated agent workspaces."},
                         "status": {"type": "string", "enum": ["pending", "approved", "rejected"], "description": "Filter by status"}
                     },
-                    "required": []
+                    "required": ["workflow_id"]
                 }
             ),
             Tool(
@@ -814,17 +814,17 @@ class ClaudeWorkflowMCPServer:
             ),
             Tool(
                 name="editor_search_files",
-                description="Search for files by name pattern in the repository or isolated workspace.",
+                description="Search for files by name pattern in the repository. For isolated workspaces, provide both workflow_id and workspace_path.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository (required unless workspace_path provided)"},
-                        "workspace_path": {"type": "string", "description": "Direct path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)"},
+                        "workflow_id": {"type": "string", "description": "Workflow ID (REQUIRED - provides context and security)"},
+                        "workspace_path": {"type": "string", "description": "Optional: Path to isolated workspace. Use with workflow_id for isolated agent workspaces."},
                         "query": {"type": "string", "description": "Search query (supports wildcards)"},
                         "path": {"type": "string", "description": "Directory to search in", "default": ""},
                         "case_sensitive": {"type": "boolean", "description": "Case-sensitive search", "default": False}
                     },
-                    "required": ["query"]
+                    "required": ["workflow_id", "query"]
                 }
             ),
             Tool(
