@@ -79,6 +79,8 @@ import {
   Speed,
   PlayArrow,
   Pause,
+  Add,
+  PeopleAlt,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -92,6 +94,7 @@ import api from '../services/api';
 import EnhancedFileTree, { getFileIcon } from './EnhancedFileTree';
 import InlineDiffViewer from './InlineDiffViewer';
 import RunnerSprite from './RunnerSprite';
+import AgentPanel, { Agent } from './AgentPanel';
 
 interface FileItem {
   name: string;
@@ -408,6 +411,13 @@ const NewCodeEditorPage: React.FC = () => {
   // Dialogs
   const [newFolderDialog, setNewFolderDialog] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  
+  // Multi-Agent System State
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [showAgentPanels, setShowAgentPanels] = useState(false);
+  const [addAgentDialog, setAddAgentDialog] = useState(false);
+  const [newAgentName, setNewAgentName] = useState('');
+  const [newAgentFolder, setNewAgentFolder] = useState('');
   
   // Refs
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -2764,6 +2774,46 @@ const NewCodeEditorPage: React.FC = () => {
     }
   };
   
+  // Agent Management Functions
+  const generateAgentColor = (index: number): string => {
+    const colors = [
+      '#4FC3F7', '#AB47BC', '#66BB6A', '#FFA726', '#EF5350',
+      '#5C6BC0', '#26A69A', '#EC407A', '#42A5F5', '#9CCC65'
+    ];
+    return colors[index % colors.length];
+  };
+  
+  const handleAddAgent = () => {
+    if (!newAgentName.trim()) {
+      enqueueSnackbar('Agent name is required', { variant: 'warning' });
+      return;
+    }
+    
+    const newAgent: Agent = {
+      id: `agent-${Date.now()}`,
+      name: newAgentName,
+      color: generateAgentColor(agents.length),
+      workFolder: newAgentFolder.trim() || '',
+      status: 'idle',
+    };
+    
+    setAgents(prev => [...prev, newAgent]);
+    setAddAgentDialog(false);
+    setNewAgentName('');
+    setNewAgentFolder('');
+    setShowAgentPanels(true);
+    enqueueSnackbar(`Agent "${newAgentName}" added`, { variant: 'success' });
+  };
+  
+  const handleRemoveAgent = (agentId: string) => {
+    setAgents(prev => prev.filter(a => a.id !== agentId));
+    enqueueSnackbar('Agent removed', { variant: 'info' });
+  };
+  
+  const handleAgentStatusChange = (agentId: string, status: Agent['status']) => {
+    setAgents(prev => prev.map(a => a.id === agentId ? { ...a, status } : a));
+  };
+  
   const pendingChanges = changes.filter((c: FileChange) => c.status === 'pending');
   const hasUnsavedChanges = fileContent !== originalContent;
   
@@ -3241,6 +3291,52 @@ const NewCodeEditorPage: React.FC = () => {
                 <SourceOutlined sx={{ fontSize: 24 }} />
               </IconButton>
             </Badge>
+          </Tooltip>
+          
+          <Divider sx={{ width: '80%', my: 1, bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
+          
+          <Tooltip title="Multi-Agent Panels" placement="right">
+            <Badge 
+              badgeContent={agents.length} 
+              color="primary" 
+              sx={{ 
+                width: '100%',
+                '& .MuiBadge-badge': { right: 8, top: 8, fontSize: 9, height: 16, minWidth: 16 },
+              }}
+            >
+              <IconButton
+                size="small"
+                onClick={() => {
+                  setShowAgentPanels(!showAgentPanels);
+                }}
+                sx={{ 
+                  color: showAgentPanels ? '#6495ed' : 'rgba(255, 255, 255, 0.6)',
+                  borderLeft: showAgentPanels ? '2px solid #6495ed' : '2px solid transparent',
+                  borderRadius: 0,
+                  width: '100%',
+                  py: 1.5,
+                  '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+                }}
+              >
+                <PeopleAlt sx={{ fontSize: 24 }} />
+              </IconButton>
+            </Badge>
+          </Tooltip>
+          
+          <Tooltip title="Add Agent" placement="right">
+            <IconButton
+              size="small"
+              onClick={() => setAddAgentDialog(true)}
+              sx={{ 
+                color: 'rgba(255, 255, 255, 0.6)',
+                borderRadius: 0,
+                width: '100%',
+                py: 1.5,
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Add sx={{ fontSize: 24 }} />
+            </IconButton>
           </Tooltip>
           
         </Box>
@@ -5524,6 +5620,38 @@ const NewCodeEditorPage: React.FC = () => {
                 </Panel>
               </>
             )}
+            
+            {/* Agent Panels - Show when enabled and agents exist */}
+            {showAgentPanels && agents.length > 0 && (
+              <>
+                <PanelResizeHandle style={resizeHandleStyles} />
+                <Panel defaultSize={30} minSize={20} maxSize={50}>
+                  <Box sx={{ height: '100%', display: 'flex', flexDirection: 'row', gap: 0 }}>
+                    {agents.map((agent, index) => (
+                      <Box
+                        key={agent.id}
+                        sx={{
+                          flex: 1,
+                          minWidth: 250,
+                          maxWidth: agents.length === 1 ? '100%' : `${100 / agents.length}%`,
+                          height: '100%',
+                          borderRight: index < agents.length - 1 ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
+                        }}
+                      >
+                        <AgentPanel
+                          agent={agent}
+                          workflowId={selectedWorkflow}
+                          onClose={() => handleRemoveAgent(agent.id)}
+                          selectedTheme={selectedTheme}
+                          themeColors={themeColors}
+                          onAgentStatusChange={handleAgentStatusChange}
+                        />
+                      </Box>
+                    ))}
+                  </Box>
+                </Panel>
+              </>
+            )}
           </PanelGroup>
         ) : (
           // No Workflow Selected (Editor view)
@@ -5585,6 +5713,17 @@ const NewCodeEditorPage: React.FC = () => {
             </Box>
           </>
         )}
+        {agents.length > 0 && (
+          <>
+            <Divider orientation="vertical" flexItem sx={{ bgcolor: 'rgba(255, 255, 255, 0.3)' }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <SmartToy sx={{ fontSize: 14 }} />
+              <Typography variant="caption" sx={{ fontSize: 11 }}>
+                {agents.length} {agents.length === 1 ? 'agent' : 'agents'} active
+              </Typography>
+            </Box>
+          </>
+        )}
         <Box sx={{ flexGrow: 1 }} />
         <Typography variant="caption" sx={{ fontSize: 11 }}>
           Theme: {getAvailableThemes().find(t => t.value === selectedTheme)?.label}
@@ -5608,6 +5747,37 @@ const NewCodeEditorPage: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setNewFolderDialog(false)} size="small">Cancel</Button>
           <Button onClick={handleCreateFolder} variant="contained" size="small">Create</Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Add Agent Dialog */}
+      <Dialog open={addAgentDialog} onClose={() => setAddAgentDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontSize: 14 }}>Add Agent</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              autoFocus
+              label="Agent Name"
+              fullWidth
+              value={newAgentName}
+              onChange={(e) => setNewAgentName(e.target.value)}
+              size="small"
+              placeholder="e.g., Frontend Agent"
+            />
+            <TextField
+              label="Work Folder (Optional)"
+              fullWidth
+              value={newAgentFolder}
+              onChange={(e) => setNewAgentFolder(e.target.value)}
+              size="small"
+              placeholder="e.g., frontend or backend/api"
+              helperText="Leave empty for root directory access"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddAgentDialog(false)} size="small">Cancel</Button>
+          <Button onClick={handleAddAgent} variant="contained" size="small">Add Agent</Button>
         </DialogActions>
       </Dialog>
     </Box>
