@@ -689,7 +689,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
               </Box>
               
               {/* Diff Editor */}
-              <Box sx={{ flex: 1 }}>
+              <Box sx={{ flex: 1 }} key={`diff-${selectedFile.path}-${fileChange.change_id}`}>
                 <DiffEditor
                   height="100%"
                   language={getLanguageFromFilename(selectedFile.name)}
@@ -709,6 +709,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
           ) : (
             // Show regular editor (no changes)
             <Editor
+              key={`editor-${selectedFile.path}`}
               height="100%"
               language={getLanguageFromFilename(selectedFile.name)}
               value={fileContent}
