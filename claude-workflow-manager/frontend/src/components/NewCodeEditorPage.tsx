@@ -783,6 +783,11 @@ const NewCodeEditorPage: React.FC = () => {
   
   // Expand parent folders for a file path
   const expandParentFolders = async (filePath: string) => {
+    // Skip if file is in root directory
+    if (!filePath.includes('/')) {
+      return;
+    }
+    
     // Get all parent folder paths
     const pathParts = filePath.split('/');
     const folderPaths: string[] = [];
@@ -792,10 +797,16 @@ const NewCodeEditorPage: React.FC = () => {
       folderPaths.push(folderPath);
     }
     
-    // Expand each parent folder
+    console.log(`[PerfTest] Expanding folders for "${filePath}":`, folderPaths);
+    
+    // Expand each parent folder sequentially
     for (const folderPath of folderPaths) {
       try {
-        await handleFolderExpand(folderPath);
+        console.log(`[PerfTest] Expanding folder: ${folderPath}`);
+        const children = await handleFolderExpand(folderPath);
+        console.log(`[PerfTest] Folder ${folderPath} loaded with ${children.length} children`);
+        // Small delay to allow UI to update
+        await new Promise(resolve => setTimeout(resolve, 50));
       } catch (error) {
         console.error(`Failed to expand folder ${folderPath}:`, error);
       }
