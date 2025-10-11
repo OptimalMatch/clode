@@ -3840,13 +3840,13 @@ const NewCodeEditorPage: React.FC = () => {
               onExpand={() => setEditorMinimized(false)}
             >
               {editorMinimized ? (
-                <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#1e1e1e', writingMode: 'vertical-lr', p: 1 }}>
+                <Box sx={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#1e1e1e', writingMode: 'vertical-lr', p: 1, overflow: 'hidden' }}>
                   <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: 10 }}>
                     EDITOR
                   </Typography>
                 </Box>
               ) : (
-              <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#1e1e1e' }}>
+              <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#1e1e1e', overflow: 'hidden' }}>
                 {/* Tab Bar - Single view or Split view */}
                 {!splitViewEnabled && (
                   <Box 
@@ -3884,7 +3884,7 @@ const NewCodeEditorPage: React.FC = () => {
                           borderRight: '1px solid rgba(255, 255, 255, 0.05)',
                           bgcolor: activeTabIndex === index ? '#1e1e1e' : 'transparent',
                           cursor: 'pointer',
-                          minWidth: 120,
+                          minWidth: 60,
                           maxWidth: 200,
                           '&:hover': {
                             bgcolor: activeTabIndex === index ? '#1e1e1e' : 'rgba(255, 255, 255, 0.05)',
@@ -4089,7 +4089,7 @@ const NewCodeEditorPage: React.FC = () => {
                                           borderRight: '1px solid rgba(255, 255, 255, 0.05)',
                                           bgcolor: leftActiveIndex === index ? '#1e1e1e' : 'transparent',
                                           cursor: 'pointer',
-                                          minWidth: 120,
+                                          minWidth: 60,
                                           maxWidth: 200,
                                           '&:hover': {
                                             bgcolor: leftActiveIndex === index ? '#1e1e1e' : 'rgba(255, 255, 255, 0.05)',
@@ -4350,7 +4350,7 @@ const NewCodeEditorPage: React.FC = () => {
                                               borderRight: '1px solid rgba(255, 255, 255, 0.05)',
                                               bgcolor: middleActiveIndex === index ? '#1e1e1e' : 'transparent',
                                               cursor: 'pointer',
-                                              minWidth: 120,
+                                              minWidth: 60,
                                               maxWidth: 200,
                                               '&:hover': {
                                                 bgcolor: middleActiveIndex === index ? '#1e1e1e' : 'rgba(255, 255, 255, 0.05)',
@@ -4536,7 +4536,7 @@ const NewCodeEditorPage: React.FC = () => {
                                           borderRight: '1px solid rgba(255, 255, 255, 0.05)',
                                           bgcolor: rightActiveIndex === index ? '#1e1e1e' : 'transparent',
                                           cursor: 'pointer',
-                                          minWidth: 120,
+                                          minWidth: 60,
                                           maxWidth: 200,
                                           '&:hover': {
                                             bgcolor: rightActiveIndex === index ? '#1e1e1e' : 'rgba(255, 255, 255, 0.05)',
