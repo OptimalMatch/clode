@@ -3834,10 +3834,6 @@ const NewCodeEditorPage: React.FC = () => {
               ref={editorPanelRef}
               defaultSize={sidebarCollapsed ? 100 : 80}
               minSize={3}
-              collapsible={true}
-              collapsedSize={3}
-              onCollapse={() => setEditorMinimized(true)}
-              onExpand={() => setEditorMinimized(false)}
             >
               {editorMinimized ? (
                 <Box sx={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#1e1e1e', writingMode: 'vertical-lr', p: 1, overflow: 'hidden' }}>
@@ -3957,9 +3953,11 @@ const NewCodeEditorPage: React.FC = () => {
                         onClick={() => {
                           if (editorPanelRef.current) {
                             if (editorMinimized) {
-                              editorPanelRef.current.expand();
+                              editorPanelRef.current.resize(sidebarCollapsed ? 100 : 80);
+                              setEditorMinimized(false);
                             } else {
-                              editorPanelRef.current.collapse();
+                              editorPanelRef.current.resize(3);
+                              setEditorMinimized(true);
                             }
                           }
                         }}
