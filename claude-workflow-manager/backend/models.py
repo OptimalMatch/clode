@@ -481,6 +481,7 @@ class ParallelAggregateRequest(BaseModel):
     aggregator: Optional[OrchestrationAgent] = None
     aggregator_name: Optional[str] = None
     model: Optional[str] = None
+    workflow_id: Optional[str] = None  # Optional workflow ID for change tracking
     git_repo: Optional[str] = None  # Optional git repository to clone
     isolate_agent_workspaces: bool = False  # Clone repo separately for each agent
 

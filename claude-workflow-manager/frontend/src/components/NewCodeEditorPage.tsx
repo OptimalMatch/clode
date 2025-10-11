@@ -2374,6 +2374,7 @@ const NewCodeEditorPage: React.FC = () => {
           agent_names: agents.map(a => a.name),
           aggregator: null,
           model: selectedModel,
+          workflow_id: selectedWorkflow,
           git_repo: gitRepo,
           isolate_agent_workspaces: true
         }, signal);
@@ -2399,6 +2400,7 @@ const NewCodeEditorPage: React.FC = () => {
       agent_names: agents.map(a => a.name),
       aggregator: null,
       model: selectedModel,
+      workflow_id: selectedWorkflow,
       git_repo: gitRepo
     }, signal);
   };

@@ -140,8 +140,23 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
       
       setItems(response.data.items || []);
     } catch (error: any) {
-      console.error('Error loading directory:', error);
-      setItems([]);
+      // If workspace_path fails (cleanup happened), fall back to main workflow
+      if (agent.workspacePath) {
+        console.log(`[AgentPanel] Isolated workspace cleaned up, falling back to main workflow`);
+        try {
+          const response = await api.post('/api/file-editor/browse', {
+            workflow_id: workflowId,
+            path: path
+          });
+          setItems(response.data.items || []);
+        } catch (fallbackError) {
+          console.error('Error loading directory from main workflow:', fallbackError);
+          setItems([]);
+        }
+      } else {
+        console.error('Error loading directory:', error);
+        setItems([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -156,26 +171,32 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         workflow_id: workflowId  // Always required for context and security
       };
       
-      // If using isolated workspace, add workspace_path
+      // If using isolated workspace, try with workspace_path first
       if (agent.workspacePath) {
         requestData.workspace_path = agent.workspacePath;
       }
       
       const response = await api.post('/api/file-editor/changes', requestData);
       
-      // If shared workspace, filter changes for this agent's work folder
-      if (!agent.workspacePath && agent.workFolder) {
-        const agentChanges = (response.data.changes || []).filter((change: FileChange) => {
-          return change.file_path.startsWith(agent.workFolder);
-        });
-        setChanges(agentChanges);
-      } else {
-        // For isolated workspaces, all changes are for this agent
-        setChanges(response.data.changes || []);
-      }
+      // Always show all changes (isolated workspaces copy changes to main workflow after execution)
+      setChanges(response.data.changes || []);
     } catch (error: any) {
-      console.error('Error loading changes:', error);
-      setChanges([]);
+      // If workspace_path fails (cleanup happened), fall back to main workflow
+      if (agent.workspacePath) {
+        console.log(`[AgentPanel] Isolated workspace cleaned up, falling back to main workflow`);
+        try {
+          const response = await api.post('/api/file-editor/changes', {
+            workflow_id: workflowId
+          });
+          setChanges(response.data.changes || []);
+        } catch (fallbackError) {
+          console.error('Error loading changes from main workflow:', fallbackError);
+          setChanges([]);
+        }
+      } else {
+        console.error('Error loading changes:', error);
+        setChanges([]);
+      }
     }
   };
 
@@ -203,8 +224,22 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
       
       return response.data.items || [];
     } catch (error) {
-      console.error('Error loading folder:', error);
-      return [];
+      // If workspace_path fails, fall back to main workflow
+      if (agent.workspacePath) {
+        try {
+          const response = await api.post('/api/file-editor/browse', {
+            workflow_id: workflowId,
+            path: folderPath
+          });
+          return response.data.items || [];
+        } catch (fallbackError) {
+          console.error('Error loading folder from main workflow:', fallbackError);
+          return [];
+        }
+      } else {
+        console.error('Error loading folder:', error);
+        return [];
+      }
     }
   };
 
@@ -254,8 +289,23 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         setFileContent(response.data.content || '');
         setOriginalContent(response.data.content || '');
       } catch (error: any) {
-        console.error('Error reading file:', error);
-        setFileContent('// Error loading file');
+        // If workspace_path fails, fall back to main workflow
+        if (agent.workspacePath) {
+          try {
+            const response = await api.post('/api/file-editor/read', {
+              workflow_id: workflowId,
+              file_path: item.path
+            });
+            setFileContent(response.data.content || '');
+            setOriginalContent(response.data.content || '');
+          } catch (fallbackError) {
+            console.error('Error reading file from main workflow:', fallbackError);
+            setFileContent('// Error loading file');
+          }
+        } else {
+          console.error('Error reading file:', error);
+          setFileContent('// Error loading file');
+        }
       } finally {
         setLoading(false);
       }
