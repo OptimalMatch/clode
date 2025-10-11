@@ -3838,10 +3838,42 @@ const NewCodeEditorPage: React.FC = () => {
               maxSize={editorMinimized ? 5 : 100}
             >
               {editorMinimized ? (
-                <Box sx={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#1e1e1e', writingMode: 'vertical-lr', p: 1, overflow: 'hidden' }}>
-                  <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: 10 }}>
-                    EDITOR
-                  </Typography>
+                <Box sx={{ 
+                  height: '100%', 
+                  width: '100%',
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: '#1e1e1e',
+                }}>
+                  <Tooltip title="Expand Editor" placement="right">
+                    <IconButton
+                      size="small"
+                      onClick={() => setEditorMinimized(false)}
+                      sx={{
+                        p: 0.5,
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        '&:hover': {
+                          bgcolor: 'rgba(255, 255, 255, 0.1)',
+                        },
+                      }}
+                    >
+                      <ChevronRight sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Box sx={{ 
+                    flex: 1,
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    writingMode: 'vertical-lr',
+                    p: 1
+                  }}>
+                    <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: 10 }}>
+                      EDITOR
+                    </Typography>
+                  </Box>
                 </Box>
               ) : (
               <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#1e1e1e', overflow: 'hidden' }}>
