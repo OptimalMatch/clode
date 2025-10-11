@@ -740,14 +740,15 @@ class ClaudeWorkflowMCPServer:
             ),
             Tool(
                 name="editor_get_changes",
-                description="Get all pending file changes, optionally filtered by status (pending, approved, rejected).",
+                description="Get all pending file changes from workflow or isolated workspace, optionally filtered by status.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository"},
+                        "workflow_id": {"type": "string", "description": "Workflow ID containing the repository (required unless workspace_path provided)"},
+                        "workspace_path": {"type": "string", "description": "Direct path to isolated workspace (e.g. /tmp/orchestration_isolated_xxx/Agent_1)"},
                         "status": {"type": "string", "enum": ["pending", "approved", "rejected"], "description": "Filter by status"}
                     },
-                    "required": ["workflow_id"]
+                    "required": []
                 }
             ),
             Tool(
@@ -1125,7 +1126,12 @@ class ClaudeWorkflowMCPServer:
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
             
             elif name == "editor_get_changes":
-                data = {"workflow_id": arguments["workflow_id"]}
+                data = {}
+                # Support both workflow_id and workspace_path
+                if "workspace_path" in arguments:
+                    data["workspace_path"] = arguments["workspace_path"]
+                if "workflow_id" in arguments:
+                    data["workflow_id"] = arguments["workflow_id"]
                 if "status" in arguments:
                     data["status"] = arguments["status"]
                 result = await self._make_request("POST", "/api/file-editor/changes", json=data)
