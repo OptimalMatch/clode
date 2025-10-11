@@ -36,7 +36,8 @@
     "monaco-editor": "^0.45.0",
     "monaco-themes": "^0.4.4",
     "react-diff-viewer-continued": "^3.4.0",
-    "react-resizable-panels": "^2.0.19"
+    "react-resizable-panels": "^2.0.19",
+    "recharts": "^2.10.3"
   },
   "scripts": {
     "start": "DANGEROUSLY_DISABLE_HOST_CHECK=true react-scripts start",
