@@ -2910,6 +2910,12 @@ const NewCodeEditorPage: React.FC = () => {
     enqueueSnackbar('Agent removed', { variant: 'info' });
   };
   
+  const handleCloseAllAgents = () => {
+    setAgents([]);
+    setSelectedAgentTab(0);
+    enqueueSnackbar('All agents closed', { variant: 'info' });
+  };
+  
   const handleAgentStatusChange = (agentId: string, status: Agent['status']) => {
     setAgents(prev => prev.map(a => a.id === agentId ? { ...a, status } : a));
   };
@@ -4837,6 +4843,44 @@ const NewCodeEditorPage: React.FC = () => {
                 <PanelResizeHandle style={resizeHandleStyles} />
                 <Panel defaultSize={30} minSize={10} maxSize={50}>
                   <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    {/* Agent Panel Header */}
+                    <Box sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between',
+                      px: 1.5,
+                      py: 0.75,
+                      bgcolor: themeColors?.sidebarBg || '#252526',
+                      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                    }}>
+                      <Typography variant="caption" sx={{ 
+                        fontSize: 11, 
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.8,
+                        color: 'rgba(255, 255, 255, 0.7)',
+                      }}>
+                        Agents ({agents.length})
+                      </Typography>
+                      <Button
+                        size="small"
+                        onClick={handleCloseAllAgents}
+                        sx={{
+                          fontSize: 9,
+                          minWidth: 'unset',
+                          px: 1,
+                          py: 0.25,
+                          textTransform: 'none',
+                          color: 'rgba(255, 100, 100, 0.9)',
+                          '&:hover': {
+                            bgcolor: 'rgba(255, 100, 100, 0.1)',
+                          },
+                        }}
+                      >
+                        Close All
+                      </Button>
+                    </Box>
+                    
                     {/* Agent Tabs */}
                     {agents.length > 1 && (
                       <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: themeColors?.sidebarBg || '#252526' }}>
@@ -4865,7 +4909,7 @@ const NewCodeEditorPage: React.FC = () => {
                             <Tab
                               key={agent.id}
                               label={
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                   <Box
                                     sx={{
                                       width: 8,
@@ -4878,6 +4922,24 @@ const NewCodeEditorPage: React.FC = () => {
                                   {agent.status === 'working' && (
                                     <CircularProgress size={10} sx={{ color: agent.color }} />
                                   )}
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveAgent(agent.id);
+                                    }}
+                                    sx={{
+                                      p: 0.25,
+                                      ml: 0.5,
+                                      color: 'rgba(255, 255, 255, 0.5)',
+                                      '&:hover': {
+                                        color: 'rgba(255, 100, 100, 0.9)',
+                                        bgcolor: 'rgba(255, 100, 100, 0.1)',
+                                      },
+                                    }}
+                                  >
+                                    <Close sx={{ fontSize: 12 }} />
+                                  </IconButton>
                                 </Box>
                               }
                               sx={{
