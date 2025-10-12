@@ -5068,7 +5068,7 @@ const NewCodeEditorPage: React.FC = () => {
                                 <Paper
                                   sx={{
                                     p: 1,
-                                    bgcolor: msg.type === 'user' ? 'primary.dark' : 
+                                    bgcolor: msg.type === 'user' ? '#3a3a3a' : 
                                              msg.type === 'system' ? 'grey.800' : 'background.paper',
                                     borderLeft: msg.agent ? `3px solid ${agentColor}` : 'none',
                                     position: 'relative',
