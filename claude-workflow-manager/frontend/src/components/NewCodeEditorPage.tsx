@@ -3283,7 +3283,7 @@ const NewCodeEditorPage: React.FC = () => {
       </Box>
       
       {/* Main Content Area with Activity Bar and Resizable Panels */}
-      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
         {/* Activity Bar */}
           <Box 
             sx={{ 
