@@ -108,19 +108,29 @@ export const workflowApi = {
     const response = await api.post('/api/workflows', workflow);
     return response.data;
   },
-  
+
   getAll: async () => {
     const response = await api.get('/api/workflows');
     return response.data.workflows;
   },
-  
+
   getById: async (id: string) => {
     const response = await api.get(`/api/workflows/${id}`);
     return response.data;
   },
-  
+
   delete: async (id: string) => {
     const response = await api.delete(`/api/workflows/${id}`);
+    return response.data;
+  },
+
+  getBranch: async (id: string) => {
+    const response = await api.get(`/api/workflows/${id}/branch`);
+    return response.data;
+  },
+
+  updateBranch: async (id: string, branch: string) => {
+    const response = await api.put(`/api/workflows/${id}/branch`, { branch });
     return response.data;
   },
 };

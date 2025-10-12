@@ -1302,6 +1302,57 @@ async def delete_workflow(workflow_id: str):
         raise HTTPException(status_code=404, detail="Workflow not found or deletion failed")
     return {"message": f"Workflow {workflow_id} deleted successfully"}
 
+@app.get("/api/workflows/{workflow_id}/branch")
+async def get_workflow_branch(workflow_id: str, user: Optional[User] = Depends(get_current_user_or_internal)):
+    """Get the current branch for a workflow"""
+    workflow = await db.get_workflow(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    return {
+        "workflow_id": workflow_id,
+        "branch": workflow.get("branch", "main"),
+        "git_repo": workflow.get("git_repo")
+    }
+
+@app.put("/api/workflows/{workflow_id}/branch")
+async def update_workflow_branch(workflow_id: str, data: dict, user: Optional[User] = Depends(get_current_user_or_internal)):
+    """Update the branch for a workflow and clear the file editor cache"""
+    workflow = await db.get_workflow(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    new_branch = data.get("branch")
+    if not new_branch:
+        raise HTTPException(status_code=400, detail="branch is required")
+
+    # Update the workflow in the database
+    workflow["branch"] = new_branch
+    success = await db.update_workflow(workflow_id, workflow)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update workflow")
+
+    # Clear the file editor cache for this workflow so it re-clones with the new branch
+    git_repo = workflow.get("git_repo")
+    old_branch = workflow.get("branch", "main")
+
+    # Remove old cache entries for this workflow (any branch)
+    keys_to_remove = [k for k in file_editor_managers.keys() if k.startswith(f"{workflow_id}:")]
+    for key in keys_to_remove:
+        editor_data = file_editor_managers.pop(key, None)
+        if editor_data:
+            temp_dir = editor_data.get("temp_dir")
+            if temp_dir and os.path.exists(temp_dir):
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    return {
+        "success": True,
+        "workflow_id": workflow_id,
+        "branch": new_branch,
+        "message": f"Workflow branch updated to {new_branch}"
+    }
+
 @app.post(
     "/api/prompts",
     response_model=IdResponse,
@@ -4834,35 +4885,37 @@ async def execute_via_endpoint(endpoint_path: str, request: Request):
 # File Editor endpoints
 file_editor_managers: Dict[str, Any] = {}  # Cache of FileEditorManager instances by repo path
 
-def get_file_editor_manager(git_repo: str, workflow_id: str) -> Any:
+def get_file_editor_manager(git_repo: str, workflow_id: str, branch: str = "main") -> Any:
     """Get or create a FileEditorManager for a repository with caching"""
     from file_editor import FileEditorManager
     import tempfile
-    
-    cache_key = f"{workflow_id}:{git_repo}"
-    
+
+    cache_key = f"{workflow_id}:{git_repo}:{branch}"
+
     if cache_key not in file_editor_managers:
         # Clone repository to temp directory
         temp_dir = tempfile.mkdtemp(prefix=f"editor_{workflow_id}_")
-        
+
         try:
+            # Clone with the specific branch
             subprocess.run(
-                ["git", "clone", "--depth", "1", git_repo, temp_dir],
+                ["git", "clone", "--branch", branch, "--depth", "1", git_repo, temp_dir],
                 check=True,
                 capture_output=True,
                 env=get_git_env()
             )
-            
+
             file_editor_managers[cache_key] = {
                 "manager": FileEditorManager(temp_dir),
                 "temp_dir": temp_dir,
-                "git_repo": git_repo
+                "git_repo": git_repo,
+                "branch": branch
             }
         except Exception as e:
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
             raise HTTPException(status_code=500, detail=f"Failed to clone repository: {str(e)}")
-    
+
     return file_editor_managers[cache_key]
 
 def get_isolated_workspace_manager(workspace_path: str) -> Any:
@@ -4904,8 +4957,9 @@ async def init_file_editor(data: dict, user: Optional[User] = Depends(get_curren
         git_repo = workflow.get("git_repo")
         if not git_repo:
             raise HTTPException(status_code=400, detail="Workflow does not have a git repository")
-        
-        editor_data = get_file_editor_manager(git_repo, workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(git_repo, workflow_id, branch)
         
         return {
             "success": True,
@@ -4967,10 +5021,11 @@ async def browse_directory(data: dict, user: Optional[User] = Depends(get_curren
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         result = manager.browse_directory(path, include_hidden)
         return {"success": True, **result}
     except HTTPException:
@@ -4995,10 +5050,11 @@ async def get_directory_tree(data: dict, user: Optional[User] = Depends(get_curr
         workflow = await get_cached_workflow(workflow_id, db)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         result = manager.get_tree_structure(path, max_depth)
         return {"success": True, **result}
     except HTTPException:
@@ -5056,10 +5112,11 @@ async def read_file_content(data: dict, user: Optional[User] = Depends(get_curre
         workflow = await get_cached_workflow(workflow_id, db)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         result = manager.read_file(file_path)
         return {"success": True, **result}
     except HTTPException:
@@ -5123,10 +5180,11 @@ async def create_file_change(data: dict, user: Optional[User] = Depends(get_curr
         workflow = await get_cached_workflow(workflow_id, db)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         change = manager.create_change(file_path, operation, new_content, generate_diff=generate_diff)
         return {"success": True, "change": change.to_dict(include_diff=generate_diff)}
     except HTTPException:
@@ -5181,10 +5239,11 @@ async def get_file_changes(data: dict, user: Optional[User] = Depends(get_curren
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         changes = manager.get_changes(status)
         return {"success": True, "changes": changes}
     except HTTPException:
@@ -5211,10 +5270,11 @@ async def approve_file_change(data: dict, user: Optional[User] = Depends(get_cur
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         result = manager.approve_change(change_id)
         return result
     except HTTPException:
@@ -5241,10 +5301,11 @@ async def reject_file_change(data: dict, user: Optional[User] = Depends(get_curr
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         result = manager.reject_change(change_id)
         return result
     except HTTPException:
@@ -5271,10 +5332,11 @@ async def rollback_file_change(data: dict, user: Optional[User] = Depends(get_cu
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         result = manager.rollback_change(change_id)
         return result
     except HTTPException:
@@ -5301,10 +5363,11 @@ async def create_new_directory(data: dict, user: Optional[User] = Depends(get_cu
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         result = manager.create_directory(dir_path)
         return result
     except HTTPException:
@@ -5332,10 +5395,11 @@ async def move_file_or_directory(data: dict, user: Optional[User] = Depends(get_
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         result = manager.move_file(old_path, new_path)
         return result
     except HTTPException:
@@ -5395,10 +5459,11 @@ async def search_files(data: dict, user: Optional[User] = Depends(get_current_us
         workflow = await db.get_workflow(workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        
-        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id)
+
+        branch = workflow.get("branch", "main")
+        editor_data = get_file_editor_manager(workflow["git_repo"], workflow_id, branch)
         manager = editor_data["manager"]
-        
+
         matches = manager.search_files(query, path, case_sensitive)
         return {"success": True, "matches": matches, "count": len(matches)}
     except HTTPException:

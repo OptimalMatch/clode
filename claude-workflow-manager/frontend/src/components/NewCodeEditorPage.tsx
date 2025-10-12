@@ -306,6 +306,8 @@ const NewCodeEditorPage: React.FC = () => {
   // State
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>('');
+  const [availableBranches, setAvailableBranches] = useState<string[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [currentPath, setCurrentPath] = useState<string>('');
   const [items, setItems] = useState<FileItem[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -804,16 +806,58 @@ const NewCodeEditorPage: React.FC = () => {
     setCurrentPath('');
     setSelectedFile(null);
     setFileContent('');
-    
+
     try {
       await api.post('/api/file-editor/init', {
         workflow_id: workflowId,
       });
+
+      // Load the current branch and available branches
+      await loadBranchInfo(workflowId);
     } catch (error: any) {
       enqueueSnackbar(error.response?.data?.detail || 'Failed to initialize editor', { variant: 'error' });
     }
   };
-  
+
+  const loadBranchInfo = async (workflowId: string) => {
+    try {
+      // Get the current branch for this workflow
+      const branchInfo = await workflowApi.getBranch(workflowId);
+      setSelectedBranch(branchInfo.branch);
+
+      // Get available branches from the git repo
+      if (branchInfo.git_repo) {
+        const branchesData = await api.post('/api/git/branches', {
+          git_repo: branchInfo.git_repo,
+        });
+        setAvailableBranches(branchesData.data.branches || []);
+      }
+    } catch (error: any) {
+      console.error('Failed to load branch info:', error);
+    }
+  };
+
+  const handleBranchChange = async (newBranch: string) => {
+    if (!selectedWorkflow) return;
+
+    try {
+      // Update the branch in the backend
+      await workflowApi.updateBranch(selectedWorkflow, newBranch);
+      setSelectedBranch(newBranch);
+
+      // Reload the directory with the new branch
+      setCurrentPath('');
+      setSelectedFile(null);
+      setFileContent('');
+      loadDirectory('');
+      loadChanges();
+
+      enqueueSnackbar(`Switched to branch: ${newBranch}`, { variant: 'success' });
+    } catch (error: any) {
+      enqueueSnackbar(error.response?.data?.detail || 'Failed to change branch', { variant: 'error' });
+    }
+  };
+
   // Expand parent folders for a file path
   const expandParentFolders = async (filePath: string) => {
     // Skip if file is in root directory
@@ -5969,7 +6013,7 @@ const NewCodeEditorPage: React.FC = () => {
             onChange={(e) => handleWorkflowChange(e.target.value)}
             displayEmpty
             startAdornment={<SourceOutlined sx={{ fontSize: 14, mr: 0.5, color: 'white' }} />}
-            sx={{ 
+            sx={{
               fontSize: 11,
               height: 24,
               bgcolor: 'rgba(255, 255, 255, 0.1)',
@@ -5989,6 +6033,33 @@ const NewCodeEditorPage: React.FC = () => {
             ))}
           </Select>
         </FormControl>
+        {selectedWorkflow && selectedBranch && (
+          <>
+            <Divider orientation="vertical" flexItem sx={{ bgcolor: 'rgba(255, 255, 255, 0.3)' }} />
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <Select
+                value={selectedBranch}
+                onChange={(e) => handleBranchChange(e.target.value)}
+                startAdornment={<AccountTree sx={{ fontSize: 14, mr: 0.5, color: 'white' }} />}
+                sx={{
+                  fontSize: 11,
+                  height: 24,
+                  bgcolor: 'rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                  '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.15)' },
+                  '& .MuiSelect-select': { py: 0.25, pr: 3, display: 'flex', alignItems: 'center' },
+                }}
+              >
+                {availableBranches.map((branch) => (
+                  <MenuItem key={branch} value={branch} sx={{ fontSize: 11 }}>
+                    {branch}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </>
+        )}
         {selectedFile && (
           <>
             <Divider orientation="vertical" flexItem sx={{ bgcolor: 'rgba(255, 255, 255, 0.3)' }} />
