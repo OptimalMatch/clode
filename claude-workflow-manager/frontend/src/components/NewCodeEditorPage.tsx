@@ -3014,36 +3014,6 @@ const NewCodeEditorPage: React.FC = () => {
           </Select>
         </FormControl>
         
-        {/* Theme Selector - Compact */}
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <Select
-            value={selectedTheme}
-            onChange={(e) => handleThemeChange(e.target.value)}
-            sx={{ 
-              fontSize: 12,
-              height: 30,
-              bgcolor: 'rgba(255, 255, 255, 0.05)',
-              color: 'rgba(255, 255, 255, 0.9)',
-              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-              '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.08)' },
-            }}
-          >
-            {getAvailableThemes().map((theme) => (
-              <MenuItem 
-                key={theme.value} 
-                value={theme.value} 
-                sx={{ 
-                  fontSize: 12,
-                  opacity: loadedThemes.has(theme.value) ? 1 : 0.5,
-                }}
-                disabled={!loadedThemes.has(theme.value)}
-              >
-                {theme.label} {!loadedThemes.has(theme.value) && '(loading...)'}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        
         {/* Primary Navigation Icons - Centered */}
         <Box sx={{ display: 'flex', gap: 0.5, mx: 'auto' }}>
           <Tooltip title="Workflows">
@@ -5973,9 +5943,35 @@ const NewCodeEditorPage: React.FC = () => {
           </>
         )}
         <Box sx={{ flexGrow: 1 }} />
-        <Typography variant="caption" sx={{ fontSize: 11 }}>
-          Theme: {getAvailableThemes().find(t => t.value === selectedTheme)?.label}
-        </Typography>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <Select
+            value={selectedTheme}
+            onChange={(e) => handleThemeChange(e.target.value)}
+            sx={{ 
+              fontSize: 11,
+              height: 24,
+              bgcolor: 'rgba(255, 255, 255, 0.05)',
+              color: 'rgba(255, 255, 255, 0.7)',
+              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+              '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.08)' },
+              '& .MuiSelect-select': { py: 0.25, pr: 3 },
+            }}
+          >
+            {getAvailableThemes().map((theme) => (
+              <MenuItem 
+                key={theme.value} 
+                value={theme.value} 
+                sx={{ 
+                  fontSize: 11,
+                  opacity: loadedThemes.has(theme.value) ? 1 : 0.5,
+                }}
+                disabled={!loadedThemes.has(theme.value)}
+              >
+                {theme.label} {!loadedThemes.has(theme.value) && '(loading...)'}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       </Box>
       
       {/* Dialogs */}
