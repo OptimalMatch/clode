@@ -2967,7 +2967,23 @@ const NewCodeEditorPage: React.FC = () => {
   };
   
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: themeColors?.background || '#1e1e1e', color: themeColors?.foreground || '#d4d4d4', overflow: 'hidden' }}>
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: '100vh',
+      '@supports (height: 100dvh)': {
+        height: '100dvh'
+      },
+      bgcolor: themeColors?.background || '#1e1e1e', 
+      color: themeColors?.foreground || '#d4d4d4', 
+      overflow: 'hidden',
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      width: '100%'
+    }}>
       {/* Compact Top Toolbar */}
       <Box 
         sx={{ 
