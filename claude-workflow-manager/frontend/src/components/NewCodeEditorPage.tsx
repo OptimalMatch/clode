@@ -2988,62 +2988,6 @@ const NewCodeEditorPage: React.FC = () => {
         </Typography>
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5, bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
         
-        {/* Repository Selector - Compact */}
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <Select
-            value={selectedWorkflow}
-            onChange={(e) => handleWorkflowChange(e.target.value)}
-            displayEmpty
-            sx={{ 
-              fontSize: 12,
-              height: 30,
-              bgcolor: 'rgba(255, 255, 255, 0.05)',
-              color: 'rgba(255, 255, 255, 0.9)',
-              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-              '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.08)' },
-            }}
-          >
-            <MenuItem value="" disabled sx={{ fontSize: 12 }}>
-              <em>Select Repository</em>
-            </MenuItem>
-            {workflows.map((workflow) => (
-              <MenuItem key={workflow.id} value={workflow.id} sx={{ fontSize: 12 }}>
-                {workflow.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        
-        {/* Theme Selector - Compact */}
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <Select
-            value={selectedTheme}
-            onChange={(e) => handleThemeChange(e.target.value)}
-            sx={{ 
-              fontSize: 12,
-              height: 30,
-              bgcolor: 'rgba(255, 255, 255, 0.05)',
-              color: 'rgba(255, 255, 255, 0.9)',
-              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-              '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.08)' },
-            }}
-          >
-            {getAvailableThemes().map((theme) => (
-              <MenuItem 
-                key={theme.value} 
-                value={theme.value} 
-                sx={{ 
-                  fontSize: 12,
-                  opacity: loadedThemes.has(theme.value) ? 1 : 0.5,
-                }}
-                disabled={!loadedThemes.has(theme.value)}
-              >
-                {theme.label} {!loadedThemes.has(theme.value) && '(loading...)'}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        
         {/* Primary Navigation Icons - Centered */}
         <Box sx={{ display: 'flex', gap: 0.5, mx: 'auto' }}>
           <Tooltip title="Workflows">
@@ -5068,7 +5012,7 @@ const NewCodeEditorPage: React.FC = () => {
                                 <Paper
                                   sx={{
                                     p: 1,
-                                    bgcolor: msg.type === 'user' ? 'primary.dark' : 
+                                    bgcolor: msg.type === 'user' ? '#3a3a3a' : 
                                              msg.type === 'system' ? 'grey.800' : 'background.paper',
                                     borderLeft: msg.agent ? `3px solid ${agentColor}` : 'none',
                                     position: 'relative',
@@ -5936,12 +5880,32 @@ const NewCodeEditorPage: React.FC = () => {
           minHeight: '22px',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <SourceOutlined sx={{ fontSize: 14 }} />
-          <Typography variant="caption" sx={{ fontSize: 11 }}>
-            {selectedWorkflow ? workflows.find(w => w.id === selectedWorkflow)?.name : 'No repository'}
-          </Typography>
-        </Box>
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <Select
+            value={selectedWorkflow}
+            onChange={(e) => handleWorkflowChange(e.target.value)}
+            displayEmpty
+            startAdornment={<SourceOutlined sx={{ fontSize: 14, mr: 0.5, color: 'white' }} />}
+            sx={{ 
+              fontSize: 11,
+              height: 24,
+              bgcolor: 'rgba(255, 255, 255, 0.1)',
+              color: 'white',
+              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+              '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.15)' },
+              '& .MuiSelect-select': { py: 0.25, pr: 3, display: 'flex', alignItems: 'center' },
+            }}
+          >
+            <MenuItem value="" disabled sx={{ fontSize: 11 }}>
+              <em>Select Repository</em>
+            </MenuItem>
+            {workflows.map((workflow) => (
+              <MenuItem key={workflow.id} value={workflow.id} sx={{ fontSize: 11 }}>
+                {workflow.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         {selectedFile && (
           <>
             <Divider orientation="vertical" flexItem sx={{ bgcolor: 'rgba(255, 255, 255, 0.3)' }} />
@@ -5973,9 +5937,35 @@ const NewCodeEditorPage: React.FC = () => {
           </>
         )}
         <Box sx={{ flexGrow: 1 }} />
-        <Typography variant="caption" sx={{ fontSize: 11 }}>
-          Theme: {getAvailableThemes().find(t => t.value === selectedTheme)?.label}
-        </Typography>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <Select
+            value={selectedTheme}
+            onChange={(e) => handleThemeChange(e.target.value)}
+            sx={{ 
+              fontSize: 11,
+              height: 24,
+              bgcolor: 'rgba(255, 255, 255, 0.05)',
+              color: 'rgba(255, 255, 255, 0.7)',
+              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+              '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.08)' },
+              '& .MuiSelect-select': { py: 0.25, pr: 3 },
+            }}
+          >
+            {getAvailableThemes().map((theme) => (
+              <MenuItem 
+                key={theme.value} 
+                value={theme.value} 
+                sx={{ 
+                  fontSize: 11,
+                  opacity: loadedThemes.has(theme.value) ? 1 : 0.5,
+                }}
+                disabled={!loadedThemes.has(theme.value)}
+              >
+                {theme.label} {!loadedThemes.has(theme.value) && '(loading...)'}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       </Box>
       
       {/* Dialogs */}
