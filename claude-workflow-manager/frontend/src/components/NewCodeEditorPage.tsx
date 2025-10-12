@@ -2988,32 +2988,6 @@ const NewCodeEditorPage: React.FC = () => {
         </Typography>
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5, bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
         
-        {/* Repository Selector - Compact */}
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <Select
-            value={selectedWorkflow}
-            onChange={(e) => handleWorkflowChange(e.target.value)}
-            displayEmpty
-            sx={{ 
-              fontSize: 12,
-              height: 30,
-              bgcolor: 'rgba(255, 255, 255, 0.05)',
-              color: 'rgba(255, 255, 255, 0.9)',
-              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-              '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.08)' },
-            }}
-          >
-            <MenuItem value="" disabled sx={{ fontSize: 12 }}>
-              <em>Select Repository</em>
-            </MenuItem>
-            {workflows.map((workflow) => (
-              <MenuItem key={workflow.id} value={workflow.id} sx={{ fontSize: 12 }}>
-                {workflow.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        
         {/* Primary Navigation Icons - Centered */}
         <Box sx={{ display: 'flex', gap: 0.5, mx: 'auto' }}>
           <Tooltip title="Workflows">
@@ -5906,12 +5880,32 @@ const NewCodeEditorPage: React.FC = () => {
           minHeight: '22px',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <SourceOutlined sx={{ fontSize: 14 }} />
-          <Typography variant="caption" sx={{ fontSize: 11 }}>
-            {selectedWorkflow ? workflows.find(w => w.id === selectedWorkflow)?.name : 'No repository'}
-          </Typography>
-        </Box>
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <Select
+            value={selectedWorkflow}
+            onChange={(e) => handleWorkflowChange(e.target.value)}
+            displayEmpty
+            startAdornment={<SourceOutlined sx={{ fontSize: 14, mr: 0.5, color: 'white' }} />}
+            sx={{ 
+              fontSize: 11,
+              height: 24,
+              bgcolor: 'rgba(255, 255, 255, 0.1)',
+              color: 'white',
+              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+              '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.15)' },
+              '& .MuiSelect-select': { py: 0.25, pr: 3, display: 'flex', alignItems: 'center' },
+            }}
+          >
+            <MenuItem value="" disabled sx={{ fontSize: 11 }}>
+              <em>Select Repository</em>
+            </MenuItem>
+            {workflows.map((workflow) => (
+              <MenuItem key={workflow.id} value={workflow.id} sx={{ fontSize: 11 }}>
+                {workflow.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         {selectedFile && (
           <>
             <Divider orientation="vertical" flexItem sx={{ bgcolor: 'rgba(255, 255, 255, 0.3)' }} />
