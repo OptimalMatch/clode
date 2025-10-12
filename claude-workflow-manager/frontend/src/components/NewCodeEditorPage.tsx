@@ -5271,7 +5271,7 @@ const NewCodeEditorPage: React.FC = () => {
                         </Box>
                         
                         {/* Performance Test Content - Scrollable */}
-                        <Box sx={{ flex: 1, overflow: 'auto' }}>
+                        <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
                         
                         {/* Performance Test Controls */}
                         <Box sx={{ p: 2 }}>
