@@ -5270,6 +5270,9 @@ const NewCodeEditorPage: React.FC = () => {
                           </Tooltip>
                         </Box>
                         
+                        {/* Performance Test Content - Scrollable */}
+                        <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+                        
                         {/* Performance Test Controls */}
                         <Box sx={{ p: 2 }}>
                           <Typography variant="caption" sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.7)', mb: 1, display: 'block' }}>
@@ -5808,7 +5811,7 @@ const NewCodeEditorPage: React.FC = () => {
                         <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
                         
                         {/* Logs */}
-                        <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+                        <Box sx={{ p: 2 }}>
                           <Typography variant="caption" sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.7)', mb: 1, display: 'block' }}>
                             Test Logs
                           </Typography>
@@ -5837,6 +5840,8 @@ const NewCodeEditorPage: React.FC = () => {
                               ))}
                             </Box>
                           )}
+                        </Box>
+                        
                         </Box>
                       </>
                     )}
