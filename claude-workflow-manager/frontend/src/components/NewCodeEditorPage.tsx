@@ -97,6 +97,7 @@ import EnhancedFileTree, { getFileIcon } from './EnhancedFileTree';
 import InlineDiffViewer from './InlineDiffViewer';
 import RunnerSprite from './RunnerSprite';
 import AgentPanel, { Agent } from './AgentPanel';
+import VoiceInput from './VoiceInput';
 
 interface FileItem {
   name: string;
@@ -2816,16 +2817,21 @@ const NewCodeEditorPage: React.FC = () => {
     }
   };
   
+  const handleVoiceTranscription = (text: string) => {
+    // Append voice transcription to chat input
+    setChatInput(prev => prev ? `${prev} ${text}` : text);
+  };
+
   const handleSendMessage = async () => {
     if (!chatInput.trim() || !selectedDesign || !selectedWorkflow) return;
-    
+
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       type: 'user',
       content: chatInput,
       timestamp: new Date(),
     };
-    
+
     setChatMessages(prev => [...prev, userMessage]);
     setChatInput('');
     setExecutionStatus({ executing: true });
@@ -5185,6 +5191,10 @@ const NewCodeEditorPage: React.FC = () => {
                     
                     {/* Chat Input */}
                     <Box sx={{ p: 1.5, borderTop: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', gap: 0.5 }}>
+                      <VoiceInput
+                        onTranscriptionComplete={handleVoiceTranscription}
+                        disabled={executionStatus.executing || !selectedDesign}
+                      />
                       <TextField
                         fullWidth
                         size="small"
@@ -5207,8 +5217,8 @@ const NewCodeEditorPage: React.FC = () => {
                           <Stop sx={{ fontSize: 18 }} />
                         </IconButton>
                       ) : (
-                        <IconButton 
-                          onClick={handleSendMessage} 
+                        <IconButton
+                          onClick={handleSendMessage}
                           color="primary"
                           disabled={!chatInput.trim() || !selectedDesign}
                           size="small"
