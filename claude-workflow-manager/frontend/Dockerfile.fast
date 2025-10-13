@@ -2,6 +2,20 @@
 ARG BASE_IMAGE=ghcr.io/your-org/claude-workflow-frontend-base:latest
 FROM ${BASE_IMAGE}
 
+# Accept build arguments for environment variables
+ARG REACT_APP_API_URL
+ARG REACT_APP_WS_URL
+ARG REACT_APP_API_PORT
+ARG REACT_APP_WS_PORT
+ARG REACT_APP_VOICE_API_URL
+
+# Set environment variables for build
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
+ENV REACT_APP_WS_URL=$REACT_APP_WS_URL
+ENV REACT_APP_API_PORT=$REACT_APP_API_PORT
+ENV REACT_APP_WS_PORT=$REACT_APP_WS_PORT
+ENV REACT_APP_VOICE_API_URL=$REACT_APP_VOICE_API_URL
+
 # Copy source code (NEVER cached - always fresh)
 COPY . .
 
