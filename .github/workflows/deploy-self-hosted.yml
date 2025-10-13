@@ -162,8 +162,15 @@ jobs:
         # Copy the claude-workflow-manager subdirectory from the repo
         cp -r $GITHUB_WORKSPACE/claude-workflow-manager .
         
+        # Copy voice services if Picovoice key is available
+        if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
+          echo "🎤 Copying voice services..."
+          cp -r $GITHUB_WORKSPACE/voice-backend .
+          cp -r $GITHUB_WORKSPACE/voice-mcp-server .
+        fi
+        
         # Fix ownership to current user (important after Docker operations)
-        sudo chown -R $USER:$USER claude-workflow-manager
+        sudo chown -R $USER:$USER .
         
         echo "✅ Files deployed successfully"
 
