@@ -10,3 +10,4 @@ aiohttp
 sse-starlette
 pydantic
 mcp
+lemonpepper
