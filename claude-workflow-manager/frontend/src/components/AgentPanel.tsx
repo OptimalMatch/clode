@@ -20,9 +20,13 @@ import {
   Circle,
   CheckCircle,
   Cancel,
+  Mic,
+  ExpandMore,
+  ExpandLess,
 } from '@mui/icons-material';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import EnhancedFileTree, { getFileIcon } from './EnhancedFileTree';
+import VoiceInput from './VoiceInput';
 import api from '../services/api';
 
 export interface FileItem {
@@ -115,7 +119,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
   const [panelHovered, setPanelHovered] = useState(false);
   const [editorTransitioning, setEditorTransitioning] = useState(false);
-  
+  const [voiceChatExpanded, setVoiceChatExpanded] = useState(false);
+  const [voiceInput, setVoiceInput] = useState('');
+
   const editorRef = useRef<any>(null);
   const previousFileHadChanges = useRef<boolean>(false);
 
@@ -502,6 +508,19 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
               }}
             />
           )}
+          <Tooltip title={voiceChatExpanded ? 'Hide Voice Chat' : 'Show Voice Chat'}>
+            <IconButton
+              size="small"
+              onClick={() => setVoiceChatExpanded(!voiceChatExpanded)}
+              sx={{
+                p: 0.5,
+                color: voiceChatExpanded ? '#4CAF50' : 'rgba(255, 255, 255, 0.6)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <Mic sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Refresh">
             <IconButton
               size="small"
@@ -509,8 +528,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 loadDirectory();
                 loadChanges();
               }}
-              sx={{ 
-                p: 0.5, 
+              sx={{
+                p: 0.5,
                 color: 'rgba(255, 255, 255, 0.6)',
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
@@ -523,8 +542,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
               <IconButton
                 size="small"
                 onClick={onClose}
-                sx={{ 
-                  p: 0.5, 
+                sx={{
+                  p: 0.5,
                   color: 'rgba(255, 255, 255, 0.6)',
                   '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
                 }}
@@ -535,6 +554,67 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
           )}
         </Box>
       </Box>
+
+      {/* Voice Chat Section */}
+      {voiceChatExpanded && (
+        <Box
+          sx={{
+            p: 1,
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            bgcolor: 'rgba(0, 0, 0, 0.2)',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Typography
+              sx={{
+                fontSize: 10,
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontWeight: 600,
+                flex: 1,
+              }}
+            >
+              Voice Interaction
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={() => setVoiceChatExpanded(false)}
+              sx={{
+                p: 0.25,
+                color: 'rgba(255, 255, 255, 0.5)',
+              }}
+            >
+              <ExpandLess sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <VoiceInput
+              onTranscriptionComplete={(text) => {
+                setVoiceInput(text);
+                // TODO: Send to agent API
+                console.log('Voice input:', text);
+              }}
+            />
+            {voiceInput && (
+              <Typography
+                sx={{
+                  fontSize: 10,
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  flex: 1,
+                  bgcolor: 'rgba(255, 255, 255, 0.05)',
+                  p: 0.5,
+                  borderRadius: 0.5,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {voiceInput}
+              </Typography>
+            )}
+          </Box>
+        </Box>
+      )}
 
       {/* File Explorer */}
       <Box sx={{ height: '40%', overflow: 'auto', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
