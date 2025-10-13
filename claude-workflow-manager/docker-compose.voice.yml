@@ -83,6 +83,3 @@ volumes:
   voice_models:
     driver: local
 
-networks:
-  claude-network:
-    external: true
