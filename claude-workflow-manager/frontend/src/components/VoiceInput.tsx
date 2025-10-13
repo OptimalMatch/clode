@@ -19,9 +19,11 @@ interface VoiceInputProps {
   disabled?: boolean;
 }
 
+const DEFAULT_VOICE_API_URL = process.env.REACT_APP_VOICE_API_URL || 'http://localhost:14300';
+
 const VoiceInput: React.FC<VoiceInputProps> = ({
   onTranscriptionComplete,
-  apiBaseUrl = 'http://localhost:14300',
+  apiBaseUrl = DEFAULT_VOICE_API_URL,
   disabled = false,
 }) => {
   // Speech-to-Text state

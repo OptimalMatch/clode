@@ -594,7 +594,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 // TODO: Send to agent API
                 console.log('Voice input:', text);
               }}
-              apiBaseUrl="http://localhost:14300"
             />
             {voiceInput && (
               <Typography

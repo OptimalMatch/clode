@@ -1,0 +1,88 @@
+# Voice-Enabled Docker Compose Configuration
+# Extends the base docker-compose.yml with voice interaction services
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.voice.yml up
+
+services:
+  # Voice Backend API - Speech-to-Text and Text-to-Speech
+  voice-backend:
+    build:
+      context: ../voice-backend
+      dockerfile: Dockerfile
+    container_name: claude-workflow-voice-backend
+    restart: always
+    ports:
+      - "14300:8000"
+    cpus: 2.0
+    mem_limit: 4g
+    mem_reservation: 2g
+    environment:
+      - WHISPER_MODEL_PATH=/app/models/ggml-base.en.bin
+      - PICOVOICE_ACCESS_KEY=${PICOVOICE_ACCESS_KEY}
+    volumes:
+      - voice_models:/app/models:ro
+      # Development volume mount (commented out for production)
+      # - ../voice-backend:/app:ro
+    networks:
+      - claude-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Voice MCP Server (stdio transport)
+  voice-mcp-server:
+    build:
+      context: ../voice-mcp-server
+      dockerfile: Dockerfile
+    container_name: claude-workflow-voice-mcp
+    restart: always
+    environment:
+      - VOICE_API_URL=http://voice-backend:8000
+      - API_TIMEOUT=30
+      - MCP_TRANSPORT=stdio
+    networks:
+      - claude-network
+    depends_on:
+      - voice-backend
+    stdin_open: true
+    tty: true
+    command: ["python", "server_multi_transport.py"]
+
+  # Voice MCP Server HTTP/SSE transport (for remote access)
+  voice-mcp-server-http:
+    build:
+      context: ../voice-mcp-server
+      dockerfile: Dockerfile
+    container_name: claude-workflow-voice-mcp-http
+    restart: always
+    ports:
+      - "14302:8001"
+    cpus: 1.0
+    mem_limit: 1g
+    mem_reservation: 512m
+    environment:
+      - VOICE_API_URL=http://voice-backend:8000
+      - API_TIMEOUT=30
+      - MCP_TRANSPORT=http
+      - MCP_HTTP_PORT=8001
+      - MCP_HTTP_HOST=0.0.0.0
+    networks:
+      - claude-network
+    depends_on:
+      - voice-backend
+    command: ["python", "server_multi_transport.py"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  voice_models:
+    driver: local
+
+networks:
+  claude-network:
+    external: true

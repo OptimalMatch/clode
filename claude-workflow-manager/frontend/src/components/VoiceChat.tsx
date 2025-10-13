@@ -27,9 +27,11 @@ interface VoiceChatProps {
   disabled?: boolean;
 }
 
+const DEFAULT_VOICE_API_URL = process.env.REACT_APP_VOICE_API_URL || 'http://localhost:14300';
+
 const VoiceChat: React.FC<VoiceChatProps> = ({
   onMessageSend,
-  apiBaseUrl = 'http://localhost:14300',
+  apiBaseUrl = DEFAULT_VOICE_API_URL,
   disabled = false,
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);

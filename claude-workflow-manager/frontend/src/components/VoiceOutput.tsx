@@ -16,9 +16,11 @@ interface VoiceOutputProps {
   autoPlay?: boolean;
 }
 
+const DEFAULT_VOICE_API_URL = process.env.REACT_APP_VOICE_API_URL || 'http://localhost:14300';
+
 const VoiceOutput: React.FC<VoiceOutputProps> = ({
   text,
-  apiBaseUrl = 'http://localhost:14300',
+  apiBaseUrl = DEFAULT_VOICE_API_URL,
   disabled = false,
   autoPlay = false,
 }) => {

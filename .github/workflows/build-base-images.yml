@@ -17,10 +17,15 @@ on:
       - 'claude-workflow-manager/frontend/Dockerfile*'
       - 'claude-workflow-manager/backend/requirements.txt'
       - 'claude-workflow-manager/frontend/package*.json'
+      - 'voice-backend/Dockerfile*'
+      - 'voice-backend/requirements.txt'
+      - 'voice-mcp-server/Dockerfile*'
+      - 'voice-mcp-server/requirements.txt'
       - '.github/workflows/build-base-images.yml'
     branches:
       - main
       - develop
+      - feature/7-add-voice
 
   # Weekly rebuild to get latest security updates
   schedule:
@@ -43,12 +48,18 @@ jobs:
           - name: "backend-base"
             dockerfile: "claude-workflow-manager/backend/Dockerfile.base"
             context: "claude-workflow-manager/backend"
-          - name: "terminal-base" 
+          - name: "terminal-base"
             dockerfile: "claude-workflow-manager/backend/Dockerfile.terminal.base"
             context: "claude-workflow-manager/backend"
           - name: "frontend-base"
             dockerfile: "claude-workflow-manager/frontend/Dockerfile.base"
             context: "claude-workflow-manager/frontend"
+          - name: "voice-backend"
+            dockerfile: "voice-backend/Dockerfile"
+            context: "voice-backend"
+          - name: "voice-mcp-server"
+            dockerfile: "voice-mcp-server/Dockerfile"
+            context: "voice-mcp-server"
 
     steps:
     - name: Checkout repository
@@ -168,7 +179,7 @@ jobs:
         echo "🧹 Cleaning up old base images..."
         
         # Keep last 5 versions of each base image
-        for service in backend-base terminal-base frontend-base; do
+        for service in backend-base terminal-base frontend-base voice-backend voice-mcp-server; do
           echo "Cleaning $service images..."
           docker images --format "table {{.Repository}}:{{.Tag}}\t{{.CreatedAt}}" \
             | grep "claude-workflow-$service" \
