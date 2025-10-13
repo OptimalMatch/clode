@@ -66,6 +66,7 @@ services:
         REACT_APP_WS_URL: ws://${HOST_IP:-localhost}:8006
         REACT_APP_API_PORT: 8005
         REACT_APP_WS_PORT: 8006
+        REACT_APP_VOICE_API_URL: ${REACT_APP_VOICE_API_URL:-http://localhost:14300}
     container_name: claude-workflow-frontend
     restart: always
     ports:

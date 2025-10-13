@@ -292,6 +292,17 @@ jobs:
           export GITHUB_REPOSITORY_OWNER="$REPO_OWNER_LOWERCASE"
           export BASE_IMAGE_TAG="$BASE_IMAGE_TAG"
           
+          # Export React environment variables for frontend build
+          HOST_IP_FROM_ENV=$(grep "HOST_IP=" .env | cut -d'=' -f2)
+          export REACT_APP_API_URL="http://${HOST_IP_FROM_ENV}:8005"
+          export REACT_APP_WS_URL="ws://${HOST_IP_FROM_ENV}:8006"
+          export REACT_APP_API_PORT="8005"
+          export REACT_APP_WS_PORT="8006"
+          export REACT_APP_VOICE_API_URL="http://${HOST_IP_FROM_ENV}:14300"
+          
+          echo "🌐 Frontend will use API URL: $REACT_APP_API_URL"
+          echo "🎤 Frontend will use Voice API URL: $REACT_APP_VOICE_API_URL"
+          
           # Pull the latest base images from registry
           echo "📥 Pulling latest base images..."
           docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-backend-base:$BASE_IMAGE_TAG" || true
@@ -325,6 +336,17 @@ jobs:
         else
           echo "🏗️ Base images not available, using full build..."
           COMPOSE_FILES="-f docker-compose.yml"
+          
+          # Export React environment variables for frontend build
+          HOST_IP_FROM_ENV=$(grep "HOST_IP=" .env | cut -d'=' -f2)
+          export REACT_APP_API_URL="http://${HOST_IP_FROM_ENV}:8005"
+          export REACT_APP_WS_URL="ws://${HOST_IP_FROM_ENV}:8006"
+          export REACT_APP_API_PORT="8005"
+          export REACT_APP_WS_PORT="8006"
+          export REACT_APP_VOICE_API_URL="http://${HOST_IP_FROM_ENV}:14300"
+          
+          echo "🌐 Frontend will use API URL: $REACT_APP_API_URL"
+          echo "🎤 Frontend will use Voice API URL: $REACT_APP_VOICE_API_URL"
 
           # Add voice services if Picovoice key is available
           if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
