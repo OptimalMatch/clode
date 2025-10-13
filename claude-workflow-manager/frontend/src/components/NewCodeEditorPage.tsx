@@ -98,6 +98,7 @@ import InlineDiffViewer from './InlineDiffViewer';
 import RunnerSprite from './RunnerSprite';
 import AgentPanel, { Agent } from './AgentPanel';
 import VoiceInput from './VoiceInput';
+import VoiceOutput from './VoiceOutput';
 
 interface FileItem {
   name: string;
@@ -5137,40 +5138,53 @@ const NewCodeEditorPage: React.FC = () => {
                                     )}
                                   </Box>
                                 )}
-                                <Paper
-                                  sx={{
-                                    p: 1,
-                                    bgcolor: msg.type === 'user' ? '#3a3a3a' : 
-                                             msg.type === 'system' ? 'grey.800' : 'background.paper',
-                                    borderLeft: msg.agent ? `3px solid ${agentColor}` : 'none',
-                                    position: 'relative',
-                                    '& p': { margin: 0, marginBottom: 0.5, fontSize: 10 },
-                                    '& p:last-child': { marginBottom: 0 },
-                                    '& pre': { 
-                                      bgcolor: 'rgba(0, 0, 0, 0.3)', 
-                                      p: 1, 
-                                      borderRadius: 1, 
-                                      overflow: 'auto',
-                                      fontSize: 9,
-                                    },
-                                    '& code': { 
-                                      bgcolor: 'rgba(0, 0, 0, 0.3)', 
-                                      px: 0.5, 
-                                      borderRadius: 0.5,
-                                      fontSize: 9,
-                                    },
-                                    '& ul, & ol': { margin: 0, paddingLeft: 2, fontSize: 10 },
-                                    '& h1, & h2, & h3, & h4, & h5, & h6': { 
-                                      margin: 0, 
-                                      marginTop: 1, 
-                                      marginBottom: 0.5,
-                                      fontSize: 11,
-                                      fontWeight: 600,
-                                    },
-                                  }}
-                                >
-                                  <ReactMarkdown>{msg.content}</ReactMarkdown>
-                                </Paper>
+                                <Box sx={{ position: 'relative' }}>
+                                  <Paper
+                                    sx={{
+                                      p: 1,
+                                      bgcolor: msg.type === 'user' ? '#3a3a3a' :
+                                               msg.type === 'system' ? 'grey.800' : 'background.paper',
+                                      borderLeft: msg.agent ? `3px solid ${agentColor}` : 'none',
+                                      position: 'relative',
+                                      '& p': { margin: 0, marginBottom: 0.5, fontSize: 10 },
+                                      '& p:last-child': { marginBottom: 0 },
+                                      '& pre': {
+                                        bgcolor: 'rgba(0, 0, 0, 0.3)',
+                                        p: 1,
+                                        borderRadius: 1,
+                                        overflow: 'auto',
+                                        fontSize: 9,
+                                      },
+                                      '& code': {
+                                        bgcolor: 'rgba(0, 0, 0, 0.3)',
+                                        px: 0.5,
+                                        borderRadius: 0.5,
+                                        fontSize: 9,
+                                      },
+                                      '& ul, & ol': { margin: 0, paddingLeft: 2, fontSize: 10 },
+                                      '& h1, & h2, & h3, & h4, & h5, & h6': {
+                                        margin: 0,
+                                        marginTop: 1,
+                                        marginBottom: 0.5,
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                      },
+                                    }}
+                                  >
+                                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                  </Paper>
+                                  {msg.type === 'agent' && (
+                                    <Box
+                                      sx={{
+                                        position: 'absolute',
+                                        top: 4,
+                                        right: 4,
+                                      }}
+                                    >
+                                      <VoiceOutput text={msg.content} />
+                                    </Box>
+                                  )}
+                                </Box>
                               </Box>
                             </Box>
                           );
