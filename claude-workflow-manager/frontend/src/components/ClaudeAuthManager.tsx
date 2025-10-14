@@ -90,7 +90,14 @@ const ClaudeAuthManager: React.FC<ClaudeAuthManagerProps> = ({
 
     try {
       const apiUrl = getApiUrl();
-      const response = await fetch(`${apiUrl}/api/claude-auth/profiles`);
+      const token = localStorage.getItem('access_token');
+      
+      const response = await fetch(`${apiUrl}/api/claude-auth/profiles`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
       
       if (!response.ok) {
         throw new Error(`Failed to fetch profiles: ${response.status}`);
@@ -109,7 +116,14 @@ const ClaudeAuthManager: React.FC<ClaudeAuthManagerProps> = ({
   const fetchSelectedProfile = async () => {
     try {
       const apiUrl = getApiUrl();
-      const response = await fetch(`${apiUrl}/api/claude-auth/selected-profile`);
+      const token = localStorage.getItem('access_token');
+      
+      const response = await fetch(`${apiUrl}/api/claude-auth/selected-profile`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
       
       if (response.ok) {
         const data = await response.json();
@@ -126,10 +140,13 @@ const ClaudeAuthManager: React.FC<ClaudeAuthManagerProps> = ({
     setIsSaving(true);
     try {
       const apiUrl = getApiUrl();
+      const token = localStorage.getItem('access_token');
+      
       const response = await fetch(`${apiUrl}/api/claude-auth/selected-profile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ profile_id: profileId }),
       });
