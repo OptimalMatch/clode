@@ -121,14 +121,13 @@ const SSHKeyManagement: React.FC<SSHKeyManagementProps> = ({ open, onClose }) =>
     }
   };
 
-  const getKeySource = (keyName: string) => {
-    if (keyName.includes('(generated)')) return 'generated';
-    if (keyName.includes('(mounted)')) return 'mounted';
-    return 'unknown';
+  const getKeySource = (key: SSHKeyInfo) => {
+    // Use the source field from the API response
+    return key.source || 'unknown';
   };
 
-  const canDeleteKey = (keyName: string) => {
-    return getKeySource(keyName) === 'generated';
+  const canDeleteKey = (key: SSHKeyInfo) => {
+    return getKeySource(key) === 'generated';
   };
 
   return (
@@ -211,8 +210,8 @@ const SSHKeyManagement: React.FC<SSHKeyManagementProps> = ({ open, onClose }) =>
             <List sx={{ mb: 3 }}>
               {sshKeys.keys.map((key: SSHKeyInfo) => {
                 const testResult = testResults[key.key_name];
-                const isGeneratedKey = getKeySource(key.key_name) === 'generated';
-                const isMountedKey = getKeySource(key.key_name) === 'mounted';
+                const isGeneratedKey = getKeySource(key) === 'generated';
+                const isMountedKey = getKeySource(key) === 'mounted';
                 
                 return (
                   <ListItem 
@@ -278,7 +277,7 @@ const SSHKeyManagement: React.FC<SSHKeyManagementProps> = ({ open, onClose }) =>
                           {testingKey === key.key_name ? 'Testing...' : 'Test Key'}
                         </Button>
 
-                        {canDeleteKey(key.key_name) && (
+                        {canDeleteKey(key) && (
                           <Tooltip title="Delete key">
                             <IconButton
                               size="small"

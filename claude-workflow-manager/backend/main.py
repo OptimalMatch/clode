@@ -399,7 +399,8 @@ async def list_ssh_keys_for_user(user_id: str):
                     'key_name': ssh_key.key_name,
                     'public_key': ssh_key.public_key,
                     'created_at': ssh_key.created_at.isoformat(),
-                    'last_used': ssh_key.last_used.isoformat() if ssh_key.last_used else None
+                    'last_used': ssh_key.last_used.isoformat() if ssh_key.last_used else None,
+                    'source': 'generated'  # All database keys are generated (not mounted)
                 })
         
         return keys
