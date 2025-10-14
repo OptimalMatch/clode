@@ -12,12 +12,16 @@ import {
   IconButton,
 } from '@mui/material';
 import { Visibility, VisibilityOff, Login as LoginIcon } from '@mui/icons-material';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
+  
+  // Get the page the user was trying to access before being redirected to login
+  const from = (location.state as any)?.from?.pathname || '/';
 
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +36,8 @@ const LoginPage: React.FC = () => {
 
     try {
       await login(usernameOrEmail, password);
-      navigate('/'); // Redirect to home page after successful login
+      // Redirect to the page they were trying to access, or home page
+      navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
     } finally {

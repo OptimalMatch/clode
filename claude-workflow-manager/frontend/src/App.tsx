@@ -7,6 +7,7 @@ import { SnackbarProvider } from 'notistack';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import ModernLayout from './components/ModernLayout';
+import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import ProfilePage from './components/ProfilePage';
@@ -57,21 +58,21 @@ function App() {
                 <Route path="/register" element={<RegisterPage />} />
                 
                 {/* Protected routes (with modern layout) */}
-                <Route path="/" element={<ModernLayout><WorkflowsPage /></ModernLayout>} />
-                <Route path="/workflows" element={<ModernLayout><WorkflowsPage /></ModernLayout>} />
+                <Route path="/" element={<ProtectedRoute><ModernLayout><WorkflowsPage /></ModernLayout></ProtectedRoute>} />
+                <Route path="/workflows" element={<ProtectedRoute><ModernLayout><WorkflowsPage /></ModernLayout></ProtectedRoute>} />
                 <Route path="/profile" element={<ModernLayout><ProfilePage /></ModernLayout>} />
                 <Route path="/design" element={<ModernLayout><DesignPage /></ModernLayout>} />
                 <Route path="/prompts" element={<ModernLayout><PromptsPage /></ModernLayout>} />
                 <Route path="/subagents" element={<ModernLayout><SubagentsPage /></ModernLayout>} />
-                <Route path="/claude-auth" element={<ModernLayout><ClaudeAuthPage /></ModernLayout>} />
-                <Route path="/ssh-keys" element={<ModernLayout><SSHKeysPage /></ModernLayout>} />
+                <Route path="/claude-auth" element={<ProtectedRoute><ModernLayout><ClaudeAuthPage /></ModernLayout></ProtectedRoute>} />
+                <Route path="/ssh-keys" element={<ProtectedRoute><ModernLayout><SSHKeysPage /></ModernLayout></ProtectedRoute>} />
                 <Route path="/settings" element={<ModernLayout><SettingsPage /></ModernLayout>} />
                 <Route path="/orchestration" element={<ModernLayout><AgentOrchestrationPage /></ModernLayout>} />
                 <Route path="/orchestration-designer" element={<ModernLayout><OrchestrationDesignerPage /></ModernLayout>} />
                 <Route path="/deployments" element={<ModernLayout><DeploymentsPage /></ModernLayout>} />
                 <Route path="/code-editor" element={<NewCodeEditorPage />} />
                 <Route path="/new-code-editor" element={<NewCodeEditorPage />} />
-                <Route path="/agents/:workflowId" element={<ModernLayout><AgentsPage /></ModernLayout>} />
+                <Route path="/agents/:workflowId" element={<ProtectedRoute><ModernLayout><AgentsPage /></ModernLayout></ProtectedRoute>} />
                 <Route path="/multi-agent" element={<ModernLayout><MultiAgentView /></ModernLayout>} />
               </Routes>
             </AuthProvider>
