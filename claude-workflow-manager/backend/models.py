@@ -161,6 +161,7 @@ class OrchestrationDesign(BaseModel):
 
 class ClaudeAuthProfile(BaseModel):
     id: Optional[str] = None
+    user_id: Optional[str] = None  # Owner of this Claude auth profile
     profile_name: str  # User-friendly name like "John's Account", "Team Account"
     user_email: Optional[str] = None  # Associated email for identification
     credentials_json: str  # Encrypted/encoded ~/.claude/credentials.json content

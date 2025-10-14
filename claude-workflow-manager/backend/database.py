@@ -809,50 +809,66 @@ class Database:
         result = await self.db.claude_auth_profiles.insert_one(profile_dict)
         return str(result.inserted_id)
     
-    async def get_claude_auth_profiles(self) -> List['ClaudeAuthProfile']:
-        """Get all active Claude authentication profiles"""
+    async def get_claude_auth_profiles(self, user_id: Optional[str] = None) -> List['ClaudeAuthProfile']:
+        """Get all active Claude authentication profiles, optionally filtered by user"""
         if self.db is None:
             raise RuntimeError("Database not connected")
         
+        query = {"is_active": True}
+        if user_id:
+            query["user_id"] = user_id
+        
         profiles = []
-        cursor = self.db.claude_auth_profiles.find({"is_active": True}).sort("last_used_at", -1)
+        cursor = self.db.claude_auth_profiles.find(query).sort("last_used_at", -1)
         async for profile in cursor:
             del profile["_id"]
             from models import ClaudeAuthProfile
             profiles.append(ClaudeAuthProfile(**profile))
         return profiles
     
-    async def get_claude_auth_profile(self, profile_id: str) -> Optional['ClaudeAuthProfile']:
-        """Get a specific Claude authentication profile"""
+    async def get_claude_auth_profile(self, profile_id: str, user_id: Optional[str] = None) -> Optional['ClaudeAuthProfile']:
+        """Get a specific Claude authentication profile, optionally filtered by user"""
         if self.db is None:
             raise RuntimeError("Database not connected")
         
-        profile = await self.db.claude_auth_profiles.find_one({"id": profile_id, "is_active": True})
+        query = {"id": profile_id, "is_active": True}
+        if user_id:
+            query["user_id"] = user_id
+        
+        profile = await self.db.claude_auth_profiles.find_one(query)
         if profile:
             del profile["_id"]
             from models import ClaudeAuthProfile
             return ClaudeAuthProfile(**profile)
         return None
     
-    async def update_claude_auth_profile(self, profile_id: str, updates: dict) -> bool:
-        """Update a Claude authentication profile"""
+    async def update_claude_auth_profile(self, profile_id: str, updates: dict, user_id: Optional[str] = None) -> bool:
+        """Update a Claude authentication profile, optionally with user ownership check"""
         if self.db is None:
             raise RuntimeError("Database not connected")
         
+        query = {"id": profile_id}
+        if user_id:
+            query["user_id"] = user_id
+        
         updates["updated_at"] = datetime.utcnow()
         result = await self.db.claude_auth_profiles.update_one(
-            {"id": profile_id}, 
+            query, 
             {"$set": updates}
         )
         return result.modified_count > 0
     
-    async def delete_claude_auth_profile(self, profile_id: str) -> bool:
-        """Soft delete a Claude authentication profile"""
+    async def delete_claude_auth_profile(self, profile_id: str, user_id: Optional[str] = None) -> bool:
+        """Soft delete a Claude authentication profile, optionally with user ownership check"""
         if self.db is None:
             raise RuntimeError("Database not connected")
         
+        query = {"id": profile_id}
+        if user_id:
+            query["user_id"] = user_id
+        
         result = await self.db.claude_auth_profiles.update_one(
-            {"id": profile_id}, 
+            query, 
             {"$set": {"is_active": False, "updated_at": datetime.utcnow()}}
         )
         return result.modified_count > 0

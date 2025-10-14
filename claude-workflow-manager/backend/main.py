@@ -974,13 +974,21 @@ async def logout_user(current_user: Optional[User] = Depends(get_current_user_or
     "/api/claude-auth/profiles",
     response_model=ClaudeAuthProfileListResponse,
     summary="List Claude Auth Profiles",
-    description="Get all available Claude authentication profiles.",
-    tags=["Claude Authentication"]
+    description="Get all Claude authentication profiles for the authenticated user.",
+    tags=["Claude Authentication"],
+    responses={
+        200: {"description": "List of Claude auth profiles"},
+        401: {"model": ErrorResponse, "description": "Authentication required"}
+    }
 )
-async def get_claude_auth_profiles():
-    """Get all Claude authentication profiles."""
+async def get_claude_auth_profiles(current_user: User = Depends(get_current_user)):
+    """
+    Get all Claude authentication profiles for the authenticated user.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
+    """
     try:
-        profiles = await db.get_claude_auth_profiles()
+        profiles = await db.get_claude_auth_profiles(user_id=current_user.id)
         # Don't return sensitive credentials in the list
         safe_profiles = []
         for profile in profiles:
@@ -1027,10 +1035,22 @@ async def start_claude_login_session(request: ClaudeLoginSessionRequest):
     "/api/claude-auth/submit-token",
     summary="Submit Claude Auth Token",
     description="Submit the authentication token from Claude login flow.",
-    tags=["Claude Authentication"]
+    tags=["Claude Authentication"],
+    responses={
+        200: {"description": "Auth profile created successfully"},
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "Login session not found"}
+    }
 )
-async def submit_claude_auth_token(request: ClaudeAuthTokenRequest):
-    """Submit Claude authentication token and save profile."""
+async def submit_claude_auth_token(
+    request: ClaudeAuthTokenRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Submit Claude authentication token and save profile.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
+    """
     try:
         # Verify session exists
         if not hasattr(app.state, 'claude_login_sessions') or request.session_id not in app.state.claude_login_sessions:
@@ -1044,8 +1064,9 @@ async def submit_claude_auth_token(request: ClaudeAuthTokenRequest):
         
         profile = ClaudeAuthProfile(
             id=profile_id,
+            user_id=current_user.id,  # Associate with authenticated user
             profile_name=session["profile_name"],
-            user_email=session.get("user_email"),
+            user_email=session.get("user_email") or current_user.email,
             credentials_json=request.auth_token,  # In real implementation, this would be the processed credentials
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
@@ -1066,10 +1087,19 @@ async def submit_claude_auth_token(request: ClaudeAuthTokenRequest):
     "/api/claude-auth/import-terminal-credentials",
     summary="Import Terminal Claude Credentials",
     description="Import Claude credentials from the terminal container into the backend profile system.",
-    tags=["Claude Authentication"]
+    tags=["Claude Authentication"],
+    responses={
+        200: {"description": "Credentials imported successfully"},
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "No credentials found in terminal"}
+    }
 )
-async def import_terminal_credentials():
-    """Import Claude credentials from terminal container."""
+async def import_terminal_credentials(current_user: User = Depends(get_current_user)):
+    """
+    Import Claude credentials from terminal container.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
+    """
     try:
         import httpx
         import json
@@ -1096,8 +1126,9 @@ async def import_terminal_credentials():
         
         profile = ClaudeAuthProfile(
             id=profile_id,
+            user_id=current_user.id,  # Associate with authenticated user
             profile_name=profile_name,
-            user_email=user_email,
+            user_email=user_email or current_user.email,
             credentials_json=json.dumps(credentials_data),  # Store the full credentials
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
@@ -1127,17 +1158,31 @@ async def import_terminal_credentials():
 @app.delete(
     "/api/claude-auth/profiles/{profile_id}",
     summary="Delete Claude Auth Profile",
-    description="Delete (deactivate) a Claude authentication profile.",
-    tags=["Claude Authentication"]
+    description="Delete (deactivate) a Claude authentication profile owned by the authenticated user.",
+    tags=["Claude Authentication"],
+    responses={
+        200: {"description": "Profile deleted successfully"},
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "Profile not found or not owned by user"}
+    }
 )
-async def delete_claude_auth_profile(profile_id: str):
-    """Delete a Claude authentication profile."""
+async def delete_claude_auth_profile(
+    profile_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete a Claude authentication profile.
+    
+    Only the owner of the profile can delete it.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
+    """
     try:
-        success = await db.delete_claude_auth_profile(profile_id)
+        success = await db.delete_claude_auth_profile(profile_id, user_id=current_user.id)
         if success:
             return {"success": True, "message": "Profile deleted successfully"}
         else:
-            raise HTTPException(status_code=404, detail="Profile not found")
+            raise HTTPException(status_code=404, detail="Profile not found or you don't have permission to delete it")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete profile: {str(e)}")
 
