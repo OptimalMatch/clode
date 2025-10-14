@@ -95,9 +95,14 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
       try {
         setIsLoading(true);
         const apiUrl = getApiUrl();
+        const token = localStorage.getItem('access_token');
+        
         const response = await fetch(`${apiUrl}/api/claude-auth/import-terminal-credentials`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
         });
         
         if (!response.ok) {
@@ -182,10 +187,13 @@ const ClaudeLoginWizard: React.FC<ClaudeLoginWizardProps> = ({ open, onClose, on
 
     try {
       const apiUrl = getApiUrl();
+      const token = localStorage.getItem('access_token');
+      
       const response = await fetch(`${apiUrl}/api/claude-auth/submit-token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           session_id: loginSession.sessionId,
