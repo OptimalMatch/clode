@@ -59,6 +59,15 @@ const VoiceChat: React.FC<VoiceChatProps> = ({
 
   const startRecording = async () => {
     try {
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error(
+          'Microphone access requires HTTPS. Please access via https:// or use localhost. ' +
+          'Current URL: ' + window.location.href
+        );
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
