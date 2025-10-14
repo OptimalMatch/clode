@@ -280,17 +280,23 @@ async def clone_git_repo_per_agent(git_repo: str, agent_names: List[str]) -> Tup
     print(f"✅ Cloned {len(agent_names)} isolated workspace(s) with SSH keys configured")
     return parent_temp_dir, agent_dir_mapping
 
-def get_ssh_key_directory():
-    """Get or create SSH key directory"""
-    # Use a writable directory for generated SSH keys (not the read-only mounted one)
+def get_ssh_key_directory(user_id: str = None):
+    """Get or create SSH key directory, optionally user-specific"""
+    # Use a writable directory for generated SSH keys
     if os.path.exists('/app'):
         # Running in Docker container
-        ssh_dir = Path('/app/ssh_keys')
+        base_dir = Path('/app/ssh_keys')
     else:
         # Running locally
-        ssh_dir = Path.home() / '.ssh'
+        base_dir = Path.home() / '.ssh' / 'claude_ssh_keys'
     
-    ssh_dir.mkdir(mode=0o700, exist_ok=True)
+    # Create user-specific subdirectory if user_id is provided
+    if user_id:
+        ssh_dir = base_dir / user_id
+    else:
+        ssh_dir = base_dir
+    
+    ssh_dir.mkdir(mode=0o700, exist_ok=True, parents=True)
     return ssh_dir
 
 def generate_ssh_key_pair(key_name: str, key_type: str = "ed25519", email: str = None):
@@ -358,9 +364,9 @@ def generate_ssh_key_pair(key_name: str, key_type: str = "ed25519", email: str =
         except Exception as e:
             raise Exception(f"Error generating SSH key: {str(e)}")
 
-def save_ssh_key(key_name: str, private_key: str, public_key: str):
+def save_ssh_key(key_name: str, private_key: str, public_key: str, user_id: str = None):
     """Save SSH key pair to the SSH directory"""
-    ssh_dir = get_ssh_key_directory()
+    ssh_dir = get_ssh_key_directory(user_id)
     
     # Save private key
     private_key_path = ssh_dir / key_name
@@ -377,51 +383,29 @@ def save_ssh_key(key_name: str, private_key: str, public_key: str):
         'public_key_path': str(public_key_path)
     }
 
-def list_ssh_keys():
-    """List all SSH keys from both generated and mounted directories"""
-    keys = []
-    
-    # Get keys from writable generated directory
-    ssh_dir = get_ssh_key_directory()
-    for pub_key_file in ssh_dir.glob("*.pub"):
-        key_name = pub_key_file.stem
-        private_key_file = ssh_dir / key_name
+async def list_ssh_keys_for_user(user_id: str):
+    """List all SSH keys for a specific user from the database"""
+    try:
+        ssh_keys = await db.get_ssh_keys_by_user(user_id)
+        keys = []
         
-        if private_key_file.exists():
-            try:
-                public_key = pub_key_file.read_text().strip()
-                
-                # Get fingerprint
-                fingerprint_cmd = ['ssh-keygen', '-lf', str(pub_key_file)]
-                fingerprint_result = subprocess.run(
-                    fingerprint_cmd, capture_output=True, text=True, timeout=10
-                )
-                
-                if fingerprint_result.returncode == 0:
-                    fingerprint_line = fingerprint_result.stdout.strip()
-                    fingerprint = fingerprint_line.split(' ')[1] if ' ' in fingerprint_line else "unknown"
-                else:
-                    fingerprint = "unknown"
-                
-                # Get file creation time
-                created_at = datetime.fromtimestamp(private_key_file.stat().st_ctime).isoformat()
-                
+        for ssh_key in ssh_keys:
+            # Verify the key file still exists
+            private_key_path = Path(ssh_key.private_key_path)
+            if private_key_path.exists():
                 keys.append({
-                    'fingerprint': fingerprint,
-                    'key_name': f"{key_name} (generated)",
-                    'public_key': public_key,
-                    'created_at': created_at,
-                    'last_used': None,
-                    'source': 'generated'
+                    'id': ssh_key.id,
+                    'fingerprint': ssh_key.fingerprint,
+                    'key_name': ssh_key.key_name,
+                    'public_key': ssh_key.public_key,
+                    'created_at': ssh_key.created_at.isoformat(),
+                    'last_used': ssh_key.last_used.isoformat() if ssh_key.last_used else None
                 })
-                
-            except Exception as e:
-                print(f"Error reading generated SSH key {key_name}: {e}")
-                continue
-    
-
-    
-    return keys
+        
+        return keys
+    except Exception as e:
+        print(f"Error listing SSH keys for user {user_id}: {e}")
+        return []
 
 def test_ssh_connection(git_repo: str, key_name: str = None):
     """Test SSH connection to a Git repository with a specific key or all keys"""
@@ -2461,12 +2445,16 @@ async def get_git_branches(request: GitValidationRequest):
     tags=["SSH Key Management"],
     responses={
         201: {"description": "SSH key pair generated successfully"},
-        400: {"model": ErrorResponse, "description": "Invalid request or SSH key generation failed"}
+        400: {"model": ErrorResponse, "description": "Invalid request or SSH key generation failed"},
+        401: {"model": ErrorResponse, "description": "Authentication required"}
     }
 )
-async def generate_ssh_key(request: SSHKeyGenerationRequest):
+async def generate_ssh_key(
+    request: SSHKeyGenerationRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
-    Generate a new SSH key pair.
+    Generate a new SSH key pair for the authenticated user.
     
     Creates a new SSH key pair that can be used for Git repository authentication.
     The private key is stored securely on the server, and the public key can be
@@ -2475,29 +2463,46 @@ async def generate_ssh_key(request: SSHKeyGenerationRequest):
     - **key_name**: Name for the SSH key (default: "claude-workflow-manager")
     - **key_type**: Type of key to generate ("ed25519" or "rsa", default: "ed25519")
     - **email**: Optional email to associate with the key
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
     """
     try:
-        # Check if key already exists
-        existing_keys = list_ssh_keys()
-        if any(key['key_name'] == request.key_name for key in existing_keys):
+        # Check if user already has a key with this name
+        existing_key = await db.get_ssh_key_by_name(request.key_name, current_user.id)
+        if existing_key:
             raise HTTPException(
                 status_code=400,
-                detail=f"SSH key with name '{request.key_name}' already exists"
+                detail=f"You already have an SSH key with name '{request.key_name}'"
             )
         
         # Generate the key pair
         key_data = generate_ssh_key_pair(
             key_name=request.key_name,
             key_type=request.key_type,
-            email=request.email
+            email=request.email or current_user.email
         )
         
-        # Save the key pair
-        save_ssh_key(
+        # Save the key pair to user-specific directory
+        file_paths = save_ssh_key(
             key_name=request.key_name,
             private_key=key_data['private_key'],
-            public_key=key_data['public_key']
+            public_key=key_data['public_key'],
+            user_id=current_user.id
         )
+        
+        # Save key metadata to database
+        from models import SSHKey
+        import uuid
+        ssh_key = SSHKey(
+            id=str(uuid.uuid4()),
+            user_id=current_user.id,
+            key_name=request.key_name,
+            fingerprint=key_data['fingerprint'],
+            public_key=key_data['public_key'],
+            private_key_path=file_paths['private_key_path'],
+            created_at=datetime.utcnow()
+        )
+        await db.create_ssh_key(ssh_key)
         
         # Create instructions based on the key type and common Git providers
         instructions = [
@@ -2519,6 +2524,8 @@ async def generate_ssh_key(request: SSHKeyGenerationRequest):
             instructions=instructions
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=400,
@@ -2529,23 +2536,92 @@ async def generate_ssh_key(request: SSHKeyGenerationRequest):
     "/api/ssh/keys",
     response_model=SSHKeyListResponse,
     summary="List SSH Keys",
-    description="List all SSH keys available on the server.",
-    tags=["SSH Key Management"]
+    description="List all SSH keys for the authenticated user.",
+    tags=["SSH Key Management"],
+    responses={
+        200: {"description": "List of SSH keys"},
+        401: {"model": ErrorResponse, "description": "Authentication required"}
+    }
 )
-async def list_available_ssh_keys():
+async def list_available_ssh_keys(current_user: User = Depends(get_current_user)):
     """
-    List all SSH keys.
+    List all SSH keys for the authenticated user.
     
-    Returns a list of all SSH key pairs stored on the server, including
+    Returns a list of all SSH key pairs owned by the current user, including
     their fingerprints, creation dates, and public key content.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
     """
     try:
-        keys = list_ssh_keys()
+        keys = await list_ssh_keys_for_user(current_user.id)
         return SSHKeyListResponse(keys=keys)
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to list SSH keys: {str(e)}"
+        )
+
+@app.delete(
+    "/api/ssh/keys/{key_id}",
+    summary="Delete SSH Key",
+    description="Delete an SSH key owned by the authenticated user.",
+    tags=["SSH Key Management"],
+    responses={
+        200: {"description": "SSH key deleted successfully"},
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "SSH key not found or not owned by user"}
+    }
+)
+async def delete_ssh_key(
+    key_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete an SSH key.
+    
+    Removes an SSH key from both the database and filesystem. Only the owner
+    of the key can delete it.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
+    """
+    try:
+        # Get the key to verify ownership and get file path
+        ssh_key = await db.get_ssh_key_by_id(key_id, current_user.id)
+        if not ssh_key:
+            raise HTTPException(
+                status_code=404,
+                detail="SSH key not found or you don't have permission to delete it"
+            )
+        
+        # Delete from database
+        deleted = await db.delete_ssh_key(key_id, current_user.id)
+        if not deleted:
+            raise HTTPException(
+                status_code=404,
+                detail="Failed to delete SSH key from database"
+            )
+        
+        # Delete files from filesystem
+        try:
+            private_key_path = Path(ssh_key.private_key_path)
+            if private_key_path.exists():
+                private_key_path.unlink()
+            
+            public_key_path = private_key_path.with_suffix('.pub')
+            if public_key_path.exists():
+                public_key_path.unlink()
+        except Exception as file_error:
+            print(f"Warning: Failed to delete key files: {file_error}")
+            # Don't fail the request if file deletion fails
+        
+        return {"message": "SSH key deleted successfully", "key_id": key_id}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete SSH key: {str(e)}"
         )
 
 @app.post(

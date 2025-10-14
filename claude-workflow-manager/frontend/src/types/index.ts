@@ -178,6 +178,7 @@ export interface SSHKeyResponse {
 }
 
 export interface SSHKeyInfo {
+  id: string;
   fingerprint: string;
   key_name: string;
   public_key: string;

@@ -301,6 +301,7 @@ class SSHKeyResponse(BaseModel):
 
 class SSHKeyInfo(BaseModel):
     """Model for SSH key information"""
+    id: str
     fingerprint: str
     key_name: str
     public_key: str
@@ -310,6 +311,17 @@ class SSHKeyInfo(BaseModel):
 class SSHKeyListResponse(BaseModel):
     """Response model for SSH key list"""
     keys: List[SSHKeyInfo]
+
+class SSHKey(BaseModel):
+    """Database model for SSH key"""
+    id: Optional[str] = None
+    user_id: str  # Owner of this SSH key
+    key_name: str
+    fingerprint: str
+    public_key: str
+    private_key_path: str  # Path to private key file on disk
+    created_at: datetime
+    last_used: Optional[datetime] = None
 
 class GitConnectionTestRequest(BaseModel):
     """Request model for testing Git connection with SSH"""

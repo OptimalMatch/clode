@@ -282,7 +282,7 @@ const SSHKeyManagement: React.FC<SSHKeyManagementProps> = ({ open, onClose }) =>
                           <Tooltip title="Delete key">
                             <IconButton
                               size="small"
-                              onClick={() => deleteKeyMutation.mutate(key.key_name)}
+                              onClick={() => deleteKeyMutation.mutate(key.id)}
                               disabled={deleteKeyMutation.isPending}
                               color="error"
                             >

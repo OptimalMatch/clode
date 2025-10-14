@@ -1037,6 +1037,74 @@ class Database:
         )
         return result.modified_count > 0
     
+    # SSH Key Management Methods
+    async def create_ssh_key(self, ssh_key: 'SSHKey') -> str:
+        """Create a new SSH key record"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        ssh_key_dict = ssh_key.dict()
+        ssh_key_dict["created_at"] = datetime.utcnow()
+        
+        result = await self.db.ssh_keys.insert_one(ssh_key_dict)
+        return str(result.inserted_id)
+    
+    async def get_ssh_keys_by_user(self, user_id: str) -> List['SSHKey']:
+        """Get all SSH keys for a user"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        cursor = self.db.ssh_keys.find({"user_id": user_id}).sort("created_at", -1)
+        keys = []
+        async for key_doc in cursor:
+            del key_doc["_id"]
+            from models import SSHKey
+            keys.append(SSHKey(**key_doc))
+        return keys
+    
+    async def get_ssh_key_by_id(self, key_id: str, user_id: str) -> Optional['SSHKey']:
+        """Get SSH key by ID, ensuring it belongs to the user"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        key = await self.db.ssh_keys.find_one({"id": key_id, "user_id": user_id})
+        if key:
+            del key["_id"]
+            from models import SSHKey
+            return SSHKey(**key)
+        return None
+    
+    async def get_ssh_key_by_name(self, key_name: str, user_id: str) -> Optional['SSHKey']:
+        """Get SSH key by name for a specific user"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        key = await self.db.ssh_keys.find_one({"key_name": key_name, "user_id": user_id})
+        if key:
+            del key["_id"]
+            from models import SSHKey
+            return SSHKey(**key)
+        return None
+    
+    async def update_ssh_key_last_used(self, key_id: str, user_id: str) -> bool:
+        """Update SSH key last used timestamp"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        result = await self.db.ssh_keys.update_one(
+            {"id": key_id, "user_id": user_id},
+            {"$set": {"last_used": datetime.utcnow()}}
+        )
+        return result.modified_count > 0
+    
+    async def delete_ssh_key(self, key_id: str, user_id: str) -> bool:
+        """Delete SSH key (only if owned by user)"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        result = await self.db.ssh_keys.delete_one({"id": key_id, "user_id": user_id})
+        return result.deleted_count > 0
+    
     # Model Settings Methods
     async def get_default_model(self) -> Optional[str]:
         """Get the default LLM model setting"""

@@ -402,8 +402,8 @@ export const sshApi = {
     return response.data;
   },
   
-  deleteKey: async (keyName: string) => {
-    const response = await api.delete(`/api/ssh/keys/${keyName}`);
+  deleteKey: async (keyId: string) => {
+    const response = await api.delete(`/api/ssh/keys/${keyId}`);
     return response.data;
   },
 };
