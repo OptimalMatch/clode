@@ -63,6 +63,14 @@ const VoiceInput: React.FC<VoiceInputProps> = ({
       setStatus('connecting');
       setErrorMessage('');
 
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error(
+          'Microphone access requires HTTPS. Please access via https:// or use localhost. ' +
+          'Current URL: ' + window.location.href
+        );
+      }
+
       // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
