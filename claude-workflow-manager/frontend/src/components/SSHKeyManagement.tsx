@@ -123,11 +123,13 @@ const SSHKeyManagement: React.FC<SSHKeyManagementProps> = ({ open, onClose }) =>
 
   const getKeySource = (key: SSHKeyInfo) => {
     // Use the source field from the API response
-    return key.source || 'unknown';
+    return key.source || 'generated'; // Default to 'generated' for database keys
   };
 
   const canDeleteKey = (key: SSHKeyInfo) => {
-    return getKeySource(key) === 'generated';
+    // All keys from the API are user-owned and can be deleted
+    // (the API only returns keys owned by the authenticated user)
+    return true;
   };
 
   return (
