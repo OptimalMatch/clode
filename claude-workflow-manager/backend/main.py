@@ -407,8 +407,8 @@ async def list_ssh_keys_for_user(user_id: str):
         print(f"Error listing SSH keys for user {user_id}: {e}")
         return []
 
-def test_ssh_connection(git_repo: str, key_name: str = None):
-    """Test SSH connection to a Git repository with a specific key or all keys"""
+async def test_ssh_connection(git_repo: str, user_id: str, key_name: str = None):
+    """Test SSH connection to a Git repository with a specific key or all user's keys"""
     try:
         # Extract hostname from Git URL
         if git_repo.startswith('git@'):
@@ -424,32 +424,35 @@ def test_ssh_connection(git_repo: str, key_name: str = None):
         cmd = ['ssh', '-T', f'git@{hostname}', '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=10']
         
         if key_name:
-            # Test specific key only
-            key_found = False
-            clean_key_name = key_name.replace(" (generated)", "").replace(" (mounted)", "")
+            # Test specific key only - look it up in the database
+            ssh_key = await db.get_ssh_key_by_name(key_name, user_id)
             
-            # Check in generated keys directory first
-            ssh_key_dir = get_ssh_key_directory()
-            generated_key_path = ssh_key_dir / clean_key_name
-            if generated_key_path.exists() and generated_key_path.is_file():
-                cmd.extend(['-i', str(generated_key_path)])
-                key_found = True
-
+            if not ssh_key:
+                return False, f"SSH key '{key_name}' not found or not owned by you"
             
-            if not key_found:
-                return False, f"SSH key '{clean_key_name}' not found"
+            # Use the private key path from the database
+            private_key_path = Path(ssh_key.private_key_path)
+            if not private_key_path.exists():
+                return False, f"SSH key file not found: {ssh_key.private_key_path}"
             
+            cmd.extend(['-i', str(private_key_path)])
             # Force SSH to only use this specific key
             cmd.extend(['-o', 'IdentitiesOnly=yes'])
             
+            # Update last_used timestamp
+            await db.update_ssh_key_last_used(ssh_key.id, user_id)
         else:
-            # Test with all available keys (original behavior)
-            ssh_key_dir = get_ssh_key_directory()
+            # Test with all user's keys
+            user_keys = await db.get_ssh_keys_by_user(user_id)
             
-            # Add generated SSH keys
-            for key_file in ssh_key_dir.glob('*'):
-                if key_file.is_file() and not key_file.name.endswith('.pub'):
-                    cmd.extend(['-i', str(key_file)])
+            if not user_keys:
+                return False, "No SSH keys found for your account"
+            
+            # Add all user's SSH keys
+            for ssh_key in user_keys:
+                private_key_path = Path(ssh_key.private_key_path)
+                if private_key_path.exists() and private_key_path.is_file():
+                    cmd.extend(['-i', str(private_key_path)])
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         
@@ -458,7 +461,7 @@ def test_ssh_connection(git_repo: str, key_name: str = None):
             if 'successfully authenticated' in result.stderr:
                 return True, "SSH authentication successful"
             elif 'Permission denied' in result.stderr:
-                return False, "SSH key not authorized or not found"
+                return False, "SSH key not authorized or not found on GitHub"
             else:
                 return False, f"SSH connection failed: {result.stderr}"
         else:
@@ -2628,23 +2631,29 @@ async def delete_ssh_key(
     "/api/ssh/test-connection",
     response_model=dict,
     summary="Test SSH Connection",
-    description="Test SSH connection to a Git repository.",
+    description="Test SSH connection to a Git repository using authenticated user's keys.",
     tags=["SSH Key Management"],
     responses={
         200: {"description": "Connection test result"},
-        400: {"model": ErrorResponse, "description": "Invalid repository URL or SSH connection failed"}
+        400: {"model": ErrorResponse, "description": "Invalid repository URL or SSH connection failed"},
+        401: {"model": ErrorResponse, "description": "Authentication required"}
     }
 )
-async def test_ssh_git_connection(request: GitConnectionTestRequest):
+async def test_ssh_git_connection(
+    request: GitConnectionTestRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
-    Test SSH connection to a Git repository.
+    Test SSH connection to a Git repository using your SSH keys.
     
-    Tests whether the current SSH configuration can successfully authenticate
-    with the specified Git repository.
+    Tests whether your SSH keys can successfully authenticate with the specified
+    Git repository. Only tests keys owned by you.
     
     - **git_repo**: Git repository URL (must be SSH format)
     - **use_ssh_agent**: Whether to use SSH agent for authentication
-    - **key_name**: Optional specific SSH key name to test (tests all keys if not provided)
+    - **key_name**: Optional specific SSH key name to test (tests all your keys if not provided)
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
     """
     git_repo = request.git_repo.strip()
     
@@ -2659,7 +2668,7 @@ async def test_ssh_git_connection(request: GitConnectionTestRequest):
         )
     
     try:
-        success, message = test_ssh_connection(git_repo, request.key_name)
+        success, message = await test_ssh_connection(git_repo, current_user.id, request.key_name)
         
         return {
             "success": success,
