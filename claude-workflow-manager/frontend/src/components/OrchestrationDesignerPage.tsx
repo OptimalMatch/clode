@@ -2150,17 +2150,58 @@ Format your response as JSON:
           // Calculate midpoint on the curve for delete button
           const midX = (sourceX + controlPoint1X + controlPoint2X + targetX) / 4;
           const midY = (sourceY + controlPoint1Y + controlPoint2Y + targetY) / 4;
-
+          
           return (
             <g key={conn.id}>
+              {/* Base path - static line */}
               <path
                 d={pathData}
                 stroke={lineColor}
                 strokeWidth={lineWidth}
                 strokeDasharray={conn.type === 'agent' ? '8,4' : 'none'}
                 fill="none"
+                opacity={0.4}
                 markerEnd={conn.type === 'agent' ? 'url(#arrowhead-agent)' : 'url(#arrowhead)'}
               />
+              
+              {/* Animated flowing path overlay */}
+              <path
+                d={pathData}
+                stroke={conn.type === 'agent' 
+                  ? (darkMode ? '#90caf9' : '#1976d2') 
+                  : (darkMode ? '#aaa' : '#888')}
+                strokeWidth={lineWidth}
+                strokeDasharray="10 10"
+                fill="none"
+                strokeLinecap="round"
+                opacity={0.8}
+              >
+                <animate
+                  attributeName="stroke-dashoffset"
+                  from="0"
+                  to="-20"
+                  dur="1s"
+                  repeatCount="indefinite"
+                />
+              </path>
+              
+              {/* Pulsing particles moving along the path */}
+              <circle r={lineWidth + 1} fill={conn.type === 'agent' 
+                ? (darkMode ? '#90caf9' : '#1976d2') 
+                : (darkMode ? '#fff' : '#888')}>
+                <animateMotion
+                  dur="2s"
+                  repeatCount="indefinite"
+                  path={pathData}
+                />
+                <animate
+                  attributeName="opacity"
+                  values="0.2;1;0.2"
+                  dur="2s"
+                  repeatCount="indefinite"
+                />
+              </circle>
+              
               {/* Delete button with connection type indicator - positioned on the curve */}
               <g style={{ cursor: 'pointer', pointerEvents: 'all' }} onClick={() => deleteConnection(conn.id)}>
                 <circle
