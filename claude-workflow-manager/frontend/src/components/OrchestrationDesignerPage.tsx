@@ -2077,7 +2077,7 @@ Format your response as JSON:
           if (!sourceBlock || !targetBlock) return null;
 
           // Calculate connection points based on type
-          let sourceX, sourceY, targetX, targetY;
+          let sourceX, sourceY, targetX, targetY, sourceEdge, targetEdge;
           
           if (conn.type === 'agent' && conn.sourceAgent) {
             // Agent-level connection - connect from specific agent
@@ -2085,11 +2085,13 @@ Format your response as JSON:
             const agentOffsetY = 120 + (agentIndex * 35); // Approximate agent position in block
             sourceX = sourceBlock.position.x * zoom + panOffset.x + 300; // Right edge of block
             sourceY = sourceBlock.position.y * zoom + panOffset.y + agentOffsetY;
+            sourceEdge = 'right';
           } else {
             // Block-level connection - calculate edge-to-edge connection points
             const edgePoints = calculateEdgeConnectionPoints(sourceBlock, targetBlock);
             sourceX = edgePoints.sourceX * zoom + panOffset.x;
             sourceY = edgePoints.sourceY * zoom + panOffset.y;
+            sourceEdge = edgePoints.sourceEdge;
           }
 
           if (conn.type === 'agent' && conn.targetAgent) {
@@ -2098,17 +2100,20 @@ Format your response as JSON:
             const agentOffsetY = 120 + (agentIndex * 35);
             targetX = targetBlock.position.x * zoom + panOffset.x; // Left edge of block
             targetY = targetBlock.position.y * zoom + panOffset.y + agentOffsetY;
+            targetEdge = 'left';
           } else {
             // Block-level connection - use calculated edge points
             if (conn.type !== 'agent') {
               const edgePoints = calculateEdgeConnectionPoints(sourceBlock, targetBlock);
               targetX = edgePoints.targetX * zoom + panOffset.x;
               targetY = edgePoints.targetY * zoom + panOffset.y;
+              targetEdge = edgePoints.targetEdge;
             } else {
               // Agent connection but no target agent - use edge calculation for target
               const edgePoints = calculateEdgeConnectionPoints(sourceBlock, targetBlock);
               targetX = edgePoints.targetX * zoom + panOffset.x;
               targetY = edgePoints.targetY * zoom + panOffset.y;
+              targetEdge = edgePoints.targetEdge;
             }
           }
 
@@ -2123,26 +2128,56 @@ Format your response as JSON:
           const dx = targetX - sourceX;
           const dy = targetY - sourceY;
           
-          // Control points for smooth curves
-          // Adjust curve based on direction (vertical vs horizontal flow)
-          const isVertical = Math.abs(dy) > Math.abs(dx);
+          // Calculate control points to exit/enter perpendicular to edges
+          // Use a fixed offset distance for perpendicular exit/entry
+          const curveDistance = 80; // Distance to travel perpendicular before curving
           
           let controlPoint1X, controlPoint1Y, controlPoint2X, controlPoint2Y;
           
-          if (isVertical) {
-            // Vertical flow - curve smoothly downward/upward
-            const curveOffset = Math.abs(dy) * 0.4;
-            controlPoint1X = sourceX;
-            controlPoint1Y = sourceY + curveOffset;
-            controlPoint2X = targetX;
-            controlPoint2Y = targetY - curveOffset;
-          } else {
-            // Horizontal flow - curve smoothly left/right
-            const curveOffset = Math.abs(dx) * 0.4;
-            controlPoint1X = sourceX + curveOffset;
-            controlPoint1Y = sourceY;
-            controlPoint2X = targetX - curveOffset;
-            controlPoint2Y = targetY;
+          // Source control point - perpendicular to source edge
+          switch (sourceEdge) {
+            case 'right':
+              controlPoint1X = sourceX + curveDistance;
+              controlPoint1Y = sourceY;
+              break;
+            case 'left':
+              controlPoint1X = sourceX - curveDistance;
+              controlPoint1Y = sourceY;
+              break;
+            case 'top':
+              controlPoint1X = sourceX;
+              controlPoint1Y = sourceY - curveDistance;
+              break;
+            case 'bottom':
+              controlPoint1X = sourceX;
+              controlPoint1Y = sourceY + curveDistance;
+              break;
+            default:
+              controlPoint1X = sourceX + curveDistance;
+              controlPoint1Y = sourceY;
+          }
+          
+          // Target control point - perpendicular to target edge
+          switch (targetEdge) {
+            case 'right':
+              controlPoint2X = targetX + curveDistance;
+              controlPoint2Y = targetY;
+              break;
+            case 'left':
+              controlPoint2X = targetX - curveDistance;
+              controlPoint2Y = targetY;
+              break;
+            case 'top':
+              controlPoint2X = targetX;
+              controlPoint2Y = targetY - curveDistance;
+              break;
+            case 'bottom':
+              controlPoint2X = targetX;
+              controlPoint2Y = targetY + curveDistance;
+              break;
+            default:
+              controlPoint2X = targetX - curveDistance;
+              controlPoint2Y = targetY;
           }
           
           const pathData = `M ${sourceX} ${sourceY} C ${controlPoint1X} ${controlPoint1Y}, ${controlPoint2X} ${controlPoint2Y}, ${targetX} ${targetY}`;
