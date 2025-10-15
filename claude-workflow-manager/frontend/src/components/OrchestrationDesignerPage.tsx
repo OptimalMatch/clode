@@ -2196,7 +2196,6 @@ Format your response as JSON:
                 strokeDasharray={conn.type === 'agent' ? '8,4' : 'none'}
                 fill="none"
                 opacity={0.4}
-                markerEnd={conn.type === 'agent' ? 'url(#arrowhead-agent)' : 'url(#arrowhead)'}
               />
               
               {/* Animated flowing path overlay */}
@@ -2276,31 +2275,6 @@ Format your response as JSON:
         
         {/* Render connection handles (squares on block edges) */}
         {renderConnectionHandles()}
-        
-        <defs>
-          {/* Block-level arrowhead */}
-          <marker
-            id="arrowhead"
-            markerWidth="10"
-            markerHeight="10"
-            refX="9"
-            refY="3"
-            orient="auto"
-          >
-            <polygon points="0 0, 10 3, 0 6" fill={darkMode ? "#888" : "#666"} />
-          </marker>
-          {/* Agent-level arrowhead */}
-          <marker
-            id="arrowhead-agent"
-            markerWidth="10"
-            markerHeight="10"
-            refX="9"
-            refY="3"
-            orient="auto"
-          >
-            <polygon points="0 0, 10 3, 0 6" fill={darkMode ? '#90caf9' : '#1976d2'} />
-          </marker>
-        </defs>
       </svg>
     );
   };
