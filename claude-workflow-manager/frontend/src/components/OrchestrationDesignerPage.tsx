@@ -1867,6 +1867,195 @@ Format your response as JSON:
     });
   };
 
+  // Constants for block dimensions
+  const BLOCK_WIDTH = 300;
+  const BLOCK_HEIGHT = 200; // Approximate average height
+  const CONNECTION_HANDLE_SIZE = 8;
+
+  // Helper function to calculate edge connection points based on relative positions
+  const calculateEdgeConnectionPoints = (sourceBlock: any, targetBlock: any) => {
+    // Calculate block centers (unzoomed)
+    const sourceCenterX = sourceBlock.position.x + BLOCK_WIDTH / 2;
+    const sourceCenterY = sourceBlock.position.y + BLOCK_HEIGHT / 2;
+    const targetCenterX = targetBlock.position.x + BLOCK_WIDTH / 2;
+    const targetCenterY = targetBlock.position.y + BLOCK_HEIGHT / 2;
+    
+    // Calculate angle between centers
+    const dx = targetCenterX - sourceCenterX;
+    const dy = targetCenterY - sourceCenterY;
+    const angle = Math.atan2(dy, dx);
+    
+    // Determine which edge to use based on angle
+    // Source edge (where line exits)
+    let sourceEdgeX, sourceEdgeY, sourceEdge;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Horizontal dominance
+      if (dx > 0) {
+        // Target is to the right - use right edge
+        sourceEdgeX = sourceBlock.position.x + BLOCK_WIDTH;
+        sourceEdgeY = sourceCenterY;
+        sourceEdge = 'right';
+      } else {
+        // Target is to the left - use left edge
+        sourceEdgeX = sourceBlock.position.x;
+        sourceEdgeY = sourceCenterY;
+        sourceEdge = 'left';
+      }
+    } else {
+      // Vertical dominance
+      if (dy > 0) {
+        // Target is below - use bottom edge
+        sourceEdgeX = sourceCenterX;
+        sourceEdgeY = sourceBlock.position.y + BLOCK_HEIGHT;
+        sourceEdge = 'bottom';
+      } else {
+        // Target is above - use top edge
+        sourceEdgeX = sourceCenterX;
+        sourceEdgeY = sourceBlock.position.y;
+        sourceEdge = 'top';
+      }
+    }
+    
+    // Target edge (where line enters)
+    let targetEdgeX, targetEdgeY, targetEdge;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Horizontal dominance
+      if (dx > 0) {
+        // Source is to the left - use left edge
+        targetEdgeX = targetBlock.position.x;
+        targetEdgeY = targetCenterY;
+        targetEdge = 'left';
+      } else {
+        // Source is to the right - use right edge
+        targetEdgeX = targetBlock.position.x + BLOCK_WIDTH;
+        targetEdgeY = targetCenterY;
+        targetEdge = 'right';
+      }
+    } else {
+      // Vertical dominance
+      if (dy > 0) {
+        // Source is above - use top edge
+        targetEdgeX = targetCenterX;
+        targetEdgeY = targetBlock.position.y;
+        targetEdge = 'top';
+      } else {
+        // Source is below - use bottom edge
+        targetEdgeX = targetCenterX;
+        targetEdgeY = targetBlock.position.y + BLOCK_HEIGHT;
+        targetEdge = 'bottom';
+      }
+    }
+    
+    return {
+      sourceX: sourceEdgeX,
+      sourceY: sourceEdgeY,
+      sourceEdge,
+      targetX: targetEdgeX,
+      targetY: targetEdgeY,
+      targetEdge
+    };
+  };
+
+  // Render connection handles on block edges
+  const renderConnectionHandles = () => {
+    const handles: any[] = [];
+    
+    blocks.forEach(block => {
+      const blockX = block.position.x * zoom + panOffset.x;
+      const blockY = block.position.y * zoom + panOffset.y;
+      const scaledWidth = BLOCK_WIDTH * zoom;
+      const scaledHeight = BLOCK_HEIGHT * zoom;
+      
+      // For block-level connections, show handles on all 4 edges (center of each edge)
+      const blockHandles = [
+        { x: blockX + scaledWidth / 2, y: blockY, edge: 'top' },
+        { x: blockX + scaledWidth, y: blockY + scaledHeight / 2, edge: 'right' },
+        { x: blockX + scaledWidth / 2, y: blockY + scaledHeight, edge: 'bottom' },
+        { x: blockX, y: blockY + scaledHeight / 2, edge: 'left' },
+      ];
+      
+      blockHandles.forEach((handle, idx) => {
+        // Check if this handle is used by any connection
+        const isUsed = connections.some(conn => {
+          if (conn.type !== 'block') return false;
+          const sourceBlock = blocks.find(b => b.id === conn.source);
+          const targetBlock = blocks.find(b => b.id === conn.target);
+          if (!sourceBlock || !targetBlock) return false;
+          
+          const edgePoints = calculateEdgeConnectionPoints(sourceBlock, targetBlock);
+          const isSource = conn.source === block.id && edgePoints.sourceEdge === handle.edge;
+          const isTarget = conn.target === block.id && edgePoints.targetEdge === handle.edge;
+          return isSource || isTarget;
+        });
+        
+        handles.push(
+          <rect
+            key={`block-handle-${block.id}-${idx}`}
+            x={handle.x - CONNECTION_HANDLE_SIZE / 2}
+            y={handle.y - CONNECTION_HANDLE_SIZE / 2}
+            width={CONNECTION_HANDLE_SIZE}
+            height={CONNECTION_HANDLE_SIZE}
+            fill={isUsed ? (darkMode ? '#888' : '#666') : (darkMode ? '#444' : '#ccc')}
+            stroke={darkMode ? '#666' : '#999'}
+            strokeWidth={1}
+            opacity={isUsed ? 0.9 : 0.4}
+            style={{ pointerEvents: 'none' }}
+          />
+        );
+      });
+      
+      // For agent-level connections, show handles aligned with each agent
+      if (connectionMode === 'advanced') {
+        block.data.agents.forEach((agent: any, index: number) => {
+          const agentOffsetY = 120 + (index * 35);
+          const agentY = blockY + agentOffsetY;
+          
+          // Left edge handle (input)
+          const leftHandleUsed = connections.some(conn => 
+            conn.type === 'agent' && conn.target === block.id && conn.targetAgent === agent.id
+          );
+          
+          handles.push(
+            <rect
+              key={`agent-handle-left-${block.id}-${agent.id}`}
+              x={blockX - CONNECTION_HANDLE_SIZE / 2}
+              y={agentY - CONNECTION_HANDLE_SIZE / 2}
+              width={CONNECTION_HANDLE_SIZE}
+              height={CONNECTION_HANDLE_SIZE}
+              fill={leftHandleUsed ? (darkMode ? '#90caf9' : '#1976d2') : (darkMode ? '#555' : '#aaa')}
+              stroke={darkMode ? '#90caf9' : '#1976d2'}
+              strokeWidth={1}
+              opacity={leftHandleUsed ? 0.9 : 0.3}
+              style={{ pointerEvents: 'none' }}
+            />
+          );
+          
+          // Right edge handle (output)
+          const rightHandleUsed = connections.some(conn => 
+            conn.type === 'agent' && conn.source === block.id && conn.sourceAgent === agent.id
+          );
+          
+          handles.push(
+            <rect
+              key={`agent-handle-right-${block.id}-${agent.id}`}
+              x={blockX + scaledWidth - CONNECTION_HANDLE_SIZE / 2}
+              y={agentY - CONNECTION_HANDLE_SIZE / 2}
+              width={CONNECTION_HANDLE_SIZE}
+              height={CONNECTION_HANDLE_SIZE}
+              fill={rightHandleUsed ? (darkMode ? '#90caf9' : '#1976d2') : (darkMode ? '#555' : '#aaa')}
+              stroke={darkMode ? '#90caf9' : '#1976d2'}
+              strokeWidth={1}
+              opacity={rightHandleUsed ? 0.9 : 0.3}
+              style={{ pointerEvents: 'none' }}
+            />
+          );
+        });
+      }
+    });
+    
+    return handles;
+  };
+
   // Render connections as SVG curved paths
   const renderConnections = () => {
     return (
@@ -1897,9 +2086,10 @@ Format your response as JSON:
             sourceX = sourceBlock.position.x * zoom + panOffset.x + 300; // Right edge of block
             sourceY = sourceBlock.position.y * zoom + panOffset.y + agentOffsetY;
           } else {
-            // Block-level connection - connect from bottom center
-            sourceX = sourceBlock.position.x * zoom + panOffset.x + 150;
-            sourceY = sourceBlock.position.y * zoom + panOffset.y + 80;
+            // Block-level connection - calculate edge-to-edge connection points
+            const edgePoints = calculateEdgeConnectionPoints(sourceBlock, targetBlock);
+            sourceX = edgePoints.sourceX * zoom + panOffset.x;
+            sourceY = edgePoints.sourceY * zoom + panOffset.y;
           }
 
           if (conn.type === 'agent' && conn.targetAgent) {
@@ -1909,9 +2099,17 @@ Format your response as JSON:
             targetX = targetBlock.position.x * zoom + panOffset.x; // Left edge of block
             targetY = targetBlock.position.y * zoom + panOffset.y + agentOffsetY;
           } else {
-            // Block-level connection - connect to top center
-            targetX = targetBlock.position.x * zoom + panOffset.x + 150;
-            targetY = targetBlock.position.y * zoom + panOffset.y + 20;
+            // Block-level connection - use calculated edge points
+            if (conn.type !== 'agent') {
+              const edgePoints = calculateEdgeConnectionPoints(sourceBlock, targetBlock);
+              targetX = edgePoints.targetX * zoom + panOffset.x;
+              targetY = edgePoints.targetY * zoom + panOffset.y;
+            } else {
+              // Agent connection but no target agent - use edge calculation for target
+              const edgePoints = calculateEdgeConnectionPoints(sourceBlock, targetBlock);
+              targetX = edgePoints.targetX * zoom + panOffset.x;
+              targetY = edgePoints.targetY * zoom + panOffset.y;
+            }
           }
 
           // Different colors for different connection types
@@ -1999,6 +2197,10 @@ Format your response as JSON:
             </g>
           );
         })}
+        
+        {/* Render connection handles (squares on block edges) */}
+        {renderConnectionHandles()}
+        
         <defs>
           {/* Block-level arrowhead */}
           <marker
