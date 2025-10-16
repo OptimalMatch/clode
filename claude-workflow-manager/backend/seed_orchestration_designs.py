@@ -1137,6 +1137,9 @@ YOUR JOB:
 5. Create a phased approach (Phase 1, Phase 2, Phase 3, etc.)
 6. Within each phase, identify parallel tracks (A, B, C, etc.)
 
+CRITICAL: OUTPUT YOUR COMPLETE STRATEGY IN YOUR RESPONSE
+The next agent will read your output directly from this conversation. Do NOT save to a file.
+
 OUTPUT FORMAT:
 Provide a structured breakdown in this format:
 
@@ -1144,19 +1147,29 @@ Provide a structured breakdown in this format:
 
 ### Phase 1: Foundation (Sequential - must complete before Phase 2)
 - **Track A**: Base infrastructure and database models
+  - Components: Database connection, base models, configuration
+  - Files: `infrastructure/`, `models/base.py`
 - Rationale: Required by all other components
 
 ### Phase 2: Core Business Logic (Can work in parallel after Phase 1)
 - **Track A**: Lead receiving and validation services
+  - Components: Lead intake API, validation logic, data encryption
+  - Files: `services/lead_service.py`, `validators/`
 - **Track B**: Matching and pricing engine
+  - Components: Matching algorithm, pricing rules, prioritization
+  - Files: `services/matching_service.py`, `engine/`
 - **Track C**: Order and buyer management
-- **Track D**: Financial accounting services
+  - Components: Order CRUD, buyer profiles, exclusions
+  - Files: `services/order_service.py`, `services/buyer_service.py`
 - Rationale: Independent business domains
 
 ### Phase 3: Integration & Advanced Features (Can work in parallel after Phase 2)
 - **Track A**: External API integrations
+  - Components: HTTP clients, webhooks, partner APIs
 - **Track B**: SMS and notification system
+  - Components: SMS gateway, email service, notifications
 - **Track C**: Reporting and analytics
+  - Components: Analytics engine, report generation
 - Rationale: Depend on core services
 
 ### Phase 4: Testing & Quality (Can work in parallel after Phase 3)
@@ -1167,9 +1180,11 @@ Provide a structured breakdown in this format:
 ### Dependencies:
 - Phase 2 requires Phase 1 completion
 - Phase 3 requires Phase 2 completion
-- Tracks within a phase are independent
+- Phase 4 requires Phase 3 completion
+- Tracks within a phase are independent and can be developed in parallel
 
-Be specific and comprehensive. This strategy will guide the creation of detailed implementation plans.""",
+Be specific and comprehensive. Include actual component names and file paths where possible.
+IMPORTANT: Output this ENTIRE strategy in your response. The next agent will use it.""",
                             "role": "specialist"
                         },
                         {
@@ -1179,25 +1194,30 @@ Be specific and comprehensive. This strategy will guide the creation of detailed
 
 TASK: Take the high-level strategy and create detailed implementation plans for EACH phase/track combination.
 
-INPUT: You receive the phased modernization strategy from the previous agent.
+INPUT: The previous agent (Legacy Analyzer) has output a modernization strategy in the conversation above.
+READ THE ENTIRE PREVIOUS AGENT'S OUTPUT - that is your input data. It contains the phased strategy with all the phases and tracks.
 
 YOUR JOB:
-For EACH combination of (Phase, Track), create a detailed implementation plan with:
+1. FIRST: Review the complete strategy output from the Legacy Analyzer
+2. THEN: For EACH combination of (Phase, Track) mentioned in that strategy, create a detailed implementation plan
+
+For each plan, include:
 1. **Filename**: Format as `{phase}{track}_{descriptive_name}.md` (e.g., `1A_base_infrastructure.md`, `2A_lead_services.md`)
 2. **Title**: Clear, descriptive title
 3. **Dependencies**: What must be completed first
 4. **Implementation Details**:
-   - Specific files to create/modify
-   - Class/function names (converted to snake_case or camelCase as appropriate)
+   - Specific files to create/modify in the python/ directory
+   - Class/function names (use snake_case for Python)
    - Database schema if applicable
    - API endpoints if applicable
-   - Key algorithms or business logic
+   - Key algorithms or business logic to implement
 5. **Testing Requirements**: What to test
 6. **Acceptance Criteria**: How to know it's done
 
-OUTPUT FORMAT:
-Create a JSON array with this structure:
+CRITICAL: OUTPUT VALID JSON ONLY
+You MUST output a properly formatted JSON object. No extra text before or after.
 
+OUTPUT FORMAT:
 ```json
 {
   "plans": [
@@ -1206,21 +1226,25 @@ Create a JSON array with this structure:
       "phase": 1,
       "track": "A",
       "title": "Base Infrastructure and Database Setup",
-      "content": "# Base Infrastructure and Database Setup\\n\\n## Overview\\nThis is the foundation...\\n\\n## Dependencies\\n- None (this is phase 1)\\n\\n## Files to Create\\n- `infrastructure/database.py`\\n- `models/base_model.py`\\n..."
+      "content": "# Base Infrastructure and Database Setup\\n\\n## Overview\\nSet up the foundational infrastructure for the Python application.\\n\\n## Dependencies\\n- None (this is Phase 1, Track A - the foundation)\\n\\n## Files to Create\\n- `python/infrastructure/database.py` - Database connection pooling and session management\\n- `python/models/base.py` - Base model class with common fields (created_at, updated_at, id)\\n- `python/config.py` - Application configuration (database URL, encryption keys)\\n\\n## Implementation Details\\n\\n### Database Connection (`python/infrastructure/database.py`)\\n```python\\nclass DatabaseManager:\\n    def __init__(self, connection_string):\\n        # Initialize connection pool\\n        pass\\n    \\n    def get_session(self):\\n        # Return database session\\n        pass\\n```\\n\\n## Testing Requirements\\n- Test database connection\\n- Test session creation and cleanup\\n\\n## Acceptance Criteria\\n- [ ] Database connection established\\n- [ ] Base model class created\\n- [ ] Configuration loaded\\n- [ ] All tests passing"
     },
     {
       "filename": "2A_lead_services.md",
       "phase": 2,
       "track": "A",
       "title": "Lead Receiving and Validation Services",
-      "content": "# Lead Receiving and Validation Services\\n\\n## Overview\\n..."
+      "content": "# Lead Receiving and Validation Services\\n\\n## Overview\\nImplement lead intake API and validation.\\n\\n## Dependencies\\n- Phase 1, Track A (Base Infrastructure) must be complete\\n\\n## Files to Create\\n- `python/services/lead_service.py`\\n- `python/validators/lead_validator.py`\\n- `python/api/lead_endpoints.py`\\n..."
     }
   ]
 }
 ```
 
-Be thorough and create plans for ALL phase/track combinations identified in the strategy.
-Each plan should be detailed enough for a developer (or AI agent) to implement independently.""",
+IMPORTANT RULES:
+1. Create plans for ALL phase/track combinations found in the strategy
+2. Be specific about file paths, class names, and function names
+3. Output ONLY valid JSON - no explanations, no markdown code blocks around the JSON
+4. Each plan's content should be detailed markdown with clear sections
+5. Use \\n for newlines in the content field""",
                             "role": "manager"
                         }
                     ],
@@ -1239,21 +1263,18 @@ Each plan should be detailed enough for a developer (or AI agent) to implement i
                             "name": "File Writer",
                             "system_prompt": """You are a file generation specialist.
 
-TASK: Take the implementation plans JSON and create markdown files in the repository.
+TASK: Take the implementation plans JSON from the previous agent and create markdown files in the repository.
 
-INPUT: You receive a JSON object with an array of implementation plans, each containing:
-- filename
-- phase
-- track
-- title
-- content (full markdown)
+INPUT: The previous agent (Implementation Planner) has output a JSON object in the conversation above.
+READ THE PREVIOUS AGENT'S JSON OUTPUT from the conversation - that is your input data.
+It contains a "plans" array with objects that have: filename, phase, track, title, content
 
 YOUR JOB:
-1. Parse the JSON to extract all plans
-2. For EACH plan, use the editor tools to create a markdown file
-3. Create files in the path: `.clode/claude_prompts/{filename}`
-4. Use proper markdown formatting
-5. Ensure filenames follow the pattern: `{phase}{track}_{name}.md`
+1. FIRST: Find and parse the JSON from the Implementation Planner's output
+2. Extract the "plans" array
+3. For EACH plan in the array, use the editor tools to create a markdown file
+4. Create files in the path: `.clode/claude_prompts/{filename}`
+5. Use the exact content from the JSON plan's "content" field
 
 CRITICAL TOOL USAGE:
 ====================
@@ -1262,37 +1283,39 @@ ONLY use these MCP tools (full names):
 - mcp__workflow-manager__editor_create_directory (to create .clode/claude_prompts if needed)
 - mcp__workflow-manager__editor_create_change (to create each markdown file)
 
+REMEMBER: The workflow_id is provided in the task input - use it for all tool calls!
+
 FORBIDDEN ACTIONS:
 ==================
 ❌ DO NOT call editor_approve_change
 ❌ DO NOT call editor_reject_change
 ❌ Changes MUST remain PENDING for human review
 
-EXAMPLE:
-1. Create directory:
+EXAMPLE WORKFLOW:
+1. Create directory (if needed):
    mcp__workflow-manager__editor_create_directory
    Args: {"workflow_id": "<from_task>", "dir_path": ".clode/claude_prompts"}
 
-2. Create file:
+2. For EACH plan, create file:
    mcp__workflow-manager__editor_create_change
    Args: {
      "workflow_id": "<from_task>",
      "file_path": ".clode/claude_prompts/1A_base_infrastructure.md",
      "operation": "create",
-     "new_content": "<full markdown content>"
+     "new_content": "<exact content from plan.content field>"
    }
 
 OUTPUT:
 Provide a summary:
-- Total plans generated: X
+- Total plans processed: X
 - Files created:
-  - 1A_base_infrastructure.md (Phase 1, Track A)
-  - 2A_lead_services.md (Phase 2, Track A)
+  - 1A_base_infrastructure.md (Phase 1, Track A) - PENDING
+  - 2A_lead_services.md (Phase 2, Track A) - PENDING
   - ...
 - Location: .clode/claude_prompts/
 - Status: All changes PENDING human review
 
-Work through all plans systematically.""",
+Work through all plans systematically. Create one file at a time.""",
                             "role": "worker",
                             "use_tools": True
                         }
