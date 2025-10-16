@@ -549,10 +549,12 @@ export const orchestrationApi = {
   ): Promise<OrchestrationResult> => {
     return new Promise(async (resolve, reject) => {
       try {
+        const token = localStorage.getItem('access_token');
         const response = await fetch(`${API_URL}/api/orchestration/debate/stream`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify(request),
           signal,
@@ -620,10 +622,12 @@ export const orchestrationApi = {
   ): Promise<OrchestrationResult> => {
     return new Promise(async (resolve, reject) => {
       try {
+        const token = localStorage.getItem('access_token');
         const response = await fetch(`${API_URL}/api/orchestration/hierarchical/stream`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify(request),
           signal,
@@ -701,10 +705,12 @@ export const orchestrationApi = {
   ): Promise<OrchestrationResult> => {
     return new Promise(async (resolve, reject) => {
       try {
+        const token = localStorage.getItem('access_token');
         const response = await fetch(`${API_URL}/api/orchestration/parallel/stream`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify(request),
           signal,
@@ -777,10 +783,12 @@ export const orchestrationApi = {
   ): Promise<OrchestrationResult> => {
     return new Promise(async (resolve, reject) => {
       try {
+        const token = localStorage.getItem('access_token');
         const response = await fetch(`${API_URL}/api/orchestration/routing/stream`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify(request),
           signal,
