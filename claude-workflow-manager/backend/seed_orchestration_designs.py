@@ -1114,7 +1114,7 @@ Work quickly and accurately. Changes remain pending for human review.""",
                 "type": "sequential",
                 "position": {"x": 50, "y": 50},
                 "data": {
-                    "label": "Analysis & Planning",
+                    "label": "Analysis, Planning & File Generation",
                     "agents": [
                         {
                             "id": "agent-1",
@@ -1246,18 +1246,7 @@ IMPORTANT RULES:
 4. Each plan's content should be detailed markdown with clear sections
 5. Use \\n for newlines in the content field""",
                             "role": "manager"
-                        }
-                    ],
-                    "task": "Analyze legacy application and generate implementation plans"
-                }
-            },
-            {
-                "id": "block-2",
-                "type": "sequential",
-                "position": {"x": 500, "y": 50},
-                "data": {
-                    "label": "File Generation",
-                    "agents": [
+                        },
                         {
                             "id": "agent-3",
                             "name": "File Writer",
@@ -1320,18 +1309,11 @@ Work through all plans systematically. Create one file at a time.""",
                             "use_tools": True
                         }
                     ],
-                    "task": "Generate markdown files for all implementation plans"
+                    "task": "Analyze legacy application and generate implementation plans"
                 }
             }
         ],
-        connections=[
-            {
-                "id": "conn-1",
-                "source": "block-1",
-                "target": "block-2",
-                "type": "block"
-            }
-        ],
+        connections=[],
         git_repos=[]
     )
 
