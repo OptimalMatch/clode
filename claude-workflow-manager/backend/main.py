@@ -3835,8 +3835,11 @@ async def execute_parallel_stream(
         try:
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
             
-            # Restore fresh credentials for orchestration
-            await ensure_orchestration_credentials()
+            # Only restore Max Plan credentials if user doesn't have an API key
+            user_api_key = await db.get_default_anthropic_api_key(current_user.id)
+            if not user_api_key or not user_api_key.is_active:
+                # No API key, use Max Plan
+                await ensure_orchestration_credentials()
             
             # Clone git repo if specified
             if request.git_repo:
