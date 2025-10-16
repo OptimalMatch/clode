@@ -168,11 +168,11 @@ const ClaudeAuthPage: React.FC = () => {
               </Typography>
 
               <Typography variant="subtitle2" gutterBottom sx={{ color: 'primary.main' }}>
-                4. Team Collaboration
+                4. Bring Your Own Authentication
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Multiple users can create their own profiles on the same system, enabling team-wide 
-                Claude Max Plan usage with individual account tracking and billing.
+                Each user authenticates with their own Claude Max Plan subscription or Anthropic API key, 
+                ensuring compliance with terms of service and proper individual usage tracking.
               </Typography>
             </Grid>
           </Grid>
