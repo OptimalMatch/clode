@@ -3245,8 +3245,11 @@ async def execute_sequential_pipeline(
         # Get model - uses Claude Agent SDK (works with Max Plan!)
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
-        # Restore fresh credentials for orchestration
-        await ensure_orchestration_credentials()
+        # Only restore Max Plan credentials if user doesn't have an API key
+        user_api_key = await db.get_default_anthropic_api_key(current_user.id)
+        if not user_api_key or not user_api_key.is_active:
+            # No API key, use Max Plan
+            await ensure_orchestration_credentials()
         
         # Clone git repo if specified
         if request.git_repo:
@@ -3330,8 +3333,11 @@ async def execute_debate(
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
-        # Restore fresh credentials for orchestration
-        await ensure_orchestration_credentials()
+        # Only restore Max Plan credentials if user doesn't have an API key
+        user_api_key = await db.get_default_anthropic_api_key(current_user.id)
+        if not user_api_key or not user_api_key.is_active:
+            # No API key, use Max Plan
+            await ensure_orchestration_credentials()
         
         # Clone git repo if specified
         if request.git_repo:
@@ -3417,7 +3423,12 @@ async def execute_debate_stream(
             yield f"data: {json.dumps({'type': 'start', 'pattern': 'debate', 'agents': request.participant_names, 'rounds': request.rounds})}\n\n"
             
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
-            await ensure_orchestration_credentials()
+            
+            # Only restore Max Plan credentials if user doesn't have an API key
+            user_api_key = await db.get_default_anthropic_api_key(current_user.id)
+            if not user_api_key or not user_api_key.is_active:
+                # No API key, use Max Plan
+                await ensure_orchestration_credentials()
             
             # Clone git repo if specified
             if request.git_repo:
@@ -3564,7 +3575,12 @@ async def execute_hierarchical_stream(
             yield f"data: {json.dumps({'type': 'start', 'pattern': 'hierarchical', 'agents': agent_names, 'manager': request.manager.name})}\n\n"
             
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
-            await ensure_orchestration_credentials()
+            
+            # Only restore Max Plan credentials if user doesn't have an API key
+            user_api_key = await db.get_default_anthropic_api_key(current_user.id)
+            if not user_api_key or not user_api_key.is_active:
+                # No API key, use Max Plan
+                await ensure_orchestration_credentials()
             
             # Clone git repo if specified
             if request.git_repo:
@@ -3713,8 +3729,11 @@ async def execute_hierarchical(
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
-        # Restore fresh credentials for orchestration
-        await ensure_orchestration_credentials()
+        # Only restore Max Plan credentials if user doesn't have an API key
+        user_api_key = await db.get_default_anthropic_api_key(current_user.id)
+        if not user_api_key or not user_api_key.is_active:
+            # No API key, use Max Plan
+            await ensure_orchestration_credentials()
         
         # Clone git repo if specified
         if request.git_repo:
@@ -4034,8 +4053,11 @@ async def execute_parallel_aggregate(
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
-        # Restore fresh credentials for orchestration
-        await ensure_orchestration_credentials()
+        # Only restore Max Plan credentials if user doesn't have an API key
+        user_api_key = await db.get_default_anthropic_api_key(current_user.id)
+        if not user_api_key or not user_api_key.is_active:
+            # No API key, use Max Plan
+            await ensure_orchestration_credentials()
         
         # Clone git repo if specified
         if request.git_repo:
@@ -4126,8 +4148,11 @@ async def execute_dynamic_routing(
     try:
         model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
         
-        # Restore fresh credentials for orchestration
-        await ensure_orchestration_credentials()
+        # Only restore Max Plan credentials if user doesn't have an API key
+        user_api_key = await db.get_default_anthropic_api_key(current_user.id)
+        if not user_api_key or not user_api_key.is_active:
+            # No API key, use Max Plan
+            await ensure_orchestration_credentials()
         
         # Clone git repo if specified
         if request.git_repo:
@@ -4384,7 +4409,12 @@ async def execute_sequential_pipeline_stream(
             yield f"data: {json.dumps({'type': 'start', 'pattern': 'sequential', 'agents': request.agent_sequence})}\n\n"
             
             model = request.model or await db.get_default_model() or "claude-sonnet-4-20250514"
-            await ensure_orchestration_credentials()
+            
+            # Only restore Max Plan credentials if user doesn't have an API key
+            user_api_key = await db.get_default_anthropic_api_key(current_user.id)
+            if not user_api_key or not user_api_key.is_active:
+                # No API key, use Max Plan
+                await ensure_orchestration_credentials()
             
             # Clone git repo if specified
             if request.git_repo:
@@ -4798,8 +4828,11 @@ Return ONLY the complete design JSON, no other text."""
             accumulated_text = ""
             
             try:
-                # Ensure credentials are set up
-                await ensure_orchestration_credentials()
+                # Only restore Max Plan credentials if user doesn't have an API key
+                user_api_key = await db.get_default_anthropic_api_key(current_user.id)
+                if not user_api_key or not user_api_key.is_active:
+                    # No API key, use Max Plan
+                    await ensure_orchestration_credentials()
                 
                 # Create orchestrator
                 model = await db.get_default_model() or "claude-sonnet-4-20250514"
