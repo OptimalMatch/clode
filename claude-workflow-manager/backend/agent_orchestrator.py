@@ -283,6 +283,34 @@ class MultiAgentOrchestrator:
             full_message = f"Context:\n{context}\n\nTask:\n{message}"
         
         try:
+            # Set API key in environment for Claude CLI to use
+            api_key = await self._get_api_key()
+            if api_key:
+                os.environ['ANTHROPIC_API_KEY'] = api_key
+                os.environ['CLAUDE_API_KEY'] = api_key
+                
+                # Clear any existing Claude CLI credentials to prevent conflicts
+                # Check multiple possible locations
+                possible_claude_dirs = [
+                    Path.home() / ".claude",
+                    Path("/home/claude/.claude"),
+                    Path("/root/.claude")
+                ]
+                
+                for claude_dir in possible_claude_dirs:
+                    if claude_dir.exists():
+                        credentials_file = claude_dir / "credentials.json"
+                        if credentials_file.exists():
+                            try:
+                                credentials_file.unlink()
+                                print(f"🧹 Cleared old Claude CLI credentials from {claude_dir} (using API key instead)")
+                                logger.info(f"🧹 Cleared old Claude CLI credentials from {claude_dir}")
+                            except Exception as e:
+                                logger.warning(f"Failed to clear credentials from {claude_dir}: {e}")
+                
+                print(f"🔑 Set API key in environment for Claude CLI")
+                logger.info(f"🔑 Set API key in environment for Claude CLI")
+            
             print(f"🔧 Initializing Claude query for agent {agent.name}")
             print(f"   System prompt length: {len(agent.system_prompt)} chars")
             print(f"   MCP Server: http://claude-workflow-mcp:8003/mcp (HTTP)")
