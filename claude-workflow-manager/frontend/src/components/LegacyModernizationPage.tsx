@@ -255,7 +255,7 @@ Create detailed markdown files for each phase and track combination in the .clod
 
       // Now browse the directory
       const response = await fileEditorApi.browseDirectory(selectedWorkflowId, currentPath, false);
-      setRepositoryFiles(response.data.entries || []);
+      setRepositoryFiles(response.data.items || []);
     } catch (err: any) {
       enqueueSnackbar(err.response?.data?.detail || 'Failed to browse repository files', { variant: 'error' });
       console.error('Browse error:', err);
@@ -273,7 +273,7 @@ Create detailed markdown files for each phase and track combination in the .clod
 
       try {
         const response = await fileEditorApi.browseDirectory(selectedWorkflowId, newPath, false);
-        setRepositoryFiles(response.data.entries || []);
+        setRepositoryFiles(response.data.items || []);
       } catch (err: any) {
         enqueueSnackbar('Failed to browse directory', { variant: 'error' });
       } finally {
@@ -303,7 +303,7 @@ Create detailed markdown files for each phase and track combination in the .clod
 
     try {
       const response = await fileEditorApi.browseDirectory(selectedWorkflowId, newPath, false);
-      setRepositoryFiles(response.data.entries || []);
+      setRepositoryFiles(response.data.items || []);
     } catch (err: any) {
       enqueueSnackbar('Failed to browse directory', { variant: 'error' });
     } finally {
