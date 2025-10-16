@@ -250,10 +250,14 @@ Create detailed markdown files for each phase and track combination in the .clod
     setBrowsingFiles(true);
 
     try {
+      // First initialize the file editor (handles cloning and SSH keys)
+      await fileEditorApi.initEditor(selectedWorkflowId);
+
+      // Now browse the directory
       const response = await fileEditorApi.browseDirectory(selectedWorkflowId, currentPath, false);
       setRepositoryFiles(response.data.entries || []);
     } catch (err: any) {
-      enqueueSnackbar('Failed to browse repository files', { variant: 'error' });
+      enqueueSnackbar(err.response?.data?.detail || 'Failed to browse repository files', { variant: 'error' });
       console.error('Browse error:', err);
     } finally {
       setBrowsingFiles(false);
