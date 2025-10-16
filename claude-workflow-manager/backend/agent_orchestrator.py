@@ -290,23 +290,28 @@ class MultiAgentOrchestrator:
                 os.environ['CLAUDE_API_KEY'] = api_key
                 
                 # Clear any existing Claude CLI credentials to prevent conflicts
-                # Check multiple possible locations
+                # Only check directories we have access to (running as claude user)
                 possible_claude_dirs = [
                     Path.home() / ".claude",
-                    Path("/home/claude/.claude"),
-                    Path("/root/.claude")
+                    Path("/home/claude/.claude")
                 ]
                 
                 for claude_dir in possible_claude_dirs:
-                    if claude_dir.exists():
-                        credentials_file = claude_dir / "credentials.json"
-                        if credentials_file.exists():
-                            try:
-                                credentials_file.unlink()
-                                print(f"🧹 Cleared old Claude CLI credentials from {claude_dir} (using API key instead)")
-                                logger.info(f"🧹 Cleared old Claude CLI credentials from {claude_dir}")
-                            except Exception as e:
-                                logger.warning(f"Failed to clear credentials from {claude_dir}: {e}")
+                    try:
+                        if claude_dir.exists():
+                            credentials_file = claude_dir / "credentials.json"
+                            if credentials_file.exists():
+                                try:
+                                    credentials_file.unlink()
+                                    print(f"🧹 Cleared old Claude CLI credentials from {claude_dir} (using API key instead)")
+                                    logger.info(f"🧹 Cleared old Claude CLI credentials from {claude_dir}")
+                                except Exception as e:
+                                    logger.warning(f"Failed to clear credentials from {claude_dir}: {e}")
+                    except PermissionError:
+                        # Skip directories we don't have access to
+                        logger.debug(f"No permission to access {claude_dir}, skipping")
+                    except Exception as e:
+                        logger.debug(f"Error checking {claude_dir}: {e}")
                 
                 print(f"🔑 Set API key in environment for Claude CLI")
                 logger.info(f"🔑 Set API key in environment for Claude CLI")
