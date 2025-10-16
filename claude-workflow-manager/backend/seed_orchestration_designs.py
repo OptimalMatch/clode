@@ -17,7 +17,8 @@ SAMPLE_DESIGN_NAMES = [
     "Self-Improving Prompt Optimization",
     "Simple Code Editor",
     "Fast Code Editor",
-    "Parallel Code Editor"
+    "Parallel Code Editor",
+    "Legacy Application Modernization"
 ]
 
 async def seed_sample_designs(force=False, silent=False, db=None, only_missing=False):
@@ -1103,8 +1104,216 @@ Work quickly and accurately. Changes remain pending for human review.""",
         git_repos=[]
     )
     
+    # Design 12: Legacy Application Modernization
+    design12 = OrchestrationDesign(
+        name="Legacy Application Modernization",
+        description="AI-powered workflow to analyze legacy applications and generate phased implementation plans for modernization to new tech stacks",
+        blocks=[
+            {
+                "id": "block-1",
+                "type": "sequential",
+                "position": {"x": 50, "y": 50},
+                "data": {
+                    "label": "Analysis & Planning",
+                    "agents": [
+                        {
+                            "id": "agent-1",
+                            "name": "Legacy Analyzer",
+                            "system_prompt": """You are a legacy application analysis expert.
+
+TASK: Analyze the legacy application and create a high-level modernization strategy.
+
+INPUT: You will receive:
+1. Application specifications describing functionality
+2. Current tech stack information (e.g., J2EE, EJB, JSF)
+3. Target tech stack (e.g., Python, microservices)
+4. Any specific requirements or constraints
+
+YOUR JOB:
+1. Identify major functional areas from the specifications
+2. Determine dependencies between components
+3. Identify what must be built first (base classes, infrastructure)
+4. Group related functionality that can be worked on in parallel
+5. Create a phased approach (Phase 1, Phase 2, Phase 3, etc.)
+6. Within each phase, identify parallel tracks (A, B, C, etc.)
+
+OUTPUT FORMAT:
+Provide a structured breakdown in this format:
+
+## Modernization Strategy
+
+### Phase 1: Foundation (Sequential - must complete before Phase 2)
+- **Track A**: Base infrastructure and database models
+- Rationale: Required by all other components
+
+### Phase 2: Core Business Logic (Can work in parallel after Phase 1)
+- **Track A**: Lead receiving and validation services
+- **Track B**: Matching and pricing engine
+- **Track C**: Order and buyer management
+- **Track D**: Financial accounting services
+- Rationale: Independent business domains
+
+### Phase 3: Integration & Advanced Features (Can work in parallel after Phase 2)
+- **Track A**: External API integrations
+- **Track B**: SMS and notification system
+- **Track C**: Reporting and analytics
+- Rationale: Depend on core services
+
+### Phase 4: Testing & Quality (Can work in parallel after Phase 3)
+- **Track A**: Unit tests for all services
+- **Track B**: Integration tests
+- **Track C**: Performance and load tests
+
+### Dependencies:
+- Phase 2 requires Phase 1 completion
+- Phase 3 requires Phase 2 completion
+- Tracks within a phase are independent
+
+Be specific and comprehensive. This strategy will guide the creation of detailed implementation plans.""",
+                            "role": "specialist"
+                        },
+                        {
+                            "id": "agent-2",
+                            "name": "Implementation Planner",
+                            "system_prompt": """You are an implementation planning expert.
+
+TASK: Take the high-level strategy and create detailed implementation plans for EACH phase/track combination.
+
+INPUT: You receive the phased modernization strategy from the previous agent.
+
+YOUR JOB:
+For EACH combination of (Phase, Track), create a detailed implementation plan with:
+1. **Filename**: Format as `{phase}{track}_{descriptive_name}.md` (e.g., `1A_base_infrastructure.md`, `2A_lead_services.md`)
+2. **Title**: Clear, descriptive title
+3. **Dependencies**: What must be completed first
+4. **Implementation Details**:
+   - Specific files to create/modify
+   - Class/function names (converted to snake_case or camelCase as appropriate)
+   - Database schema if applicable
+   - API endpoints if applicable
+   - Key algorithms or business logic
+5. **Testing Requirements**: What to test
+6. **Acceptance Criteria**: How to know it's done
+
+OUTPUT FORMAT:
+Create a JSON array with this structure:
+
+```json
+{
+  "plans": [
+    {
+      "filename": "1A_base_infrastructure.md",
+      "phase": 1,
+      "track": "A",
+      "title": "Base Infrastructure and Database Setup",
+      "content": "# Base Infrastructure and Database Setup\\n\\n## Overview\\nThis is the foundation...\\n\\n## Dependencies\\n- None (this is phase 1)\\n\\n## Files to Create\\n- `infrastructure/database.py`\\n- `models/base_model.py`\\n..."
+    },
+    {
+      "filename": "2A_lead_services.md",
+      "phase": 2,
+      "track": "A",
+      "title": "Lead Receiving and Validation Services",
+      "content": "# Lead Receiving and Validation Services\\n\\n## Overview\\n..."
+    }
+  ]
+}
+```
+
+Be thorough and create plans for ALL phase/track combinations identified in the strategy.
+Each plan should be detailed enough for a developer (or AI agent) to implement independently.""",
+                            "role": "manager"
+                        }
+                    ],
+                    "task": "Analyze legacy application and generate implementation plans"
+                }
+            },
+            {
+                "id": "block-2",
+                "type": "sequential",
+                "position": {"x": 500, "y": 50},
+                "data": {
+                    "label": "File Generation",
+                    "agents": [
+                        {
+                            "id": "agent-3",
+                            "name": "File Writer",
+                            "system_prompt": """You are a file generation specialist.
+
+TASK: Take the implementation plans JSON and create markdown files in the repository.
+
+INPUT: You receive a JSON object with an array of implementation plans, each containing:
+- filename
+- phase
+- track
+- title
+- content (full markdown)
+
+YOUR JOB:
+1. Parse the JSON to extract all plans
+2. For EACH plan, use the editor tools to create a markdown file
+3. Create files in the path: `.clode/claude_prompts/{filename}`
+4. Use proper markdown formatting
+5. Ensure filenames follow the pattern: `{phase}{track}_{name}.md`
+
+CRITICAL TOOL USAGE:
+====================
+ONLY use these MCP tools (full names):
+- mcp__workflow-manager__editor_browse_directory (to check .clode folder)
+- mcp__workflow-manager__editor_create_directory (to create .clode/claude_prompts if needed)
+- mcp__workflow-manager__editor_create_change (to create each markdown file)
+
+FORBIDDEN ACTIONS:
+==================
+❌ DO NOT call editor_approve_change
+❌ DO NOT call editor_reject_change
+❌ Changes MUST remain PENDING for human review
+
+EXAMPLE:
+1. Create directory:
+   mcp__workflow-manager__editor_create_directory
+   Args: {"workflow_id": "<from_task>", "dir_path": ".clode/claude_prompts"}
+
+2. Create file:
+   mcp__workflow-manager__editor_create_change
+   Args: {
+     "workflow_id": "<from_task>",
+     "file_path": ".clode/claude_prompts/1A_base_infrastructure.md",
+     "operation": "create",
+     "new_content": "<full markdown content>"
+   }
+
+OUTPUT:
+Provide a summary:
+- Total plans generated: X
+- Files created:
+  - 1A_base_infrastructure.md (Phase 1, Track A)
+  - 2A_lead_services.md (Phase 2, Track A)
+  - ...
+- Location: .clode/claude_prompts/
+- Status: All changes PENDING human review
+
+Work through all plans systematically.""",
+                            "role": "worker",
+                            "use_tools": True
+                        }
+                    ],
+                    "task": "Generate markdown files for all implementation plans"
+                }
+            }
+        ],
+        connections=[
+            {
+                "id": "conn-1",
+                "source": "block-1",
+                "target": "block-2",
+                "type": "block"
+            }
+        ],
+        git_repos=[]
+    )
+
     # Insert all designs
-    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8, design9, design10, design11]
+    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8, design9, design10, design11, design12]
     
     # Filter to only missing designs if requested
     if only_missing:
@@ -1149,6 +1358,7 @@ Work quickly and accurately. Changes remain pending for human review.""",
         print("  9. Simple Code Editor - 2-agent design for code editing (balanced)")
         print(" 10. Fast Code Editor - Single-agent design for code editing (fastest)")
         print(" 11. Parallel Code Editor - 5-agent parallel batch execution (20+ tasks)")
+        print(" 12. Legacy Application Modernization - AI-powered legacy app modernization planner")
         print("\n💡 Next steps:")
         print("  1. Start the backend server (if not already running)")
         print("  2. Open the Orchestration Designer in the UI")

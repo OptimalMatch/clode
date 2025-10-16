@@ -28,6 +28,7 @@ import {
   AccountCircle,
   Person,
   Logout,
+  AutoAwesome,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -42,7 +43,7 @@ interface ModernLayoutProps {
   aiAssistantOpen?: boolean;
 }
 
-type PrimaryNavView = 'workflows' | 'multi-agent' | 'orchestration' | 'orchestration-designer' | 'deployments' | 'editor' | 'design' | 'prompts' | 'subagents' | 'claude-auth' | 'ssh-keys' | 'settings';
+type PrimaryNavView = 'workflows' | 'multi-agent' | 'orchestration' | 'orchestration-designer' | 'deployments' | 'editor' | 'design' | 'prompts' | 'subagents' | 'claude-auth' | 'ssh-keys' | 'settings' | 'legacy-modernization';
 
 const ModernLayout: React.FC<ModernLayoutProps> = ({ 
   children,
@@ -87,6 +88,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
     if (location.pathname.includes('/orchestration')) return 'orchestration';
     if (location.pathname.includes('/deployments')) return 'deployments';
     if (location.pathname.includes('/code-editor')) return 'editor';
+    if (location.pathname.includes('/legacy-modernization')) return 'legacy-modernization';
     if (location.pathname.includes('/design')) return 'design';
     if (location.pathname.includes('/prompts')) return 'prompts';
     if (location.pathname.includes('/subagents')) return 'subagents';
@@ -117,6 +119,9 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
         break;
       case 'editor':
         navigate('/code-editor');
+        break;
+      case 'legacy-modernization':
+        navigate('/legacy-modernization');
         break;
       case 'design':
         navigate('/design');
@@ -232,7 +237,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
             <IconButton
               size="small"
               onClick={() => handleNavClick('editor')}
-              sx={{ 
+              sx={{
                 color: primaryNavView === 'editor' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
                 '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
               }}
@@ -240,7 +245,20 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
               <Code sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
-          
+
+          <Tooltip title="Legacy Modernization">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('legacy-modernization')}
+              sx={{
+                color: primaryNavView === 'legacy-modernization' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <AutoAwesome sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+
           <Tooltip title="Design">
             <IconButton
               size="small"
