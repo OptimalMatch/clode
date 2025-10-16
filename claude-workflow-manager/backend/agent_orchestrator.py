@@ -147,19 +147,26 @@ class Agent:
 
 
 class MultiAgentOrchestrator:
-    def __init__(self, model: str = "claude-sonnet-4-20250514", cwd: Optional[str] = None):
+    def __init__(self, model: str = "claude-sonnet-4-20250514", cwd: Optional[str] = None, user_id: Optional[str] = None, db = None):
+        """
+        Initialize the orchestrator.
+        
+        Args:
+            model: Claude model to use
+            cwd: Working directory for the orchestration
+            user_id: User ID for fetching user-specific API keys
+            db: Database instance for fetching user-specific API keys
+        """
         self.model = model
         self.cwd = cwd
+        self.user_id = user_id
+        self.db = db
         self.agents: Dict[str, Agent] = {}
         self.shared_memory: List[Dict] = []
         self.message_log: List[Message] = []
         self.execution_log: List[Dict] = []
         
-        # Log authentication mode
-        if self._is_max_plan_mode():
-            logger.info("🎯 Multi-Agent Orchestrator: Max Plan mode (message-level streaming)")
-        else:
-            logger.info("⚡ Multi-Agent Orchestrator: API Key mode (token-level streaming available)")
+        # Note: Authentication mode will be determined when first API call is made
         
     def add_agent(self, name: str, system_prompt: str, role: AgentRole = AgentRole.WORKER, use_tools: bool = None) -> Agent:
         """
@@ -186,17 +193,33 @@ class MultiAgentOrchestrator:
         logger.info(f"   System prompt snippet: {system_prompt[:150]}...")
         return agent
     
-    def _get_api_key(self) -> Optional[str]:
+    async def _get_api_key(self) -> Optional[str]:
         """
-        Get Anthropic API key from environment variables.
+        Get Anthropic API key from user-specific keys or environment variables.
         Returns None if using Max Plan (which uses OAuth, not API keys).
         """
-        # Only check environment variables for API keys
+        # First try to get user-specific API key from database
+        if self.user_id and self.db:
+            try:
+                # Get the default API key for this user
+                api_key_obj = await self.db.get_default_anthropic_api_key(self.user_id)
+                if api_key_obj and api_key_obj.is_active:
+                    print(f"🔑 Using user-specific API key: {api_key_obj.key_name}")
+                    logger.info(f"🔑 Using user-specific API key: {api_key_obj.key_name}")
+                    return api_key_obj.api_key
+            except Exception as e:
+                print(f"⚠️ Failed to fetch user API key: {e}")
+                logger.warning(f"Failed to fetch user API key: {e}")
+        
+        # Fall back to environment variables for API keys
         # Max Plan uses OAuth session tokens, not API keys
         api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
+        if api_key:
+            print("🔑 Using environment variable API key")
+            logger.info("🔑 Using environment variable API key")
         return api_key
     
-    def _is_max_plan_mode(self) -> bool:
+    async def _is_max_plan_mode(self) -> bool:
         """
         Detect if we're running in Max Plan mode.
         Max Plan uses OAuth session tokens, not API keys.
@@ -205,7 +228,7 @@ class MultiAgentOrchestrator:
         use_max_plan = os.getenv("USE_CLAUDE_MAX_PLAN", "false").lower() == "true"
         
         # If no API key is set, assume Max Plan
-        has_api_key = self._get_api_key() is not None
+        has_api_key = await self._get_api_key() is not None
         
         return use_max_plan or not has_api_key
     
@@ -218,9 +241,9 @@ class MultiAgentOrchestrator:
         
         try:
             # Get API key for Anthropic SDK
-            api_key = self._get_api_key()
+            api_key = await self._get_api_key()
             if not api_key:
-                raise Exception("No API key found. Set ANTHROPIC_API_KEY or ensure Claude CLI is authenticated.")
+                raise Exception("No API key found. Add an API key in the Claude Authentication page or set ANTHROPIC_API_KEY environment variable.")
             
             # Use Anthropic SDK directly for true token-level streaming
             client = anthropic.AsyncAnthropic(api_key=api_key)

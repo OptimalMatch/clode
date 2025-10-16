@@ -581,3 +581,45 @@ class ExecutionLog(BaseModel):
     started_at: datetime
     completed_at: Optional[datetime] = None
     duration_ms: Optional[int] = None
+
+class AnthropicApiKey(BaseModel):
+    """Anthropic API key stored per user"""
+    id: Optional[str] = None
+    user_id: str  # Owner of this API key
+    key_name: str  # User-friendly name like "Personal Key", "Team Key"
+    api_key: str  # The actual API key (should be encrypted in production)
+    is_active: bool = True
+    is_default: bool = False  # Whether this is the default key for the user
+    created_at: datetime
+    updated_at: datetime
+    last_used_at: Optional[datetime] = None
+    last_test_at: Optional[datetime] = None
+    last_test_status: Optional[str] = None  # "success", "failed", "unknown"
+
+class AnthropicApiKeyCreate(BaseModel):
+    """Request model for creating an API key"""
+    key_name: str
+    api_key: str
+    is_default: bool = False
+
+class AnthropicApiKeyResponse(BaseModel):
+    """Response model for API key (with masked key)"""
+    id: str
+    key_name: str
+    api_key_preview: str  # Masked version like "sk-ant-***...xyz"
+    is_active: bool
+    is_default: bool
+    created_at: datetime
+    last_used_at: Optional[datetime] = None
+    last_test_at: Optional[datetime] = None
+    last_test_status: Optional[str] = None
+
+class AnthropicApiKeyListResponse(BaseModel):
+    """Response model for API key list"""
+    api_keys: List[AnthropicApiKeyResponse]
+
+class AnthropicApiKeyTestResponse(BaseModel):
+    """Response model for API key test"""
+    success: bool
+    message: str
+    model_tested: Optional[str] = None
