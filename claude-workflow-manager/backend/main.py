@@ -36,7 +36,9 @@ from models import (
     AgentRole, OrchestrationAgent, SequentialPipelineRequest,
     DebateRequest, HierarchicalRequest, ParallelAggregateRequest,
     DynamicRoutingRequest, OrchestrationResult, OrchestrationDesign,
-    Deployment, ExecutionLog, ScheduleConfig
+    Deployment, ExecutionLog, ScheduleConfig, AnthropicApiKey,
+    AnthropicApiKeyCreate, AnthropicApiKeyResponse, AnthropicApiKeyListResponse,
+    AnthropicApiKeyTestResponse
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -1238,6 +1240,245 @@ async def get_selected_claude_profile():
             return ClaudeProfileSelectionResponse()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get selected profile: {str(e)}")
+
+# Anthropic API Key Management Endpoints
+@app.get(
+    "/api/anthropic-api-keys",
+    response_model=AnthropicApiKeyListResponse,
+    summary="List Anthropic API Keys",
+    description="Get all Anthropic API keys for the authenticated user.",
+    tags=["Anthropic API Keys"],
+    responses={
+        200: {"description": "List of API keys"},
+        401: {"model": ErrorResponse, "description": "Authentication required"}
+    }
+)
+async def get_anthropic_api_keys(current_user: User = Depends(get_current_user)):
+    """
+    Get all Anthropic API keys for the authenticated user.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
+    """
+    try:
+        api_keys = await db.get_anthropic_api_keys(user_id=current_user.id)
+        # Mask the API keys in the response
+        safe_keys = []
+        for key in api_keys:
+            safe_key = key.dict()
+            # Mask key to show only first and last few characters
+            full_key = safe_key["api_key"]
+            if len(full_key) > 12:
+                safe_key["api_key_preview"] = f"{full_key[:8]}...{full_key[-4:]}"
+            else:
+                safe_key["api_key_preview"] = "***"
+            # Remove the full key from response
+            del safe_key["api_key"]
+            safe_keys.append(AnthropicApiKeyResponse(**safe_key))
+        return {"api_keys": safe_keys}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve API keys: {str(e)}")
+
+@app.post(
+    "/api/anthropic-api-keys",
+    response_model=IdResponse,
+    summary="Create Anthropic API Key",
+    description="Add a new Anthropic API key for the authenticated user.",
+    tags=["Anthropic API Keys"],
+    responses={
+        200: {"description": "API key created successfully"},
+        401: {"model": ErrorResponse, "description": "Authentication required"}
+    }
+)
+async def create_anthropic_api_key(
+    request: AnthropicApiKeyCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Create a new Anthropic API key.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
+    """
+    try:
+        # Validate API key format
+        if not request.api_key.startswith("sk-ant-"):
+            raise HTTPException(status_code=400, detail="Invalid API key format. Anthropic API keys should start with 'sk-ant-'")
+        
+        api_key = AnthropicApiKey(
+            user_id=current_user.id,
+            key_name=request.key_name,
+            api_key=request.api_key,
+            is_default=request.is_default,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        
+        key_id = await db.create_anthropic_api_key(api_key)
+        return {"id": key_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create API key: {str(e)}")
+
+@app.post(
+    "/api/anthropic-api-keys/{key_id}/test",
+    response_model=AnthropicApiKeyTestResponse,
+    summary="Test Anthropic API Key",
+    description="Test an Anthropic API key by making a simple API call.",
+    tags=["Anthropic API Keys"],
+    responses={
+        200: {"description": "Test result"},
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "API key not found"}
+    }
+)
+async def test_anthropic_api_key(
+    key_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Test an Anthropic API key.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
+    """
+    try:
+        # Get the API key
+        api_key = await db.get_anthropic_api_key(key_id, user_id=current_user.id)
+        if not api_key:
+            raise HTTPException(status_code=404, detail="API key not found or you don't have permission to access it")
+        
+        # Test the API key with a simple request
+        import anthropic
+        try:
+            client = anthropic.Anthropic(api_key=api_key.api_key)
+            # Make a minimal API call to test the key
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "Hello"}]
+            )
+            
+            # Update last test status
+            await db.update_anthropic_api_key(
+                key_id,
+                {
+                    "last_test_at": datetime.utcnow(),
+                    "last_test_status": "success"
+                },
+                user_id=current_user.id
+            )
+            
+            return AnthropicApiKeyTestResponse(
+                success=True,
+                message="API key is valid and working",
+                model_tested="claude-sonnet-4-20250514"
+            )
+        except anthropic.AuthenticationError:
+            # Update last test status
+            await db.update_anthropic_api_key(
+                key_id,
+                {
+                    "last_test_at": datetime.utcnow(),
+                    "last_test_status": "failed"
+                },
+                user_id=current_user.id
+            )
+            return AnthropicApiKeyTestResponse(
+                success=False,
+                message="Authentication failed. API key is invalid or expired."
+            )
+        except Exception as e:
+            # Update last test status
+            await db.update_anthropic_api_key(
+                key_id,
+                {
+                    "last_test_at": datetime.utcnow(),
+                    "last_test_status": "failed"
+                },
+                user_id=current_user.id
+            )
+            return AnthropicApiKeyTestResponse(
+                success=False,
+                message=f"API test failed: {str(e)}"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to test API key: {str(e)}")
+
+@app.patch(
+    "/api/anthropic-api-keys/{key_id}",
+    summary="Update Anthropic API Key",
+    description="Update an Anthropic API key (e.g., set as default).",
+    tags=["Anthropic API Keys"],
+    responses={
+        200: {"description": "API key updated successfully"},
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "API key not found"}
+    }
+)
+async def update_anthropic_api_key(
+    key_id: str,
+    is_default: Optional[bool] = Body(None),
+    is_active: Optional[bool] = Body(None),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update an Anthropic API key.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
+    """
+    try:
+        updates = {}
+        if is_default is not None:
+            updates["is_default"] = is_default
+        if is_active is not None:
+            updates["is_active"] = is_active
+        
+        if not updates:
+            raise HTTPException(status_code=400, detail="No updates provided")
+        
+        success = await db.update_anthropic_api_key(key_id, updates, user_id=current_user.id)
+        if success:
+            return {"success": True, "message": "API key updated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="API key not found or you don't have permission to update it")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update API key: {str(e)}")
+
+@app.delete(
+    "/api/anthropic-api-keys/{key_id}",
+    summary="Delete Anthropic API Key",
+    description="Delete an Anthropic API key owned by the authenticated user.",
+    tags=["Anthropic API Keys"],
+    responses={
+        200: {"description": "API key deleted successfully"},
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "API key not found"}
+    }
+)
+async def delete_anthropic_api_key(
+    key_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete an Anthropic API key.
+    
+    Only the owner of the API key can delete it.
+    
+    **Authentication Required**: This endpoint requires a valid JWT token.
+    """
+    try:
+        success = await db.delete_anthropic_api_key(key_id, user_id=current_user.id)
+        if success:
+            return {"success": True, "message": "API key deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="API key not found or you don't have permission to delete it")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete API key: {str(e)}")
 
 @app.delete(
     "/api/claude-auth/selected-profile",
@@ -2993,7 +3234,10 @@ async def set_default_model_setting(request: ModelSettingsRequest):
     description="Execute a task through a sequential pipeline of agents where each agent's output becomes the next agent's input.",
     tags=["Agent Orchestration"]
 )
-async def execute_sequential_pipeline(request: SequentialPipelineRequest):
+async def execute_sequential_pipeline(
+    request: SequentialPipelineRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Execute sequential pipeline orchestration pattern."""
     temp_dir = None
     agent_dir_mapping = None
@@ -3020,8 +3264,8 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
         else:
             cwd = os.getenv("PROJECT_ROOT_DIR")
         
-        # Create orchestrator (no API key needed - uses Claude CLI)
-        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
+        # Create orchestrator with user-specific API key support
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd, user_id=current_user.id, db=db)
         
         # Add agents
         for agent in request.agents:
@@ -3076,7 +3320,10 @@ async def execute_sequential_pipeline(request: SequentialPipelineRequest):
     description="Execute a debate where agents discuss and argue different perspectives on a topic.",
     tags=["Agent Orchestration"]
 )
-async def execute_debate(request: DebateRequest):
+async def execute_debate(
+    request: DebateRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Execute debate orchestration pattern."""
     temp_dir = None
     agent_dir_mapping = None
@@ -3102,7 +3349,7 @@ async def execute_debate(request: DebateRequest):
         else:
             cwd = os.getenv("PROJECT_ROOT_DIR")
         
-        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd, user_id=current_user.id, db=db)
         
         # Add agents
         for agent in request.agents:
@@ -3156,7 +3403,10 @@ async def execute_debate(request: DebateRequest):
     description="Execute debate pattern with real-time SSE streaming of agent outputs.",
     tags=["Agent Orchestration"]
 )
-async def execute_debate_stream(request: DebateRequest):
+async def execute_debate_stream(
+    request: DebateRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Execute debate with Server-Sent Events streaming."""
     
     async def event_generator():
@@ -3185,7 +3435,7 @@ async def execute_debate_stream(request: DebateRequest):
             else:
                 cwd = os.getenv("PROJECT_ROOT_DIR")
             
-            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd, user_id=current_user.id, db=db)
             
             # Add agents
             for agent in request.agents:
@@ -3299,7 +3549,10 @@ async def execute_debate_stream(request: DebateRequest):
     description="Execute hierarchical pattern with real-time SSE streaming of agent outputs.",
     tags=["Agent Orchestration"]
 )
-async def execute_hierarchical_stream(request: HierarchicalRequest):
+async def execute_hierarchical_stream(
+    request: HierarchicalRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Execute hierarchical orchestration with Server-Sent Events streaming."""
     
     async def event_generator():
@@ -3330,7 +3583,7 @@ async def execute_hierarchical_stream(request: HierarchicalRequest):
             else:
                 cwd = os.getenv("PROJECT_ROOT_DIR")
             
-            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd, user_id=current_user.id, db=db)
             
             # Add manager
             manager_prompt = request.manager.system_prompt
@@ -3450,7 +3703,10 @@ async def execute_hierarchical_stream(request: HierarchicalRequest):
     description="Execute hierarchical orchestration where a manager delegates tasks to worker agents.",
     tags=["Agent Orchestration"]
 )
-async def execute_hierarchical(request: HierarchicalRequest):
+async def execute_hierarchical(
+    request: HierarchicalRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Execute hierarchical orchestration pattern."""
     temp_dir = None
     agent_dir_mapping = None
@@ -3477,7 +3733,7 @@ async def execute_hierarchical(request: HierarchicalRequest):
         else:
             cwd = os.getenv("PROJECT_ROOT_DIR")
         
-        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd, user_id=current_user.id, db=db)
         
         # Add manager
         manager_prompt = request.manager.system_prompt
@@ -3545,7 +3801,10 @@ async def execute_hierarchical(request: HierarchicalRequest):
     description="Execute parallel aggregation with real-time SSE streaming of agent outputs.",
     tags=["Agent Orchestration"]
 )
-async def execute_parallel_stream(request: ParallelAggregateRequest):
+async def execute_parallel_stream(
+    request: ParallelAggregateRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Execute parallel aggregation with Server-Sent Events streaming."""
     
     async def event_generator():
@@ -3576,7 +3835,7 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
             else:
                 cwd = os.getenv("PROJECT_ROOT_DIR")
             
-            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd, user_id=current_user.id, db=db)
             
             # Store workspace metadata in database if using isolated workspaces
             if agent_dir_mapping and request.workflow_id:
@@ -3765,7 +4024,10 @@ async def execute_parallel_stream(request: ParallelAggregateRequest):
     description="Execute parallel aggregation where multiple agents work independently on the same task.",
     tags=["Agent Orchestration"]
 )
-async def execute_parallel_aggregate(request: ParallelAggregateRequest):
+async def execute_parallel_aggregate(
+    request: ParallelAggregateRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Execute parallel aggregation orchestration pattern."""
     temp_dir = None
     agent_dir_mapping = None
@@ -3791,7 +4053,7 @@ async def execute_parallel_aggregate(request: ParallelAggregateRequest):
         else:
             cwd = os.getenv("PROJECT_ROOT_DIR")
         
-        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd, user_id=current_user.id, db=db)
         
         # Add agents
         for agent in request.agents:
@@ -3854,7 +4116,10 @@ async def execute_parallel_aggregate(request: ParallelAggregateRequest):
     description="Execute dynamic routing where a router agent selects the most appropriate specialist(s) for the task.",
     tags=["Agent Orchestration"]
 )
-async def execute_dynamic_routing(request: DynamicRoutingRequest):
+async def execute_dynamic_routing(
+    request: DynamicRoutingRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Execute dynamic routing orchestration pattern."""
     temp_dir = None
     agent_dir_mapping = None
@@ -3881,7 +4146,7 @@ async def execute_dynamic_routing(request: DynamicRoutingRequest):
         else:
             cwd = os.getenv("PROJECT_ROOT_DIR")
         
-        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
+        orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd, user_id=current_user.id, db=db)
         
         # Add router
         router_prompt = request.router.system_prompt
@@ -3951,7 +4216,10 @@ async def execute_dynamic_routing(request: DynamicRoutingRequest):
     description="Execute dynamic routing with real-time SSE streaming of agent outputs.",
     tags=["Agent Orchestration"]
 )
-async def execute_dynamic_routing_stream(request: DynamicRoutingRequest):
+async def execute_dynamic_routing_stream(
+    request: DynamicRoutingRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Execute dynamic routing with Server-Sent Events streaming."""
     
     async def event_generator():
@@ -3980,7 +4248,7 @@ async def execute_dynamic_routing_stream(request: DynamicRoutingRequest):
             else:
                 cwd = os.getenv("PROJECT_ROOT_DIR")
             
-            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd, user_id=current_user.id, db=db)
             
             # Add router
             router_prompt = request.router.system_prompt
@@ -4102,7 +4370,10 @@ async def execute_dynamic_routing_stream(request: DynamicRoutingRequest):
     description="Execute sequential pipeline with real-time SSE streaming of agent outputs.",
     tags=["Agent Orchestration"]
 )
-async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest):
+async def execute_sequential_pipeline_stream(
+    request: SequentialPipelineRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Execute sequential pipeline with Server-Sent Events streaming."""
     
     async def event_generator():
@@ -4131,7 +4402,7 @@ async def execute_sequential_pipeline_stream(request: SequentialPipelineRequest)
             else:
                 cwd = os.getenv("PROJECT_ROOT_DIR")
             
-            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd)
+            orchestrator = MultiAgentOrchestrator(model=model, cwd=cwd, user_id=current_user.id, db=db)
             
             # Add agents
             for agent in request.agents:
@@ -4408,7 +4679,8 @@ async def generate_orchestration_design(
     request: Request,
     prompt: str = Body(..., description="User's natural language description of what they want"),
     current_design: Optional[Dict[str, Any]] = Body(None, description="Current design to improve (optional)"),
-    mode: str = Body("create", description="Mode: 'create' for new design or 'improve' for enhancing existing")
+    mode: str = Body("create", description="Mode: 'create' for new design or 'improve' for enhancing existing"),
+    current_user: User = Depends(get_current_user)
 ):
     """Generate or improve an orchestration design using AI"""
     try:
@@ -4531,7 +4803,7 @@ Return ONLY the complete design JSON, no other text."""
                 
                 # Create orchestrator
                 model = await db.get_default_model() or "claude-sonnet-4-20250514"
-                orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"))
+                orchestrator = MultiAgentOrchestrator(model=model, cwd=os.getenv("PROJECT_ROOT_DIR"), user_id=current_user.id, db=db)
                 
                 # Add a single design generation agent
                 orchestrator.add_agent(

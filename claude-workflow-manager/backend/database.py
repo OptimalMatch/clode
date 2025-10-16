@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
 from bson import ObjectId
-from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics, OrchestrationDesign, OrchestrationDesignVersion, Deployment, ExecutionLog, ScheduleConfig, AgentWorkspace
+from models import Workflow, Prompt, ClaudeInstance, InstanceStatus, InstanceLog, Subagent, LogType, LogAnalytics, OrchestrationDesign, OrchestrationDesignVersion, Deployment, ExecutionLog, ScheduleConfig, AgentWorkspace, AnthropicApiKey
 
 class Database:
     def __init__(self):
@@ -84,6 +84,11 @@ class Database:
         await self.db.users.create_index("username", unique=True)
         await self.db.users.create_index("email", unique=True)
         await self.db.users.create_index("created_at")
+        
+        # Anthropic API Keys indexes
+        await self.db.anthropic_api_keys.create_index("user_id")
+        await self.db.anthropic_api_keys.create_index([("user_id", 1), ("is_default", 1)])
+        await self.db.anthropic_api_keys.create_index("created_at")
         
         # Settings collection (for global app settings like default model)
         # No indexes needed yet, it's a singleton document
@@ -1543,4 +1548,118 @@ class Database:
             return result.deleted_count > 0
         except Exception as e:
             print(f"Error deleting agent workspace {workspace_id}: {e}")
+            return False
+    
+    # ==================== Anthropic API Key Methods ====================
+    
+    async def create_anthropic_api_key(self, api_key: AnthropicApiKey) -> str:
+        """Create a new Anthropic API key for a user"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        # If this is set as default, unset any existing defaults for this user
+        if api_key.is_default:
+            await self.db.anthropic_api_keys.update_many(
+                {"user_id": api_key.user_id},
+                {"$set": {"is_default": False}}
+            )
+        
+        api_key_dict = api_key.dict(exclude={"id"})
+        result = await self.db.anthropic_api_keys.insert_one(api_key_dict)
+        return str(result.inserted_id)
+    
+    async def get_anthropic_api_keys(self, user_id: str) -> List[AnthropicApiKey]:
+        """Get all Anthropic API keys for a user"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        cursor = self.db.anthropic_api_keys.find({"user_id": user_id}).sort("created_at", -1)
+        api_keys = []
+        async for doc in cursor:
+            doc["id"] = str(doc.pop("_id"))
+            api_keys.append(AnthropicApiKey(**doc))
+        return api_keys
+    
+    async def get_anthropic_api_key(self, key_id: str, user_id: Optional[str] = None) -> Optional[AnthropicApiKey]:
+        """Get an Anthropic API key by ID, optionally filtered by user"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(key_id) if ObjectId.is_valid(key_id) else key_id
+            query = {"_id": object_id}
+            if user_id:
+                query["user_id"] = user_id
+            
+            doc = await self.db.anthropic_api_keys.find_one(query)
+            if doc:
+                doc["id"] = str(doc.pop("_id"))
+                return AnthropicApiKey(**doc)
+            return None
+        except Exception as e:
+            print(f"Error getting API key {key_id}: {e}")
+            return None
+    
+    async def get_default_anthropic_api_key(self, user_id: str) -> Optional[AnthropicApiKey]:
+        """Get the default Anthropic API key for a user"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        doc = await self.db.anthropic_api_keys.find_one({
+            "user_id": user_id,
+            "is_default": True,
+            "is_active": True
+        })
+        if doc:
+            doc["id"] = str(doc.pop("_id"))
+            return AnthropicApiKey(**doc)
+        return None
+    
+    async def update_anthropic_api_key(self, key_id: str, updates: Dict[str, Any], user_id: Optional[str] = None) -> bool:
+        """Update an Anthropic API key"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(key_id) if ObjectId.is_valid(key_id) else key_id
+            query = {"_id": object_id}
+            if user_id:
+                query["user_id"] = user_id
+            
+            # If setting as default, unset any existing defaults for this user
+            if updates.get("is_default"):
+                # First get the user_id of this key if not provided
+                if not user_id:
+                    key_doc = await self.db.anthropic_api_keys.find_one({"_id": object_id})
+                    if key_doc:
+                        user_id = key_doc["user_id"]
+                
+                if user_id:
+                    await self.db.anthropic_api_keys.update_many(
+                        {"user_id": user_id, "_id": {"$ne": object_id}},
+                        {"$set": {"is_default": False}}
+                    )
+            
+            updates["updated_at"] = datetime.utcnow()
+            result = await self.db.anthropic_api_keys.update_one(query, {"$set": updates})
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error updating API key {key_id}: {e}")
+            return False
+    
+    async def delete_anthropic_api_key(self, key_id: str, user_id: Optional[str] = None) -> bool:
+        """Delete an Anthropic API key"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            object_id = ObjectId(key_id) if ObjectId.is_valid(key_id) else key_id
+            query = {"_id": object_id}
+            if user_id:
+                query["user_id"] = user_id
+            
+            result = await self.db.anthropic_api_keys.delete_one(query)
+            return result.deleted_count > 0
+        except Exception as e:
+            print(f"Error deleting API key {key_id}: {e}")
             return False

@@ -11,6 +11,7 @@ import {
   Chip,
   Alert,
   Container,
+  Divider,
 } from '@mui/material';
 import {
   Add,
@@ -20,6 +21,7 @@ import {
   Info,
 } from '@mui/icons-material';
 import ClaudeAuthManager from './ClaudeAuthManager';
+import AnthropicApiKeyManager from './AnthropicApiKeyManager';
 
 const ClaudeAuthPage: React.FC = () => {
   const [showAuthManager, setShowAuthManager] = useState(false);
@@ -185,6 +187,12 @@ const ClaudeAuthPage: React.FC = () => {
             // You could store this in global state or local storage for default selection
           }}
         />
+
+        {/* Divider */}
+        <Divider sx={{ my: 6 }} />
+
+        {/* Anthropic API Keys Section */}
+        <AnthropicApiKeyManager />
       </Box>
     </Container>
   );
