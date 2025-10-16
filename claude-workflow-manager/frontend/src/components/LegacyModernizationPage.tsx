@@ -17,6 +17,16 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import {
   AutoAwesome,
@@ -30,18 +40,32 @@ import {
   PlayArrow,
   Schedule,
   Psychology,
+  WorkOutline,
+  FolderOpen,
+  Description,
+  Close,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import ReactMarkdown from 'react-markdown';
-import { orchestrationDesignApi, orchestrationApi, OrchestrationDesign, StreamEvent } from '../services/api';
+import { orchestrationDesignApi, orchestrationApi, workflowApi, fileEditorApi, OrchestrationDesign, StreamEvent } from '../services/api';
+import { Workflow } from '../types';
 
 const LegacyModernizationPage: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
 
   // Form state
-  const [repoPath, setRepoPath] = useState('/mnt/c/github/oms-core');
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>('');
+  const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [modernizationPrompt, setModernizationPrompt] = useState(`I wrote this application many years ago in J2EE so it uses EJBs for business logic. It had a frontend that was JSF. But mainly this application facilitates buying and selling sales leads as a marketplace where lead buyers and lead sellers can transact. The functionality is documented in optimalmatch_capabilities.md. I want you to rebuild the same application business logic and functionality in python where you write the python classes in the python/ folder. It is a very large application so you will have to plan wisely and work on parts of the business logic in chunks. Also I did not use camel case or underscores when writing the method/function names. You will need to decipher and convert to camel case when you see these. We also want to write the code better than I did as I had too much complexity in the methods/functions and it needed to be refactored. Start with writing out a plan on how to do all this that you can re-reference and split into work for other claude code instances to work on separately and in their own git branches where base classes are done first so as not to block scaling this work effort.`);
   const [specifications, setSpecifications] = useState('');
+  const [selectedSpecFile, setSelectedSpecFile] = useState<string>('');
+
+  // File browser state
+  const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
+  const [browsingFiles, setBrowsingFiles] = useState(false);
+  const [repositoryFiles, setRepositoryFiles] = useState<any[]>([]);
+  const [currentPath, setCurrentPath] = useState('');
 
   // Orchestration state
   const [modernizationDesign, setModernizationDesign] = useState<OrchestrationDesign | null>(null);
@@ -53,10 +77,15 @@ const LegacyModernizationPage: React.FC = () => {
   const [currentAgent, setCurrentAgent] = useState<string>('');
   const [agentStatus, setAgentStatus] = useState<string>('');
 
-  // Load the Legacy Modernization orchestration design on mount
+  // Load workflows and orchestration design on mount
   useEffect(() => {
-    const loadDesign = async () => {
+    const loadData = async () => {
       try {
+        // Load workflows
+        const workflowsData = await workflowApi.getAll();
+        setWorkflows(workflowsData);
+
+        // Load orchestration design
         const designs = await orchestrationDesignApi.getAll();
         const legacyDesign = designs.find(d => d.name === 'Legacy Application Modernization');
 
@@ -66,17 +95,33 @@ const LegacyModernizationPage: React.FC = () => {
           enqueueSnackbar('Legacy Modernization design not found. Please seed the orchestration designs.', { variant: 'warning' });
         }
       } catch (err: any) {
-        console.error('Failed to load orchestration design:', err);
-        enqueueSnackbar('Failed to load orchestration design', { variant: 'error' });
+        console.error('Failed to load data:', err);
+        enqueueSnackbar('Failed to load workflows or orchestration design', { variant: 'error' });
       }
     };
 
-    loadDesign();
+    loadData();
   }, [enqueueSnackbar]);
 
+  // Update selected workflow when selection changes
+  useEffect(() => {
+    if (selectedWorkflowId) {
+      const workflow = workflows.find(w => w.id === selectedWorkflowId);
+      setSelectedWorkflow(workflow || null);
+    } else {
+      setSelectedWorkflow(null);
+    }
+  }, [selectedWorkflowId, workflows]);
+
   const loadExample = () => {
-    enqueueSnackbar('Example template loaded', { variant: 'success' });
-    setRepoPath('/mnt/c/github/oms-core');
+    // Try to find oms-core workflow
+    const omsWorkflow = workflows.find(w => w.git_repo?.includes('oms-core'));
+    if (omsWorkflow && omsWorkflow.id) {
+      setSelectedWorkflowId(omsWorkflow.id);
+      enqueueSnackbar('Example workflow loaded', { variant: 'success' });
+    } else {
+      enqueueSnackbar('oms-core workflow not found. Please create a workflow first.', { variant: 'warning' });
+    }
   };
 
   const handleGenerate = async () => {
@@ -85,8 +130,8 @@ const LegacyModernizationPage: React.FC = () => {
       return;
     }
 
-    if (!repoPath || !modernizationPrompt) {
-      enqueueSnackbar('Please fill in all required fields', { variant: 'warning' });
+    if (!selectedWorkflowId || !selectedWorkflow || !modernizationPrompt) {
+      enqueueSnackbar('Please select a workflow and fill in all required fields', { variant: 'warning' });
       return;
     }
 
@@ -101,14 +146,23 @@ const LegacyModernizationPage: React.FC = () => {
     try {
       // Build the task combining all inputs
       const fullTask = `
-REPOSITORY PATH: ${repoPath}
+WORKFLOW ID: ${selectedWorkflowId}
+REPOSITORY PATH: ${selectedWorkflow.git_repo || 'N/A'}
+WORKFLOW NAME: ${selectedWorkflow.name}
 
 MODERNIZATION REQUEST:
 ${modernizationPrompt}
 
 ${specifications ? `APPLICATION SPECIFICATIONS:\n${specifications}` : ''}
 
-Please analyze this legacy application and generate phased implementation plans following the format specified in your instructions. Create detailed markdown files for each phase and track combination in the .clode/claude_prompts/ directory.
+Please analyze this legacy application and generate phased implementation plans following the format specified in your instructions.
+
+IMPORTANT: Use the workflow_id "${selectedWorkflowId}" when calling editor tools like:
+- mcp__workflow-manager__editor_browse_directory
+- mcp__workflow-manager__editor_create_directory
+- mcp__workflow-manager__editor_create_change
+
+Create detailed markdown files for each phase and track combination in the .clode/claude_prompts/ directory.
       `.trim();
 
       // Execute the orchestration with sequential stream
@@ -136,7 +190,8 @@ Please analyze this legacy application and generate phased implementation plans 
         })),
         agent_sequence: agents.map((agent: any) => agent.name),
         model: 'claude-sonnet-4',
-        git_repo: repoPath,
+        git_repo: selectedWorkflow.git_repo,
+        workflow_id: selectedWorkflowId, // Pass workflow_id for editor tools
         isolate_agent_workspaces: false
       };
 
@@ -175,12 +230,81 @@ Please analyze this legacy application and generate phased implementation plans 
   };
 
   const clearForm = () => {
-    setRepoPath('');
+    setSelectedWorkflowId('');
+    setSelectedWorkflow(null);
     setModernizationPrompt('');
     setSpecifications('');
+    setSelectedSpecFile('');
     setResult(null);
     setError(null);
     setStreamingOutput('');
+  };
+
+  const handleBrowseFiles = async () => {
+    if (!selectedWorkflowId) {
+      enqueueSnackbar('Please select a workflow first', { variant: 'warning' });
+      return;
+    }
+
+    setFileBrowserOpen(true);
+    setBrowsingFiles(true);
+
+    try {
+      const response = await fileEditorApi.browseDirectory(selectedWorkflowId, currentPath, false);
+      setRepositoryFiles(response.data.entries || []);
+    } catch (err: any) {
+      enqueueSnackbar('Failed to browse repository files', { variant: 'error' });
+      console.error('Browse error:', err);
+    } finally {
+      setBrowsingFiles(false);
+    }
+  };
+
+  const handleSelectFile = async (file: any) => {
+    if (file.type === 'directory') {
+      // Navigate into directory
+      const newPath = currentPath ? `${currentPath}/${file.name}` : file.name;
+      setCurrentPath(newPath);
+      setBrowsingFiles(true);
+
+      try {
+        const response = await fileEditorApi.browseDirectory(selectedWorkflowId, newPath, false);
+        setRepositoryFiles(response.data.entries || []);
+      } catch (err: any) {
+        enqueueSnackbar('Failed to browse directory', { variant: 'error' });
+      } finally {
+        setBrowsingFiles(false);
+      }
+    } else {
+      // Read file content
+      try {
+        const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
+        const response = await fileEditorApi.readFile(selectedWorkflowId, filePath);
+        setSpecifications(response.data.content || '');
+        setSelectedSpecFile(filePath);
+        setFileBrowserOpen(false);
+        enqueueSnackbar(`Loaded: ${filePath}`, { variant: 'success' });
+      } catch (err: any) {
+        enqueueSnackbar('Failed to read file', { variant: 'error' });
+      }
+    }
+  };
+
+  const handleBackDirectory = async () => {
+    const pathParts = currentPath.split('/');
+    pathParts.pop();
+    const newPath = pathParts.join('/');
+    setCurrentPath(newPath);
+    setBrowsingFiles(true);
+
+    try {
+      const response = await fileEditorApi.browseDirectory(selectedWorkflowId, newPath, false);
+      setRepositoryFiles(response.data.entries || []);
+    } catch (err: any) {
+      enqueueSnackbar('Failed to browse directory', { variant: 'error' });
+    } finally {
+      setBrowsingFiles(false);
+    }
   };
 
   return (
@@ -230,25 +354,45 @@ Please analyze this legacy application and generate phased implementation plans 
                 <Typography variant="body2">
                   Try our oms-core example
                 </Typography>
-                <Button size="small" onClick={loadExample} startIcon={<RefreshOutlined />}>
+                <Button size="small" onClick={loadExample} startIcon={<RefreshOutlined />} disabled={workflows.length === 0}>
                   Load Example
                 </Button>
               </Box>
             </Alert>
 
-            {/* Repository Path */}
-            <TextField
-              fullWidth
-              label="Repository Path"
-              value={repoPath}
-              onChange={(e) => setRepoPath(e.target.value)}
-              placeholder="/mnt/c/github/your-legacy-app"
-              helperText="Absolute path to the legacy application repository"
-              sx={{ mb: 3 }}
-              InputProps={{
-                startAdornment: <Folder sx={{ mr: 1, color: 'text.secondary' }} />,
-              }}
-            />
+            {/* Workflow Selector */}
+            <FormControl fullWidth sx={{ mb: 3 }}>
+              <InputLabel id="workflow-select-label">Select Workflow</InputLabel>
+              <Select
+                labelId="workflow-select-label"
+                id="workflow-select"
+                value={selectedWorkflowId}
+                label="Select Workflow"
+                onChange={(e) => setSelectedWorkflowId(e.target.value)}
+                startAdornment={<WorkOutline sx={{ mr: 1, ml: 1, color: 'text.secondary' }} />}
+              >
+                <MenuItem value="">
+                  <em>None</em>
+                </MenuItem>
+                {workflows.map((workflow) => (
+                  <MenuItem key={workflow.id} value={workflow.id}>
+                    <Box>
+                      <Typography variant="body2">{workflow.name}</Typography>
+                      {workflow.git_repo && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          {workflow.git_repo}
+                        </Typography>
+                      )}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+              {selectedWorkflow && selectedWorkflow.git_repo && (
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, ml: 1 }}>
+                  Repository: {selectedWorkflow.git_repo}
+                </Typography>
+              )}
+            </FormControl>
 
             {/* Modernization Prompt */}
             <TextField
@@ -264,20 +408,44 @@ Please analyze this legacy application and generate phased implementation plans 
             />
 
             {/* Specifications Document */}
-            <TextField
-              fullWidth
-              multiline
-              rows={8}
-              label="Specifications Document (Optional)"
-              value={specifications}
-              onChange={(e) => setSpecifications(e.target.value)}
-              placeholder="Paste your application specifications here (e.g., optimalmatch_capabilities.md content)"
-              helperText="Optional: Paste documentation that describes your application's functionality"
-              sx={{ mb: 3 }}
-              InputProps={{
-                startAdornment: <Article sx={{ mr: 1, color: 'text.secondary' }} />,
-              }}
-            />
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Specifications Document (Optional)
+                </Typography>
+                <Button
+                  size="small"
+                  startIcon={<FolderOpen />}
+                  onClick={handleBrowseFiles}
+                  disabled={!selectedWorkflowId}
+                >
+                  Browse Files
+                </Button>
+              </Box>
+              {selectedSpecFile && (
+                <Chip
+                  label={`File: ${selectedSpecFile}`}
+                  onDelete={() => {
+                    setSelectedSpecFile('');
+                    setSpecifications('');
+                  }}
+                  size="small"
+                  sx={{ mb: 1 }}
+                />
+              )}
+              <TextField
+                fullWidth
+                multiline
+                rows={8}
+                value={specifications}
+                onChange={(e) => setSpecifications(e.target.value)}
+                placeholder="Paste your application specifications here, or browse to select a file from the repository"
+                helperText="Optional: Paste documentation or select a file that describes your application's functionality"
+                InputProps={{
+                  startAdornment: <Article sx={{ mr: 1, color: 'text.secondary' }} />,
+                }}
+              />
+            </Box>
 
             {/* Action Buttons */}
             <Box sx={{ display: 'flex', gap: 2 }}>
@@ -285,7 +453,7 @@ Please analyze this legacy application and generate phased implementation plans 
                 variant="contained"
                 size="large"
                 onClick={handleGenerate}
-                disabled={loading || executing || !repoPath || !modernizationPrompt || !modernizationDesign}
+                disabled={loading || executing || !selectedWorkflowId || !modernizationPrompt || !modernizationDesign}
                 startIcon={loading ? <CircularProgress size={20} /> : <PlayArrow />}
                 sx={{ flex: 1 }}
               >
@@ -507,6 +675,87 @@ Please analyze this legacy application and generate phased implementation plans 
           </Grid>
         </Grid>
       </Box>
+
+      {/* File Browser Dialog */}
+      <Dialog
+        open={fileBrowserOpen}
+        onClose={() => setFileBrowserOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <FolderOpen />
+              <Typography variant="h6">Browse Repository Files</Typography>
+            </Box>
+            <IconButton onClick={() => setFileBrowserOpen(false)} size="small">
+              <Close />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {/* Current Path */}
+          <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Path:
+            </Typography>
+            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+              /{currentPath || '(root)'}
+            </Typography>
+            {currentPath && (
+              <Button size="small" onClick={handleBackDirectory}>
+                Back
+              </Button>
+            )}
+          </Box>
+
+          {browsingFiles ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <List>
+              {repositoryFiles.map((file, index) => (
+                <ListItem
+                  key={index}
+                  button
+                  onClick={() => handleSelectFile(file)}
+                  sx={{
+                    borderRadius: 1,
+                    mb: 0.5,
+                    '&:hover': { bgcolor: 'rgba(100, 149, 237, 0.1)' },
+                  }}
+                >
+                  <ListItemIcon>
+                    {file.type === 'directory' ? (
+                      <Folder color="primary" />
+                    ) : (
+                      <Description color="action" />
+                    )}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={file.name}
+                    secondary={
+                      file.type === 'file'
+                        ? `${(file.size / 1024).toFixed(1)} KB`
+                        : 'Directory'
+                    }
+                  />
+                </ListItem>
+              ))}
+              {repositoryFiles.length === 0 && (
+                <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
+                  <Typography variant="body2">No files found</Typography>
+                </Box>
+              )}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFileBrowserOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
