@@ -139,6 +139,7 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [connectionSource, setConnectionSource] = useState<string | null>(null);
   const [connectionSourceAgent, setConnectionSourceAgent] = useState<string | null>(null);
   const [connectionMode, setConnectionMode] = useState<'simple' | 'advanced'>('simple'); // Toggle between modes
+  const [authMode, setAuthMode] = useState<'auto' | 'api-key' | 'max-plan'>('auto'); // Authentication mode preference
   
   // Canvas panning state
   const [isPanning, setIsPanning] = useState(false);
@@ -2822,6 +2823,52 @@ Format your response as JSON:
               }
               sx={{ ml: 0 }}
             />
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Authentication Mode Selector */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+              Authentication Mode
+            </Typography>
+            <FormControl fullWidth size="small">
+              <Select
+                value={authMode}
+                onChange={(e) => setAuthMode(e.target.value as 'auto' | 'api-key' | 'max-plan')}
+                sx={{ 
+                  fontSize: '0.875rem',
+                  '& .MuiSelect-select': {
+                    py: 1,
+                  }
+                }}
+              >
+                <MenuItem value="auto">
+                  <Box>
+                    <Typography variant="body2">🔄 Auto (Recommended)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Uses your API key if set, otherwise Max Plan
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem value="api-key">
+                  <Box>
+                    <Typography variant="body2">🔑 API Key Only</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Use your Anthropic API key
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem value="max-plan">
+                  <Box>
+                    <Typography variant="body2">⭐ Max Plan Only</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Use Claude Max Plan authentication
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              </Select>
+            </FormControl>
           </Box>
         </Paper>
 
