@@ -1094,6 +1094,28 @@ export const deploymentApi = {
 };
 
 // File Editor API
+export const anthropicApiKeyApi = {
+  getApiKeys: async () => {
+    return api.get('/api/anthropic-api-keys');
+  },
+  
+  createApiKey: async (data: { key_name: string; api_key: string; is_default: boolean }) => {
+    return api.post('/api/anthropic-api-keys', data);
+  },
+  
+  testApiKey: async (keyId: string) => {
+    return api.post(`/api/anthropic-api-keys/${keyId}/test`);
+  },
+  
+  updateApiKey: async (keyId: string, data: { is_default?: boolean; is_active?: boolean }) => {
+    return api.patch(`/api/anthropic-api-keys/${keyId}`, data);
+  },
+  
+  deleteApiKey: async (keyId: string) => {
+    return api.delete(`/api/anthropic-api-keys/${keyId}`);
+  },
+};
+
 export const fileEditorApi = {
   initEditor: (workflowId: string) =>
     api.post('/api/file-editor/init', { workflow_id: workflowId }),

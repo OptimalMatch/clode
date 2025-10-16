@@ -31,7 +31,7 @@ import {
   Info,
   VpnKey,
 } from '@mui/icons-material';
-import axios from 'axios';
+import { anthropicApiKeyApi } from '../services/api';
 
 interface AnthropicApiKey {
   id: string;
@@ -63,14 +63,12 @@ const AnthropicApiKeyManager: React.FC = () => {
   const fetchApiKeys = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get('/api/anthropic-api-keys', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setApiKeys(response.data.api_keys);
+      const response = await anthropicApiKeyApi.getApiKeys();
+      setApiKeys(response.data.api_keys || []);
     } catch (error: any) {
       console.error('Failed to fetch API keys:', error);
       setSnackbar({ open: true, message: 'Failed to load API keys', severity: 'error' });
+      setApiKeys([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -89,13 +87,10 @@ const AnthropicApiKeyManager: React.FC = () => {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      await axios.post('/api/anthropic-api-keys', {
+      await anthropicApiKeyApi.createApiKey({
         key_name: newKeyName,
         api_key: newApiKey,
         is_default: isDefaultKey
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
 
       setSnackbar({ open: true, message: 'API key added successfully', severity: 'success' });
@@ -123,11 +118,7 @@ const AnthropicApiKeyManager: React.FC = () => {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      await axios.delete(`/api/anthropic-api-keys/${keyId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
+      await anthropicApiKeyApi.deleteApiKey(keyId);
       setSnackbar({ open: true, message: 'API key deleted successfully', severity: 'success' });
       fetchApiKeys();
     } catch (error: any) {
@@ -141,11 +132,7 @@ const AnthropicApiKeyManager: React.FC = () => {
   const handleTestApiKey = async (keyId: string) => {
     setTestingKeyId(keyId);
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.post(`/api/anthropic-api-keys/${keyId}/test`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
+      const response = await anthropicApiKeyApi.testApiKey(keyId);
       if (response.data.success) {
         setSnackbar({ open: true, message: `API key is valid! Tested with ${response.data.model_tested}`, severity: 'success' });
       } else {
@@ -163,13 +150,7 @@ const AnthropicApiKeyManager: React.FC = () => {
   const handleSetDefault = async (keyId: string) => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      await axios.patch(`/api/anthropic-api-keys/${keyId}`, {
-        is_default: true
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
+      await anthropicApiKeyApi.updateApiKey(keyId, { is_default: true });
       setSnackbar({ open: true, message: 'Default API key updated', severity: 'success' });
       fetchApiKeys();
     } catch (error: any) {
