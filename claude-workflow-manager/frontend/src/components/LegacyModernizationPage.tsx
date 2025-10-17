@@ -77,6 +77,11 @@ const LegacyModernizationPage: React.FC = () => {
   const [currentAgent, setCurrentAgent] = useState<string>('');
   const [agentStatus, setAgentStatus] = useState<string>('');
 
+  // Timer state
+  const [executionStartTime, setExecutionStartTime] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [finalDuration, setFinalDuration] = useState<string | null>(null);
+
   // Load workflows and orchestration design on mount
   useEffect(() => {
     const loadData = async () => {
@@ -113,6 +118,34 @@ const LegacyModernizationPage: React.FC = () => {
     }
   }, [selectedWorkflowId, workflows]);
 
+  // Timer effect - updates every second during execution
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+
+    if (executionStartTime && executing) {
+      interval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - executionStartTime) / 1000);
+        setElapsedSeconds(elapsed);
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [executionStartTime, executing]);
+
+  // Format elapsed time as MM:SS or HH:MM:SS
+  const formatElapsedTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const loadExample = () => {
     // Try to find oms-core workflow
     const omsWorkflow = workflows.find(w => w.git_repo?.includes('oms-core'));
@@ -142,6 +175,12 @@ const LegacyModernizationPage: React.FC = () => {
     setStreamingOutput('');
     setCurrentAgent('');
     setAgentStatus('');
+
+    // Start timer
+    const startTime = Date.now();
+    setExecutionStartTime(startTime);
+    setElapsedSeconds(0);
+    setFinalDuration(null);
 
     try {
       // Build the task combining all inputs
@@ -222,6 +261,13 @@ Create detailed markdown files for each phase and track combination in the .clod
       setError(errorMessage);
       enqueueSnackbar(errorMessage, { variant: 'error' });
     } finally {
+      // Stop timer and calculate final duration
+      if (executionStartTime) {
+        const endTime = Date.now();
+        const totalSeconds = Math.floor((endTime - executionStartTime) / 1000);
+        setFinalDuration(formatElapsedTime(totalSeconds));
+      }
+
       setLoading(false);
       setExecuting(false);
       setCurrentAgent('');
@@ -238,6 +284,9 @@ Create detailed markdown files for each phase and track combination in the .clod
     setResult(null);
     setError(null);
     setStreamingOutput('');
+    setExecutionStartTime(null);
+    setElapsedSeconds(0);
+    setFinalDuration(null);
   };
 
   const handleBrowseFiles = async () => {
@@ -506,6 +555,20 @@ Create detailed markdown files for each phase and track combination in the .clod
               <Box>
                 <LinearProgress sx={{ mb: 2 }} />
 
+                {/* Execution Timer */}
+                <Card sx={{ mb: 2, bgcolor: 'rgba(100, 149, 237, 0.05)' }}>
+                  <CardContent sx={{ py: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Execution Time:
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 600, fontFamily: 'monospace' }}>
+                        {formatElapsedTime(elapsedSeconds)}
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+
                 {currentAgent && (
                   <Card sx={{ mb: 2, bgcolor: 'rgba(100, 149, 237, 0.1)' }}>
                     <CardContent>
@@ -563,6 +626,13 @@ Create detailed markdown files for each phase and track combination in the .clod
                   <Typography variant="caption">
                     Check the .clode/claude_prompts/ directory in your repository for the generated implementation plans.
                   </Typography>
+                  {finalDuration && (
+                    <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Execution completed in <strong>{finalDuration}</strong>
+                      </Typography>
+                    </Box>
+                  )}
                 </Alert>
 
                 {/* Summary Cards */}
