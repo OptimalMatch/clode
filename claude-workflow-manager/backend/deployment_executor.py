@@ -202,41 +202,92 @@ class DeploymentExecutor:
         return result
     
     def _get_block_inputs(self, block_id: str, connections: List[Dict], context: Dict) -> str:
-        """Get formatted inputs from connected blocks"""
+        """
+        Get formatted inputs from connected blocks.
+
+        Connections can specify 'extract_output: true' to pass only the extracted text output,
+        or default to 'extract_output: false' to pass the full JSON result with all metadata.
+        """
         # Find connections targeting this block
         # Handle both formats: {'target': 'block-1'} and {'target': {'blockId': 'block-1'}}
         def get_target_id(conn):
             target = conn["target"]
             return target["blockId"] if isinstance(target, dict) else target
-        
+
         incoming = [c for c in connections if get_target_id(c) == block_id]
-        
+
         if not incoming:
             # Convert dict to JSON string for consistency
             input_data = context["input"]
             if isinstance(input_data, dict):
                 return json.dumps(input_data, indent=2) if input_data else ""
             return str(input_data) if input_data else ""
-        
+
         # Format results from previous blocks
         inputs = []
         for conn in incoming:
             source = conn["source"]
             source_id = source["blockId"] if isinstance(source, dict) else source
+
+            # Check if this connection wants extracted output only (default: False for backward compatibility)
+            extract_output = conn.get("extract_output", False)
+
             if source_id in context["block_outputs"]:
                 result = context["block_outputs"][source_id]
-                if isinstance(result, dict):
-                    # Format nicely
-                    inputs.append(json.dumps(result, indent=2))
+
+                # If extract_output is True, extract just the final text output
+                if extract_output and isinstance(result, dict):
+                    # Sequential pattern: extract final_result
+                    if result.get("pattern") == "sequential":
+                        output = result.get("final_result", "")
+                        inputs.append(str(output))
+                    # Parallel pattern: extract aggregated_result or individual_results
+                    elif result.get("pattern") == "parallel":
+                        if result.get("aggregated_result"):
+                            inputs.append(str(result["aggregated_result"]))
+                        else:
+                            # No aggregator - format all individual results
+                            individual = result.get("individual_results", {})
+                            formatted = json.dumps(individual, indent=2)
+                            inputs.append(formatted)
+                    # Hierarchical pattern: extract final_result
+                    elif result.get("pattern") == "hierarchical":
+                        output = result.get("final_result", "")
+                        inputs.append(str(output))
+                    # Debate pattern: extract last round or full debate_history
+                    elif result.get("pattern") == "debate":
+                        debate_history = result.get("debate_history", [])
+                        if debate_history:
+                            # Get the last statement as the conclusion
+                            last_statement = debate_history[-1].get("statement", "")
+                            inputs.append(str(last_statement))
+                        else:
+                            inputs.append(json.dumps(result, indent=2))
+                    # Dynamic routing pattern: extract results
+                    elif result.get("pattern") == "dynamic_routing":
+                        routing_results = result.get("results", {})
+                        if routing_results:
+                            # Format all specialist results
+                            formatted = json.dumps(routing_results, indent=2)
+                            inputs.append(formatted)
+                        else:
+                            inputs.append(json.dumps(result, indent=2))
+                    else:
+                        # Unknown pattern - send full result as JSON
+                        inputs.append(json.dumps(result, indent=2))
                 else:
-                    inputs.append(str(result))
-        
+                    # Default behavior: pass full JSON result with all metadata
+                    if isinstance(result, dict):
+                        inputs.append(json.dumps(result, indent=2))
+                    else:
+                        inputs.append(str(result))
+
         if not inputs:
             input_data = context["input"]
             if isinstance(input_data, dict):
                 return json.dumps(input_data, indent=2) if input_data else ""
             return str(input_data) if input_data else ""
-        
+
         return "\n\n---\n\n".join(inputs)
     
     async def _execute_sequential(self, block: Dict, block_input: Any, log_id: str) -> Dict[str, Any]:
