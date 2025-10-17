@@ -1,4 +1,4 @@
-# CLode - A Claude Workflow Manager
+# CLode - A Claude Agentic Workforce Manager
 
 A full-stack application for managing Claude Code instances in Git workflows with parallel execution capabilities.
 
