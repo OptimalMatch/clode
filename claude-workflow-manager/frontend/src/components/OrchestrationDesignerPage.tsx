@@ -3126,31 +3126,31 @@ Format your response as JSON:
               overflow: 'hidden',
               cursor: isPanning ? 'grabbing' : 'grab',
             }}
-        >
-          {renderConnections()}
-          {renderBlocks()}
-          
-          {blocks.length === 0 && (
-            <Box
-              sx={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                textAlign: 'center',
-                color: darkMode ? '#666' : 'text.secondary',
-              }}
-            >
-              <Psychology sx={{ fontSize: 80, opacity: 0.3, mb: 2 }} />
-              <Typography variant="h6">
-                Start by adding orchestration patterns
-              </Typography>
-              <Typography variant="body2">
-                Select patterns from the left sidebar to begin designing
-              </Typography>
-            </Box>
-          )}
-        </Box>
+          >
+            {renderConnections()}
+            {renderBlocks()}
+
+            {blocks.length === 0 && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  textAlign: 'center',
+                  color: darkMode ? '#666' : 'text.secondary',
+                }}
+              >
+                <Psychology sx={{ fontSize: 80, opacity: 0.3, mb: 2 }} />
+                <Typography variant="h6">
+                  Start by adding orchestration patterns
+                </Typography>
+                <Typography variant="body2">
+                  Select patterns from the left sidebar to begin designing
+                </Typography>
+              </Box>
+            )}
+          </Box>
       </Box>
       {/* End Main Content Area */}
 
