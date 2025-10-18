@@ -2054,8 +2054,8 @@ Format your response as JSON:
       // Advanced mode: each agent row is approximately 32px
       agentListHeight = agentsCount * 32;
     } else {
-      // Simple mode: just text showing agent count = ~20px
-      agentListHeight = 20;
+      // Simple mode: text showing agent count = ~30px (includes mb:1 margin)
+      agentListHeight = 30;
     }
 
     // Git repo chip (optional): if present, adds ~28px
