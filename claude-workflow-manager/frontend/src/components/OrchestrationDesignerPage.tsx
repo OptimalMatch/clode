@@ -2042,15 +2042,27 @@ Format your response as JSON:
 
   // Calculate actual block height based on content
   const calculateBlockHeight = (block: any) => {
-    // Base height for header, padding, chip, divider
-    const baseHeight = 120;
+    // CardContent padding: 16px top + 16px bottom = 32px
+    // Header Box (DragIndicator + Title + Delete): ~40px + mb:1 (8px) = 48px
+    // Chip: ~24px + mb:1 (8px) = 32px
+    // Divider: ~1px + my:1 (8px top + 8px bottom) = 17px
+    // Buttons Box: ~36px + mt:2 (16px) = 52px
+    // Base total: 32 + 48 + 32 + 17 + 52 = 181px
+    const baseHeight = 181;
 
-    // Height per agent in the list (approximately 35px per agent)
-    const agentHeight = 35;
+    // Height per agent in the list
+    // Each agent: py:0.5 (4px top + 4px bottom) + mb:0.5 (4px) + content (~25px) = 37px
+    const agentHeight = 37;
     const agentsCount = block.data.agents?.length || 1;
 
+    // Agent section only appears in advanced mode or has streaming output
+    // In simple mode without streaming, just show count (1 line ~20px)
+    const agentSectionHeight = connectionMode === 'advanced'
+      ? (agentsCount * agentHeight)
+      : 20; // Simple mode: just the agent count text
+
     // Total height
-    return baseHeight + (agentsCount * agentHeight);
+    return baseHeight + agentSectionHeight;
   };
 
   // Helper function to calculate edge connection points based on relative positions
