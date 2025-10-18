@@ -1,0 +1,459 @@
+name: Deploy to pop-os-0
+
+on:
+  push:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+      use_claude_max_plan:
+        description: 'Claude Authentication Mode'
+        required: true
+        default: 'max-plan'
+        type: choice
+        options:
+          - 'max-plan'
+          - 'api-key'
+      force_rebuild:
+        description: 'Force rebuild without cache (ignore Docker layer cache)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, pop-os-0]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up environment variables
+      run: |
+        echo "Setting up deployment environment..."
+        echo "DEPLOYMENT_ENV=${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_ENV
+        echo "DEPLOYMENT_TIME=$(date -u +%Y%m%d_%H%M%S)" >> $GITHUB_ENV
+        echo "GIT_SHA=${GITHUB_SHA:0:8}" >> $GITHUB_ENV
+        echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+        echo "🔨 Force rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}"
+
+    - name: Verify system requirements
+      run: |
+        echo "🔍 Checking system requirements..."
+
+        # Check Docker
+        if ! command -v docker &> /dev/null; then
+          echo "❌ Docker is not installed"
+          exit 1
+        fi
+        echo "✅ Docker version: $(docker --version)"
+
+        # Check Docker Compose
+        if ! command -v docker compose &> /dev/null; then
+          echo "❌ Docker Compose is not installed"
+          exit 1
+        fi
+        echo "✅ Docker Compose version: $(docker compose --version)"
+
+        # Check available disk space (require at least 2GB)
+        AVAILABLE_SPACE=$(df / | awk 'NR==2 {print $4}')
+        REQUIRED_SPACE=2097152  # 2GB in KB
+        if [ "$AVAILABLE_SPACE" -lt "$REQUIRED_SPACE" ]; then
+          echo "❌ Insufficient disk space. Available: ${AVAILABLE_SPACE}KB, Required: ${REQUIRED_SPACE}KB"
+          exit 1
+        fi
+        echo "✅ Sufficient disk space available: ${AVAILABLE_SPACE}KB"
+
+    - name: Verify Docker group membership
+      run: |
+        echo "🔐 Verifying Docker permissions..."
+
+        # Check if current user is in docker group
+        if groups | grep -q '\bdocker\b'; then
+          echo "✅ Current user ($USER) is in the docker group"
+        else
+          echo "❌ ERROR: Current user ($USER) is NOT in the docker group"
+          echo ""
+          echo "To fix this, run on the self-hosted runner machine:"
+          echo "  sudo usermod -aG docker $USER"
+          echo "  sudo systemctl restart actions.runner.*.service"
+          echo ""
+          echo "Or reboot the machine:"
+          echo "  sudo reboot"
+          echo ""
+          echo "See GITHUB_RUNNER_DOCKER_SETUP.md for detailed instructions"
+          exit 1
+        fi
+
+        # Test Docker access without sudo
+        if docker ps &> /dev/null; then
+          echo "✅ Can run Docker commands without sudo"
+        else
+          echo "❌ ERROR: Cannot run Docker commands without sudo"
+          echo ""
+          echo "This usually means:"
+          echo "1. User is not in docker group (check above)"
+          echo "2. Docker daemon is not running"
+          echo "3. Need to log out and back in after adding to group"
+          echo ""
+          echo "Try running: newgrp docker"
+          exit 1
+        fi
+
+        echo "✅ Docker permissions verified successfully"
+
+    - name: Create deployment directory
+      run: |
+        echo "📁 Setting up deployment directory..."
+        # Use home directory instead of /opt to avoid sudo requirements
+        DEPLOY_DIR="$HOME/claude-workflow-manager-deploy"
+        mkdir -p $DEPLOY_DIR
+
+        # Fix ownership of deployment directory (in case it was created with wrong permissions)
+        sudo chown -R $USER:$USER $DEPLOY_DIR
+
+        echo "DEPLOY_DIR=$DEPLOY_DIR" >> $GITHUB_ENV
+        echo "✅ Deployment directory created at $DEPLOY_DIR"
+
+    - name: Stop existing services and clean up
+      run: |
+        echo "🛑 Stopping existing services..."
+        cd $DEPLOY_DIR || cd .
+
+        # Stop containers if they exist
+        if [ -d "claude-workflow-manager" ]; then
+          cd claude-workflow-manager
+          if [ -f docker-compose.yml ]; then
+            docker compose down --remove-orphans || true
+          fi
+          cd ..
+
+          # Remove old deployment (use sudo only for file removal, as Docker may have created root-owned files)
+          echo "🗑️ Removing old deployment..."
+          sudo rm -rf claude-workflow-manager || true
+        fi
+
+        # Clean up unused Docker resources (no sudo needed if user is in docker group)
+        docker system prune -f || true
+
+    - name: Deploy new version
+      run: |
+        echo "🚀 Deploying new version..."
+
+        # Ensure deployment directory is owned by current user
+        sudo chown -R $USER:$USER $DEPLOY_DIR
+
+        cd $DEPLOY_DIR
+
+        # Copy the claude-workflow-manager subdirectory from the repo
+        cp -r $GITHUB_WORKSPACE/claude-workflow-manager .
+
+        # Copy voice services if Picovoice key is available
+        if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
+          echo "🎤 Copying voice services..."
+          cp -r $GITHUB_WORKSPACE/voice-backend .
+          cp -r $GITHUB_WORKSPACE/voice-mcp-server .
+        fi
+
+        # Fix ownership to current user (important after Docker operations)
+        sudo chown -R $USER:$USER .
+
+        echo "✅ Files deployed successfully"
+
+    - name: Set up environment configuration
+      run: |
+        echo "⚙️ Setting up environment configuration..."
+        cd $DEPLOY_DIR/claude-workflow-manager
+
+        # Get the actual IP address of this machine
+        HOST_IP_ADDRESS=$(hostname -I | awk '{print $1}')
+        if [ -z "$HOST_IP_ADDRESS" ]; then
+          HOST_IP_ADDRESS="pop-os-0"  # Fallback to hostname
+        fi
+
+        # Use GitHub secret if set, otherwise use detected IP
+        if [ -n "${{ secrets.HOST_IP_POP_OS_0 }}" ]; then
+          FINAL_HOST_IP="${{ secrets.HOST_IP_POP_OS_0 }}"
+        else
+          FINAL_HOST_IP="$HOST_IP_ADDRESS"
+        fi
+
+        echo "🌐 Using HOST_IP: $FINAL_HOST_IP"
+
+        # Determine Claude mode
+        CLAUDE_MODE_INPUT="${{ github.event.inputs.use_claude_max_plan || 'max-plan' }}"
+        if [ "$CLAUDE_MODE_INPUT" = "max-plan" ]; then
+          CLAUDE_MODE="true"
+          echo "🤖 Claude Mode: Max Plan (authenticated via claude /login)"
+        else
+          CLAUDE_MODE="false"
+          echo "🔑 Claude Mode: API Key (using CLAUDE_API_KEY)"
+        fi
+
+        # Create .env file from GitHub secrets
+        cat > .env << EOF
+        # MongoDB Configuration
+        MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USERNAME }}
+        MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+
+        # Claude API Configuration (conditional based on mode)
+        # In max-plan mode, leave API key empty so Claude CLI uses credential files
+        # In API key mode, use the provided API key
+        CLAUDE_API_KEY=$(if [ "$CLAUDE_MODE" = "true" ]; then echo ""; else echo "${{ secrets.CLAUDE_API_KEY }}"; fi)
+        USE_CLAUDE_MAX_PLAN=$CLAUDE_MODE
+
+        # JWT Secret Key for user authentication
+        JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+
+        # Host Configuration (auto-detected IP address)
+        HOST_IP=$FINAL_HOST_IP
+
+        # Optional: Custom folders
+        CLAUDE_PROMPTS_FOLDER=.clode/claude_prompts
+        CLAUDE_AGENTS_FOLDER=.claude/agents
+
+        # Voice Services Configuration (optional)
+        PICOVOICE_ACCESS_KEY=${{ secrets.PICOVOICE_ACCESS_KEY || '' }}
+        REACT_APP_VOICE_API_URL=http://$FINAL_HOST_IP:14300
+
+        # Deployment metadata
+        DEPLOYMENT_ENV=$DEPLOYMENT_ENV
+        DEPLOYMENT_TIME=$DEPLOYMENT_TIME
+        GIT_SHA=$GIT_SHA
+        BRANCH_NAME=$BRANCH_NAME
+        EOF
+
+        echo "✅ Environment file created with HOST_IP=$FINAL_HOST_IP"
+        echo "🤖 Claude mode set to: $CLAUDE_MODE"
+
+        # Check if voice services should be enabled
+        if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
+          echo "🎤 Voice services will be enabled (Picovoice key found)"
+        else
+          echo "ℹ️  Voice services will be skipped (no Picovoice key)"
+        fi
+
+    - name: Log in to Container Registry
+      run: |
+        echo "🔐 Logging in to GitHub Container Registry..."
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        echo "✅ Successfully logged in to ghcr.io"
+
+    - name: Build and start services
+      run: |
+        echo "🔨 Building and starting services..."
+        cd $DEPLOY_DIR/claude-workflow-manager
+
+        # Determine which tag to use based on branch
+        if [ "$BRANCH_NAME" = "main" ]; then
+          BASE_IMAGE_TAG="latest"
+        else
+          # For feature branches, use branch name as tag (with slashes replaced by dashes)
+          BASE_IMAGE_TAG=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
+        fi
+
+        echo "🏷️  Using base image tag: $BASE_IMAGE_TAG"
+
+        # Convert repository owner to lowercase for Docker registry (case-sensitive)
+        REPO_OWNER_LOWERCASE=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        echo "🏢 Repository owner: $REPO_OWNER_LOWERCASE"
+
+        # Check if base images are available for fast deployment
+        echo "🔍 Checking for pre-built base images..."
+        BASE_IMAGES_AVAILABLE=true
+
+        for service in backend-base terminal-base frontend-base voice-backend voice-mcp-server; do
+          IMAGE="ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-$service:$BASE_IMAGE_TAG"
+          if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "❌ Base image not found: $IMAGE"
+            BASE_IMAGES_AVAILABLE=false
+            break
+          else
+            echo "✅ Base image found: $IMAGE"
+          fi
+        done
+
+        if [ "$BASE_IMAGES_AVAILABLE" = "true" ]; then
+          echo "🚀 Using fast deployment with pre-built base images..."
+          export GITHUB_REPOSITORY_OWNER="$REPO_OWNER_LOWERCASE"
+          export BASE_IMAGE_TAG="$BASE_IMAGE_TAG"
+
+          # Export React environment variables for frontend build
+          HOST_IP_FROM_ENV=$(grep "HOST_IP=" .env | cut -d'=' -f2)
+          export REACT_APP_API_URL="http://${HOST_IP_FROM_ENV}:8005"
+          export REACT_APP_WS_URL="ws://${HOST_IP_FROM_ENV}:8006"
+          export REACT_APP_API_PORT="8005"
+          export REACT_APP_WS_PORT="8006"
+          export REACT_APP_VOICE_API_URL="http://${HOST_IP_FROM_ENV}:14300"
+
+          echo "🌐 Frontend will use API URL: $REACT_APP_API_URL"
+          echo "🎤 Frontend will use Voice API URL: $REACT_APP_VOICE_API_URL"
+
+          # Pull the latest base images from registry
+          echo "📥 Pulling latest base images..."
+          docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-backend-base:$BASE_IMAGE_TAG" || true
+          docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-terminal-base:$BASE_IMAGE_TAG" || true
+          docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-frontend-base:$BASE_IMAGE_TAG" || true
+          docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-voice-backend:$BASE_IMAGE_TAG" || true
+          docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-voice-mcp-server:$BASE_IMAGE_TAG" || true
+
+          # Check if force rebuild is requested
+          if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
+            echo "🔨 Force rebuild requested - building without cache..."
+            COMPOSE_FILES="-f docker-compose.yml -f docker-compose.fast.yml"
+          else
+            echo "🔨 Building with cache..."
+            COMPOSE_FILES="-f docker-compose.yml -f docker-compose.fast.yml"
+          fi
+
+          # Add voice services if Picovoice key is available
+          if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
+            echo "🎤 Including voice services in deployment..."
+            COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.voice.yml"
+          fi
+
+          if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
+            docker compose $COMPOSE_FILES build --no-cache --parallel
+          else
+            docker compose $COMPOSE_FILES build --parallel
+          fi
+
+          docker compose $COMPOSE_FILES up -d
+        else
+          echo "🏗️ Base images not available, using full build..."
+          COMPOSE_FILES="-f docker-compose.yml"
+
+          # Export React environment variables for frontend build
+          HOST_IP_FROM_ENV=$(grep "HOST_IP=" .env | cut -d'=' -f2)
+          export REACT_APP_API_URL="http://${HOST_IP_FROM_ENV}:8005"
+          export REACT_APP_WS_URL="ws://${HOST_IP_FROM_ENV}:8006"
+          export REACT_APP_API_PORT="8005"
+          export REACT_APP_WS_PORT="8006"
+          export REACT_APP_VOICE_API_URL="http://${HOST_IP_FROM_ENV}:14300"
+
+          echo "🌐 Frontend will use API URL: $REACT_APP_API_URL"
+          echo "🎤 Frontend will use Voice API URL: $REACT_APP_VOICE_API_URL"
+
+          # Add voice services if Picovoice key is available
+          if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
+            echo "🎤 Including voice services in deployment..."
+            COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.voice.yml"
+          fi
+
+          docker compose $COMPOSE_FILES build --no-cache --parallel
+          docker compose $COMPOSE_FILES up -d
+        fi
+
+        echo "✅ Services started successfully"
+
+    - name: Wait for services to be healthy
+      timeout-minutes: 5
+      run: |
+        echo "🏥 Waiting for services to be healthy..."
+        cd $DEPLOY_DIR/claude-workflow-manager
+
+        # Wait for backend to be ready
+        echo "Waiting for backend service..."
+        for i in {1..30}; do
+          if curl -f http://localhost:8005/ &>/dev/null; then
+            echo "✅ Backend service is healthy"
+            break
+          fi
+          echo "Attempt $i/30: Backend not ready yet..."
+          sleep 10
+        done
+
+        # Wait for frontend to be ready
+        echo "Waiting for frontend service..."
+        for i in {1..30}; do
+          if curl -f http://localhost:3005 &>/dev/null; then
+            echo "✅ Frontend service is healthy"
+            break
+          fi
+          echo "Attempt $i/30: Frontend not ready yet..."
+          sleep 10
+        done
+
+    - name: Verify deployment
+      run: |
+        echo "✅ Deployment verification complete"
+        echo "🎉 Claude Workflow Manager services are running"
+
+    - name: Display service status
+      run: |
+        echo "📊 Service Status:"
+        cd $DEPLOY_DIR/claude-workflow-manager
+        docker compose ps
+
+        echo ""
+        echo "🔗 Service URLs:"
+        # Get the HOST_IP from the .env file
+        HOST_IP_FROM_ENV=$(grep "HOST_IP=" .env | cut -d'=' -f2)
+        echo "Frontend: http://${HOST_IP_FROM_ENV}:3005"
+        echo "Backend API: http://${HOST_IP_FROM_ENV}:8005"
+        echo "MongoDB: ${HOST_IP_FROM_ENV}:27018"
+        echo "Redis: ${HOST_IP_FROM_ENV}:6379"
+
+        # Show voice services if enabled
+        if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
+          echo ""
+          echo "🎤 Voice Services:"
+          echo "Voice Backend API: http://${HOST_IP_FROM_ENV}:14300"
+          echo "Voice MCP HTTP: http://${HOST_IP_FROM_ENV}:14302"
+        fi
+
+    - name: Send deployment notification
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Deployment completed successfully!"
+          echo "🎉 Claude Workflow Manager is now running on self-hosted runner"
+          echo "📅 Deployed: $DEPLOYMENT_TIME"
+          echo "🌿 Branch: $BRANCH_NAME"
+          echo "📝 Commit: $GIT_SHA"
+          CLAUDE_DISPLAY_MODE="${{ github.event.inputs.use_claude_max_plan || 'max-plan' }}"
+          if [ "$CLAUDE_DISPLAY_MODE" = "max-plan" ]; then
+            echo "🤖 Claude Mode: Max Plan"
+          else
+            echo "🔑 Claude Mode: API Key"
+          fi
+        else
+          echo "❌ Deployment failed!"
+          echo "📅 Failed at: $(date -u)"
+          echo "🌿 Branch: $BRANCH_NAME"
+          echo "📝 Commit: $GIT_SHA"
+
+          # Show recent logs for debugging
+          echo "🔍 Recent logs:"
+          cd $DEPLOY_DIR/claude-workflow-manager || cd .
+          docker compose logs --tail=50 || true
+        fi
+
+    - name: Cleanup on failure
+      if: failure()
+      run: |
+        echo "🧹 Cleaning up failed deployment..."
+        cd $DEPLOY_DIR || cd .
+
+        # Stop and remove containers if they exist
+        if [ -d "claude-workflow-manager" ]; then
+          cd claude-workflow-manager
+          docker compose down --remove-orphans || true
+          cd ..
+        fi
+
+        echo "❌ Deployment failed - manual intervention may be required"
