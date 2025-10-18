@@ -67,7 +67,8 @@ import {
   Close,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent, OrchestrationDesign } from '../services/api';
+import { useSearchParams } from 'react-router-dom';
+import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent, OrchestrationDesign, promptFileApi } from '../services/api';
 import { Workflow } from '../types';
 import ReactMarkdown from 'react-markdown';
 
@@ -123,6 +124,11 @@ interface Connection {
 }
 
 const OrchestrationDesignerPage: React.FC = () => {
+  // URL parameters for auto-generation from workflow prompts
+  const [searchParams] = useSearchParams();
+  const workflowIdFromUrl = searchParams.get('workflow');
+  const autoGenerate = searchParams.get('autoGenerate') === 'true';
+
   // Canvas state
   const [blocks, setBlocks] = useState<OrchestrationBlock[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -130,6 +136,10 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [selectedBlock, setSelectedBlock] = useState<OrchestrationBlock | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Auto-generation state
+  const [autoGenerating, setAutoGenerating] = useState(false);
+  const [autoGenerationComplete, setAutoGenerationComplete] = useState(false);
   
   // Drag and drop state
   const [isDragging, setIsDragging] = useState(false);
@@ -223,6 +233,136 @@ const OrchestrationDesignerPage: React.FC = () => {
 
     return () => clearInterval(interval);
   }, [aiGenerationStartTime]);
+
+  // Auto-generate orchestration from workflow prompts
+  useEffect(() => {
+    if (autoGenerate && workflowIdFromUrl && !autoGenerationComplete && !autoGenerating) {
+      const generateFromPrompts = async () => {
+        setAutoGenerating(true);
+        try {
+          // Fetch the execution plan from the workflow
+          const response = await promptFileApi.getRepoPrompts(workflowIdFromUrl);
+          const { execution_plan, prompts } = response;
+
+          if (!execution_plan || execution_plan.length === 0) {
+            setSnackbar({
+              open: true,
+              message: 'No prompts found in workflow repository',
+              severity: 'warning',
+            });
+            setAutoGenerating(false);
+            setAutoGenerationComplete(true);
+            return;
+          }
+
+          // Get workflow details for git_repo
+          const workflow = await workflowApi.getById(workflowIdFromUrl);
+
+          // Generate blocks and connections from execution plan
+          const generatedBlocks: OrchestrationBlock[] = [];
+          const generatedConnections: Connection[] = [];
+          let yPosition = 100;
+          let previousBlockId: string | null = null;
+
+          execution_plan.forEach((sequenceGroup: any[], sequenceIndex: number) => {
+            if (sequenceGroup.length === 1) {
+              // Single prompt - create a sequential block
+              const prompt = sequenceGroup[0];
+              const blockId = `block-${sequenceIndex}`;
+
+              generatedBlocks.push({
+                id: blockId,
+                type: 'sequential',
+                position: { x: 400, y: yPosition },
+                data: {
+                  label: `Sequence ${prompt.sequence}: ${prompt.description}`,
+                  agents: [{
+                    id: `agent-${sequenceIndex}-0`,
+                    name: prompt.description.replace(/-/g, ' ').replace(/_/g, ' '),
+                    system_prompt: `Execute the following prompt:\n\n${prompt.content.substring(0, 500)}...`,
+                    role: 'worker' as AgentRole,
+                  }],
+                  task: `Execute prompt: ${prompt.filename}`,
+                  git_repo: workflow.git_repo,
+                  isolate_agent_workspaces: false,
+                },
+              });
+
+              // Connect to previous block
+              if (previousBlockId) {
+                generatedConnections.push({
+                  id: `conn-${previousBlockId}-${blockId}`,
+                  source: previousBlockId,
+                  target: blockId,
+                  type: 'block',
+                });
+              }
+
+              previousBlockId = blockId;
+              yPosition += 200;
+            } else {
+              // Multiple parallel prompts - create a parallel block
+              const blockId = `block-${sequenceIndex}`;
+
+              generatedBlocks.push({
+                id: blockId,
+                type: 'parallel',
+                position: { x: 400, y: yPosition },
+                data: {
+                  label: `Parallel Group ${sequenceGroup[0].sequence}`,
+                  agents: sequenceGroup.map((prompt: any, idx: number) => ({
+                    id: `agent-${sequenceIndex}-${idx}`,
+                    name: `${prompt.parallel}: ${prompt.description.replace(/-/g, ' ').replace(/_/g, ' ')}`,
+                    system_prompt: `Execute the following prompt:\n\n${prompt.content.substring(0, 500)}...`,
+                    role: 'worker' as AgentRole,
+                  })),
+                  task: `Execute parallel prompts in sequence ${sequenceGroup[0].sequence}`,
+                  git_repo: workflow.git_repo,
+                  isolate_agent_workspaces: false,
+                },
+              });
+
+              // Connect to previous block
+              if (previousBlockId) {
+                generatedConnections.push({
+                  id: `conn-${previousBlockId}-${blockId}`,
+                  source: previousBlockId,
+                  target: blockId,
+                  type: 'block',
+                });
+              }
+
+              previousBlockId = blockId;
+              yPosition += 250;
+            }
+          });
+
+          setBlocks(generatedBlocks);
+          setConnections(generatedConnections);
+          setDesignName(`Auto-Generated: ${workflow.name}`);
+          setDesignDescription(`Orchestration design auto-generated from ${prompts.length} prompts in ${execution_plan.length} sequence groups`);
+
+          setSnackbar({
+            open: true,
+            message: `Successfully generated orchestration from ${prompts.length} prompts`,
+            severity: 'success',
+          });
+        } catch (error: any) {
+          console.error('Error auto-generating orchestration:', error);
+          setSnackbar({
+            open: true,
+            message: `Failed to auto-generate orchestration: ${error.message}`,
+            severity: 'error',
+          });
+        } finally {
+          setAutoGenerating(false);
+          setAutoGenerationComplete(true);
+        }
+      };
+
+      generateFromPrompts();
+    }
+  }, [autoGenerate, workflowIdFromUrl, autoGenerationComplete, autoGenerating]);
 
   // Fetch workflows for git repo selection
   const { data: workflows = [] } = useQuery({

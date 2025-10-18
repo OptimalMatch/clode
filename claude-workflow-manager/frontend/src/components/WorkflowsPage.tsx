@@ -21,9 +21,10 @@ import {
   CircularProgress,
   Chip,
 } from '@mui/material';
-import { 
-  Add, PlayArrow, FolderOpen, SmartToy, Delete, 
-  CheckCircle, Error, Warning, VpnKey, DesignServices 
+import {
+  Add, PlayArrow, FolderOpen, SmartToy, Delete,
+  CheckCircle, Error, Warning, VpnKey, DesignServices,
+  AutoFixHigh
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -275,6 +276,14 @@ const WorkflowsPage: React.FC = () => {
                   color="primary"
                 >
                   <DesignServices />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => navigate(`/orchestration-designer?workflow=${workflow.id}&autoGenerate=true`)}
+                  title="Auto-Generate Orchestration from Prompts"
+                  color="secondary"
+                >
+                  <AutoFixHigh />
                 </IconButton>
                 <IconButton
                   size="small"
