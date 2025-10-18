@@ -320,6 +320,33 @@ git config user.name "Alex Chang"
 git config user.email "alex@unidatum.com"
 ```
 
+## GitHub Actions & Deployment
+
+**Monitoring CI/CD Pipelines:**
+
+This repository has GitHub Actions workflows configured for automated deployment. The `gh` CLI tool is available for monitoring workflow runs.
+
+**After pushing a branch or merging a pull request to main:**
+
+1. **Check latest workflow runs:**
+   ```bash
+   gh run list --branch main --limit 5
+   ```
+
+2. **View detailed logs for a specific run:**
+   ```bash
+   gh run view <run-id> --log
+   ```
+
+3. **Watch a running workflow in real-time:**
+   ```bash
+   gh run watch
+   ```
+
+**Always verify deployment status after merging to main** to ensure the changes deployed successfully. Look for:
+- ✅ `completed` + `success` status indicates successful deployment
+- ❌ `completed` + `failure` status requires investigation of logs
+
 ## Environment Variables
 
 **Required:**
