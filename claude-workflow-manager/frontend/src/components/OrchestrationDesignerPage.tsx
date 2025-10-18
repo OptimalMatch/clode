@@ -2042,15 +2042,43 @@ Format your response as JSON:
 
   // Calculate actual block height based on content
   const calculateBlockHeight = (block: any) => {
-    // Base height for header, padding, chip, divider
-    const baseHeight = 120;
+    // CardContent has default padding of 16px all sides (last child has no bottom padding)
+    // So: 16px top, content, 16px bottom = 32px padding total
+    const cardPadding = 32;
 
-    // Height per agent in the list (approximately 35px per agent)
-    const agentHeight = 35;
+    // Header: DragIndicator(24) + Typography(28) + IconButton(28) + mb:1(8) = ~88px
+    const headerHeight = 88;
+
+    // Pattern chip: height(24) + mb:1(8) = 32px
+    const chipHeight = 32;
+
+    // Divider: height(1) + my:1(8+8) = 17px
+    const dividerHeight = 17;
+
+    // Agent list section (varies by mode)
     const agentsCount = block.data.agents?.length || 1;
+    let agentListHeight = 0;
 
-    // Total height
-    return baseHeight + (agentsCount * agentHeight);
+    if (connectionMode === 'advanced') {
+      // Advanced mode: each agent is a Box with py:0.5(4+4) + mb:0.5(4) + content(~30px) = ~42px
+      agentListHeight = agentsCount * 42;
+    } else {
+      // Simple mode: Typography "X agents" with mb:1 = ~28px
+      agentListHeight = 28;
+    }
+
+    // Git repo chip (optional): if present, adds ~32px
+    const gitRepoHeight = block.data.git_repo ? 32 : 0;
+
+    // Execution status (optional): if present, adds ~32px
+    const executionStatusHeight = 0; // Usually not present initially
+
+    // Buttons: Box with mt:2(16) + button height(~36) = ~52px
+    const buttonsHeight = 52;
+
+    // Total
+    return cardPadding + headerHeight + chipHeight + dividerHeight +
+           agentListHeight + gitRepoHeight + executionStatusHeight + buttonsHeight;
   };
 
   // Helper function to calculate edge connection points based on relative positions
