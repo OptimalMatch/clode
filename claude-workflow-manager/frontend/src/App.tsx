@@ -26,6 +26,7 @@ import DeploymentsPage from './components/DeploymentsPage';
 import CodeEditorPage from './components/CodeEditorPage';
 import NewCodeEditorPage from './components/NewCodeEditorPage';
 import LegacyModernizationPage from './components/LegacyModernizationPage';
+import UsageDashboard from './components/UsageDashboard';
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ function App() {
                 <Route path="/" element={<ProtectedRoute><ModernLayout><WorkflowsPage /></ModernLayout></ProtectedRoute>} />
                 <Route path="/workflows" element={<ProtectedRoute><ModernLayout><WorkflowsPage /></ModernLayout></ProtectedRoute>} />
                 <Route path="/profile" element={<ModernLayout><ProfilePage /></ModernLayout>} />
+                <Route path="/usage" element={<ProtectedRoute><ModernLayout><UsageDashboard /></ModernLayout></ProtectedRoute>} />
                 <Route path="/design" element={<ModernLayout><DesignPage /></ModernLayout>} />
                 <Route path="/prompts" element={<ModernLayout><PromptsPage /></ModernLayout>} />
                 <Route path="/subagents" element={<ModernLayout><SubagentsPage /></ModernLayout>} />

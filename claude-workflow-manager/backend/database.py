@@ -1663,3 +1663,146 @@ class Database:
         except Exception as e:
             print(f"Error deleting API key {key_id}: {e}")
             return False
+    
+    # User Usage Analytics Methods
+    async def get_user_usage_stats(self, user_id: str, period_start: Optional[datetime] = None, period_end: Optional[datetime] = None) -> Dict:
+        """
+        Get aggregated usage statistics for a user across all their workflows and instances.
+        
+        This method:
+        1. Counts workflows owned by the user
+        2. Counts instances owned by the user
+        3. Aggregates all token usage and costs from logs for user's instances
+        
+        Args:
+            user_id: The user's ID
+            period_start: Optional start date for filtering (default: all time)
+            period_end: Optional end date for filtering (default: now)
+        
+        Returns:
+            Dictionary with aggregated statistics
+        """
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        try:
+            # Count workflows owned by this user
+            workflow_count = await self.db.workflows.count_documents({"user_id": user_id})
+            
+            # Count instances owned by this user
+            instance_count = await self.db.instances.count_documents({"user_id": user_id})
+            
+            # Get all instance IDs for this user
+            instance_cursor = self.db.instances.find(
+                {"user_id": user_id},
+                {"id": 1}
+            )
+            user_instance_ids = [inst["id"] async for inst in instance_cursor]
+            
+            if not user_instance_ids:
+                # User has no instances yet, return zeros
+                return {
+                    "user_id": user_id,
+                    "total_workflows": workflow_count,
+                    "total_instances": 0,
+                    "total_tokens": 0,
+                    "total_input_tokens": 0,
+                    "total_output_tokens": 0,
+                    "total_cache_creation_tokens": 0,
+                    "total_cache_read_tokens": 0,
+                    "total_cost_usd": 0.0,
+                    "total_execution_time_ms": 0,
+                    "period_start": period_start,
+                    "period_end": period_end
+                }
+            
+            # Build aggregation pipeline for logs
+            match_stage = {"instance_id": {"$in": user_instance_ids}}
+            
+            # Add date filtering if provided
+            if period_start or period_end:
+                match_stage["timestamp"] = {}
+                if period_start:
+                    match_stage["timestamp"]["$gte"] = period_start
+                if period_end:
+                    match_stage["timestamp"]["$lte"] = period_end
+            
+            pipeline = [
+                {"$match": match_stage},
+                {"$group": {
+                    "_id": None,
+                    "total_tokens": {"$sum": "$tokens_used"},
+                    "total_input_tokens": {"$sum": "$token_usage.input_tokens"},
+                    "total_output_tokens": {"$sum": "$token_usage.output_tokens"},
+                    "total_cache_creation_tokens": {"$sum": "$token_usage.cache_creation_input_tokens"},
+                    "total_cache_read_tokens": {"$sum": "$token_usage.cache_read_input_tokens"},
+                    "total_cost_usd": {"$sum": "$total_cost_usd"},
+                    "total_execution_time_ms": {"$sum": "$execution_time_ms"}
+                }}
+            ]
+            
+            cursor = self.db.logs.aggregate(pipeline)
+            result = await cursor.to_list(length=1)
+            
+            if not result:
+                # No logs yet
+                return {
+                    "user_id": user_id,
+                    "total_workflows": workflow_count,
+                    "total_instances": instance_count,
+                    "total_tokens": 0,
+                    "total_input_tokens": 0,
+                    "total_output_tokens": 0,
+                    "total_cache_creation_tokens": 0,
+                    "total_cache_read_tokens": 0,
+                    "total_cost_usd": 0.0,
+                    "total_execution_time_ms": 0,
+                    "period_start": period_start,
+                    "period_end": period_end
+                }
+            
+            data = result[0]
+            
+            # Extract token breakdown
+            total_input = data.get("total_input_tokens", 0) or 0
+            total_output = data.get("total_output_tokens", 0) or 0
+            total_cache_create = data.get("total_cache_creation_tokens", 0) or 0
+            total_cache_read = data.get("total_cache_read_tokens", 0) or 0
+            
+            # Calculate total tokens (use detailed breakdown if available)
+            calculated_total = total_input + total_output + total_cache_create + total_cache_read
+            final_total_tokens = calculated_total if calculated_total > 0 else (data.get("total_tokens", 0) or 0)
+            
+            return {
+                "user_id": user_id,
+                "total_workflows": workflow_count,
+                "total_instances": instance_count,
+                "total_tokens": final_total_tokens,
+                "total_input_tokens": total_input,
+                "total_output_tokens": total_output,
+                "total_cache_creation_tokens": total_cache_create,
+                "total_cache_read_tokens": total_cache_read,
+                "total_cost_usd": round(data.get("total_cost_usd", 0.0) or 0.0, 4),
+                "total_execution_time_ms": data.get("total_execution_time_ms", 0) or 0,
+                "period_start": period_start,
+                "period_end": period_end
+            }
+            
+        except Exception as e:
+            print(f"❌ Error getting user usage stats: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "user_id": user_id,
+                "total_workflows": 0,
+                "total_instances": 0,
+                "total_tokens": 0,
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "total_cache_creation_tokens": 0,
+                "total_cache_read_tokens": 0,
+                "total_cost_usd": 0.0,
+                "total_execution_time_ms": 0,
+                "period_start": period_start,
+                "period_end": period_end
+            }

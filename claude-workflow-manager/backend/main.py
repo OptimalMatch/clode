@@ -38,7 +38,7 @@ from models import (
     DynamicRoutingRequest, OrchestrationResult, OrchestrationDesign,
     Deployment, ExecutionLog, ScheduleConfig, AnthropicApiKey,
     AnthropicApiKeyCreate, AnthropicApiKeyResponse, AnthropicApiKeyListResponse,
-    AnthropicApiKeyTestResponse
+    AnthropicApiKeyTestResponse, UserUsageStats, TokenUsage
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -991,6 +991,96 @@ async def logout_user(current_user: Optional[User] = Depends(get_current_user_or
         message="Logout successful. Please discard your access token.",
         success=True
     )
+
+@app.get(
+    "/api/auth/usage-stats",
+    response_model=UserUsageStats,
+    summary="Get User Usage Statistics",
+    description="Get aggregated token usage and cost statistics for the authenticated user.",
+    tags=["Authentication", "Analytics"],
+    responses={
+        200: {"description": "Usage statistics retrieved successfully"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"}
+    }
+)
+async def get_user_usage_stats(
+    current_user: User = Depends(get_current_user),
+    period_start: Optional[str] = None,
+    period_end: Optional[str] = None
+):
+    """
+    Get comprehensive usage statistics for the current user.
+    
+    Returns aggregated data including:
+    - Total workflows and instances
+    - Total tokens used (input, output, cache creation, cache read)
+    - Total cost in USD
+    - Total execution time
+    
+    Optional query parameters:
+    - **period_start**: ISO 8601 datetime string (e.g., "2025-01-01T00:00:00")
+    - **period_end**: ISO 8601 datetime string (e.g., "2025-01-31T23:59:59")
+    
+    Example: `/api/auth/usage-stats?period_start=2025-01-01T00:00:00&period_end=2025-01-31T23:59:59`
+    """
+    try:
+        # Parse date parameters if provided
+        start_dt = None
+        end_dt = None
+        
+        if period_start:
+            try:
+                start_dt = datetime.fromisoformat(period_start.replace('Z', '+00:00'))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid period_start format. Use ISO 8601 format.")
+        
+        if period_end:
+            try:
+                end_dt = datetime.fromisoformat(period_end.replace('Z', '+00:00'))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid period_end format. Use ISO 8601 format.")
+        
+        # Get usage statistics from database
+        stats = await db.get_user_usage_stats(
+            user_id=current_user.id,
+            period_start=start_dt,
+            period_end=end_dt
+        )
+        
+        # Create TokenUsage object for breakdown
+        token_breakdown = TokenUsage(
+            input_tokens=stats["total_input_tokens"],
+            output_tokens=stats["total_output_tokens"],
+            cache_creation_input_tokens=stats["total_cache_creation_tokens"],
+            cache_read_input_tokens=stats["total_cache_read_tokens"],
+            total_tokens=stats["total_tokens"]
+        )
+        
+        # Return as UserUsageStats model
+        return UserUsageStats(
+            user_id=current_user.id,
+            username=current_user.username,
+            total_workflows=stats["total_workflows"],
+            total_instances=stats["total_instances"],
+            total_tokens=stats["total_tokens"],
+            total_input_tokens=stats["total_input_tokens"],
+            total_output_tokens=stats["total_output_tokens"],
+            total_cache_creation_tokens=stats["total_cache_creation_tokens"],
+            total_cache_read_tokens=stats["total_cache_read_tokens"],
+            total_cost_usd=stats["total_cost_usd"],
+            total_execution_time_ms=stats["total_execution_time_ms"],
+            period_start=start_dt,
+            period_end=end_dt,
+            token_breakdown=token_breakdown
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error getting user usage stats: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve usage statistics: {str(e)}")
 
 # Claude Authentication Profile Management Endpoints
 @app.get(
