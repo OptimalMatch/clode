@@ -2037,16 +2037,33 @@ Format your response as JSON:
 
   // Constants for block dimensions
   const BLOCK_WIDTH = 300;
-  const BLOCK_HEIGHT = 200; // Approximate average height
+  const BLOCK_HEIGHT = 200; // Approximate average height (fallback)
   const CONNECTION_HANDLE_SIZE = 8;
+
+  // Calculate actual block height based on content
+  const calculateBlockHeight = (block: any) => {
+    // Base height for header, padding, chip, divider
+    const baseHeight = 120;
+
+    // Height per agent in the list (approximately 35px per agent)
+    const agentHeight = 35;
+    const agentsCount = block.data.agents?.length || 1;
+
+    // Total height
+    return baseHeight + (agentsCount * agentHeight);
+  };
 
   // Helper function to calculate edge connection points based on relative positions
   const calculateEdgeConnectionPoints = (sourceBlock: any, targetBlock: any) => {
+    // Calculate actual block heights
+    const sourceBlockHeight = calculateBlockHeight(sourceBlock);
+    const targetBlockHeight = calculateBlockHeight(targetBlock);
+
     // Calculate block centers (unzoomed)
     const sourceCenterX = sourceBlock.position.x + BLOCK_WIDTH / 2;
-    const sourceCenterY = sourceBlock.position.y + BLOCK_HEIGHT / 2;
+    const sourceCenterY = sourceBlock.position.y + sourceBlockHeight / 2;
     const targetCenterX = targetBlock.position.x + BLOCK_WIDTH / 2;
-    const targetCenterY = targetBlock.position.y + BLOCK_HEIGHT / 2;
+    const targetCenterY = targetBlock.position.y + targetBlockHeight / 2;
     
     // Calculate angle between centers
     const dx = targetCenterX - sourceCenterX;
@@ -2074,7 +2091,7 @@ Format your response as JSON:
       if (dy > 0) {
         // Target is below - use bottom edge
         sourceEdgeX = sourceCenterX;
-        sourceEdgeY = sourceBlock.position.y + BLOCK_HEIGHT;
+        sourceEdgeY = sourceBlock.position.y + sourceBlockHeight;
         sourceEdge = 'bottom';
       } else {
         // Target is above - use top edge
@@ -2109,7 +2126,7 @@ Format your response as JSON:
       } else {
         // Source is below - use bottom edge
         targetEdgeX = targetCenterX;
-        targetEdgeY = targetBlock.position.y + BLOCK_HEIGHT;
+        targetEdgeY = targetBlock.position.y + targetBlockHeight;
         targetEdge = 'bottom';
       }
     }
@@ -2127,12 +2144,13 @@ Format your response as JSON:
   // Render connection handles on block edges
   const renderConnectionHandles = () => {
     const handles: any[] = [];
-    
+
     blocks.forEach(block => {
       const blockX = block.position.x * zoom + panOffset.x;
       const blockY = block.position.y * zoom + panOffset.y;
       const scaledWidth = BLOCK_WIDTH * zoom;
-      const scaledHeight = BLOCK_HEIGHT * zoom;
+      const actualBlockHeight = calculateBlockHeight(block);
+      const scaledHeight = actualBlockHeight * zoom;
       
       // For block-level connections, show handles on all 4 edges (center of each edge)
       const blockHandles = [
