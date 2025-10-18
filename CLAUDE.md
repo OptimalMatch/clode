@@ -303,7 +303,7 @@ MongoDB is schema-less, but for major model changes:
 
 8. **Orchestration agent tools**: Set `use_tools=True` explicitly for agents that need file/command access. Auto-detection checks for keywords like "file", "bash", "execute" in system prompt.
 
-## Git Commit Guidelines
+## Git Commit & Branch Guidelines
 
 **IMPORTANT: When creating git commits in this repository:**
 
@@ -318,6 +318,36 @@ Configure git locally before committing:
 ```bash
 git config user.name "Alex Chang"
 git config user.email "alex@unidatum.com"
+```
+
+**Branch Management:**
+
+- **DO NOT delete branches after PR merge** - Branches represent ongoing work areas
+- **Branch naming** identifies the area of work effort (e.g., `feature/91-spec-writer`, `feature/code-editor`)
+- **Keep branches alive** for continued work in that area - they serve as historical context
+- **Only delete a branch** when the work area is fully stale with no planned near-term features
+- **When merging PRs** use `gh pr merge --merge` (without `--delete-branch` flag)
+
+Example workflow:
+```bash
+# Create feature branch for a work area
+git checkout -b feature/123-new-area
+
+# Work and commit
+git add .
+git commit -m "Add initial feature"
+
+# Push and create PR
+git push origin feature/123-new-area
+gh pr create --title "Add new feature" --body "Description" --base main
+
+# Merge PR but KEEP the branch
+gh pr merge --merge  # No --delete-branch flag
+
+# Continue working in the same area later
+git checkout feature/123-new-area
+git pull origin main  # Sync with latest main
+# Make more changes...
 ```
 
 ## GitHub Actions & Deployment
