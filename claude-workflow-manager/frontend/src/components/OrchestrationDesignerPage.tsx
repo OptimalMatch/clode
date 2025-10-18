@@ -3151,8 +3151,9 @@ Format your response as JSON:
               </Box>
             )}
           </Box>
+        </Box>
+        {/* End Main Content Area */}
       </Box>
-      {/* End Main Content Area */}
 
       {/* Configuration Drawer */}
       <Drawer
