@@ -285,7 +285,7 @@ const OrchestrationDesignerPage: React.FC = () => {
                   agents: [{
                     id: `agent-${sequenceIndex}-0`,
                     name: prompt.description.replace(/-/g, ' ').replace(/_/g, ' '),
-                    system_prompt: `Execute the following prompt:\n\n${prompt.content.substring(0, 500)}...`,
+                    system_prompt: `Execute the following prompt:\n\n${prompt.content}`,
                     role: 'worker' as AgentRole,
                   }],
                   task: `Execute prompt: ${prompt.filename}`,
@@ -319,7 +319,7 @@ const OrchestrationDesignerPage: React.FC = () => {
                   agents: sequenceGroup.map((prompt: any, idx: number) => ({
                     id: `agent-${sequenceIndex}-${idx}`,
                     name: `${prompt.parallel}: ${prompt.description.replace(/-/g, ' ').replace(/_/g, ' ')}`,
-                    system_prompt: `Execute the following prompt:\n\n${prompt.content.substring(0, 500)}...`,
+                    system_prompt: `Execute the following prompt:\n\n${prompt.content}`,
                     role: 'worker' as AgentRole,
                   })),
                   task: `Execute parallel prompts in sequence ${sequenceGroup[0].sequence}`,
