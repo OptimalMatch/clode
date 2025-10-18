@@ -247,6 +247,92 @@ When `isolate_agent_workspaces=true`, each agent gets:
 
 ## Development Workflow
 
+### Feature Development Process
+
+**When developing a new feature, follow this process:**
+
+1. **Check for Existing Issues**
+   ```bash
+   # Search for related issues before starting
+   gh issue list --search "keyword"
+   ```
+
+2. **Track Your Work**
+   - If an existing issue covers the work, reference it in commits and PR
+   - If no issue exists, create one after completing the work to document what was done
+
+3. **Development**
+   - Create feature branch following naming convention
+   - Implement the feature with clear commits
+   - Test locally
+
+4. **Documentation**
+   - Update relevant documentation (README, API docs, etc.)
+   - Add inline code comments for complex logic
+
+5. **Pull Request and Merge**
+   ```bash
+   # Create PR with detailed description
+   gh pr create --title "Feature: Description" --body "Detailed explanation..."
+
+   # After review, merge to main
+   gh pr merge <pr-number> --merge
+   ```
+
+6. **Post-Merge Documentation**
+   - **REQUIRED**: Create a GitHub issue documenting the feature request and implementation
+   - Include the original user prompts/requests that led to the feature
+   - Document what was built, how it works, and technical details
+   - Reference the PR number in the issue
+   - Close the issue immediately with reference to the completed PR
+
+   ```bash
+   # Create comprehensive documentation issue
+   gh issue create --title "Feature Request: [Feature Name]" --body "$(cat <<'EOF'
+   ## Original Request
+   [User's original request or problem statement]
+
+   ## User Prompts
+   1. "First prompt..."
+   2. "Second prompt..."
+
+   ## Implementation Summary
+   [What was built, files changed, approach taken]
+
+   ## How It Works
+   [Step-by-step user workflow]
+
+   ## Technical Details
+   [APIs used, data structures, patterns, etc.]
+
+   ## Delivered
+   - PR #XXX: Merged to main
+   - Deployment: Status
+
+   ## Related Files
+   - path/to/file1.ts
+   - path/to/file2.py
+   EOF
+   )"
+
+   # Close the issue with reference to PR
+   gh issue close <issue-number> --comment "✅ Completed and deployed in PR #XXX"
+   ```
+
+7. **Verify Deployment**
+   ```bash
+   # Monitor GitHub Actions deployment
+   gh run list --branch main --limit 5
+   gh run watch  # Watch the deployment in real-time
+   ```
+
+**Why Document After Completion?**
+- Creates searchable history of features and the context behind them
+- Preserves the original user problem/request that drove the feature
+- Helps future developers understand why features exist
+- Links implementation details to user needs
+- Maintains clean issue tracking without blocking development
+
 ### Adding a New API Endpoint
 
 1. Define Pydantic request/response models in `backend/models.py`
