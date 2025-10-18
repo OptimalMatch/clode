@@ -135,7 +135,7 @@ jobs:
         if [ -d "claude-workflow-manager" ]; then
           cd claude-workflow-manager
           if [ -f docker-compose.yml ]; then
-            docker compose down --remove-orphans || true
+            docker compose down --remove-orphans --volumes || true
           fi
           cd ..
 
@@ -144,8 +144,9 @@ jobs:
           rm -rf claude-workflow-manager || true
         fi
 
-        # Clean up unused Docker resources
-        docker system prune -f || true
+        # Clean up only Claude Workflow Manager images (not system-wide prune)
+        echo "🧹 Removing old Claude Workflow Manager images..."
+        docker images | grep claude-workflow | awk '{print $3}' | xargs -r docker rmi -f || true
 
     - name: Deploy new version
       run: |

@@ -133,22 +133,23 @@ jobs:
       run: |
         echo "🛑 Stopping existing services..."
         cd $DEPLOY_DIR || cd .
-        
+
         # Stop containers if they exist
         if [ -d "claude-workflow-manager" ]; then
           cd claude-workflow-manager
           if [ -f docker-compose.yml ]; then
-            docker compose down --remove-orphans || true
+            docker compose down --remove-orphans --volumes || true
           fi
           cd ..
-          
+
           # Remove old deployment (use sudo only for file removal, as Docker may have created root-owned files)
           echo "🗑️ Removing old deployment..."
           sudo rm -rf claude-workflow-manager || true
         fi
-        
-        # Clean up unused Docker resources (no sudo needed if user is in docker group)
-        docker system prune -f || true
+
+        # Clean up only Claude Workflow Manager images (not system-wide prune)
+        echo "🧹 Removing old Claude Workflow Manager images..."
+        docker images | grep claude-workflow | awk '{print $3}' | xargs -r docker rmi -f || true
 
     - name: Deploy new version
       run: |
