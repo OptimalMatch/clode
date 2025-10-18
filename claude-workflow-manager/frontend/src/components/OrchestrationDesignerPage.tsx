@@ -2043,8 +2043,8 @@ Format your response as JSON:
   // Calculate actual block height based on content
   const calculateBlockHeight = (block: any) => {
     // Use a simplified approach based on actual measurements from DOM
-    // Base components (header, chip, divider, buttons, padding): ~165px
-    const baseHeight = 165;
+    // Base components (header, chip, divider, buttons, padding): ~170px
+    const baseHeight = 170;
 
     // Agent list section (varies by mode)
     const agentsCount = block.data.agents?.length || 1;
