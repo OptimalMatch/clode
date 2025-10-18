@@ -67,6 +67,7 @@ class TokenUsage(BaseModel):
 
 class Workflow(BaseModel):
     id: Optional[str] = None
+    user_id: Optional[str] = None  # Owner of this workflow
     name: str
     git_repo: str
     branch: str = "main"
@@ -84,6 +85,7 @@ class Workflow(BaseModel):
 
 class ClaudeInstance(BaseModel):
     id: str
+    user_id: Optional[str] = None  # Owner of this instance (inherited from workflow)
     workflow_id: str
     prompt_id: Optional[str] = None
     git_repo: Optional[str] = None
@@ -623,3 +625,20 @@ class AnthropicApiKeyTestResponse(BaseModel):
     success: bool
     message: str
     model_tested: Optional[str] = None
+
+class UserUsageStats(BaseModel):
+    """User-level usage statistics for dashboard"""
+    user_id: str
+    username: str
+    total_workflows: int
+    total_instances: int
+    total_tokens: int
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cache_creation_tokens: int
+    total_cache_read_tokens: int
+    total_cost_usd: float
+    total_execution_time_ms: int
+    period_start: Optional[datetime] = None  # For time-based filtering
+    period_end: Optional[datetime] = None
+    token_breakdown: TokenUsage

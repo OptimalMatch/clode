@@ -238,3 +238,21 @@ export interface SpawnInstanceRequest {
   start_sequence?: number;
   end_sequence?: number;
 }
+
+// User Usage Statistics
+export interface UserUsageStats {
+  user_id: string;
+  username: string;
+  total_workflows: number;
+  total_instances: number;
+  total_tokens: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cache_creation_tokens: number;
+  total_cache_read_tokens: number;
+  total_cost_usd: number;
+  total_execution_time_ms: number;
+  period_start?: string;
+  period_end?: string;
+  token_breakdown: TokenUsage;
+}

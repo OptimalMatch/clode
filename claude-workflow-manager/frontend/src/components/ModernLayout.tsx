@@ -29,6 +29,7 @@ import {
   Person,
   Logout,
   AutoAwesome,
+  Assessment,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -78,6 +79,11 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
   const handleProfile = () => {
     handleUserMenuClose();
     navigate('/profile');
+  };
+
+  const handleUsage = () => {
+    handleUserMenuClose();
+    navigate('/usage');
   };
   
   const [primaryNavView, setPrimaryNavView] = useState<PrimaryNavView>(() => {
@@ -380,6 +386,12 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
                   <Person fontSize="small" />
                 </ListItemIcon>
                 Profile
+              </MenuItem>
+              <MenuItem onClick={handleUsage}>
+                <ListItemIcon>
+                  <Assessment fontSize="small" />
+                </ListItemIcon>
+                Usage Dashboard
               </MenuItem>
               <MenuItem onClick={handleLogout}>
                 <ListItemIcon>
