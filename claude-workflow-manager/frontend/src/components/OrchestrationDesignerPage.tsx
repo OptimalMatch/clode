@@ -2509,14 +2509,16 @@ Format your response as JSON:
               position: 'absolute',
               left: block.position.x * zoom + panOffset.x,
               top: block.position.y * zoom + panOffset.y,
-              width: 300,
+              width: BLOCK_WIDTH,
+              transform: `scale(${zoom})`,
+              transformOrigin: 'top left',
               cursor: isDragging && draggedBlock === block.id ? 'grabbing' : 'grab',
               border: isSelected ? 3 : (isExecuting ? 3 : 1),
               borderColor: isExecuting ? '#ff9800' : (isSelected ? 'primary.main' : (hasResults ? '#4caf50' : (darkMode ? '#444' : 'divider'))),
               boxShadow: isSelected ? 6 : (isExecuting ? 8 : 2),
               transition: 'all 0.2s',
-              backgroundColor: isConnectionTarget 
-                ? (darkMode ? '#404040' : 'action.hover') 
+              backgroundColor: isConnectionTarget
+                ? (darkMode ? '#404040' : 'action.hover')
                 : (darkMode ? '#2d2d2d' : 'background.paper'),
               color: darkMode ? '#ffffff' : '#000000',
               zIndex: 2,
