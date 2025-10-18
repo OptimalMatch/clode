@@ -82,26 +82,47 @@ if claude_api_key and not os.getenv("ANTHROPIC_API_KEY"):
     os.environ["ANTHROPIC_API_KEY"] = claude_api_key
     print("🔑 MAIN: Set ANTHROPIC_API_KEY from CLAUDE_API_KEY for claude-cli")
 
-def get_git_env():
-    """Get git environment with SSH configuration"""
+def get_git_env(user_id: str = None):
+    """Get git environment with SSH configuration
+
+    Args:
+        user_id: Optional user ID to load user-specific SSH keys from database
+
+    Returns:
+        Environment dict with GIT_SSH_COMMAND configured for SSH keys
+    """
     env = os.environ.copy()
-    
-    # Use both the read-only mounted SSH directory and our writable directory
-    ssh_key_dir = get_ssh_key_directory()
-    
-    # Build SSH command that checks both directories for keys
+
+    # Build SSH command
     ssh_command_parts = [
         'ssh',
         '-o', 'UserKnownHostsFile=/dev/null',
         '-o', 'StrictHostKeyChecking=no',
-        '-o', f'IdentitiesOnly=yes'
+        '-o', 'IdentitiesOnly=yes'
     ]
-    
-    # Add generated keys from writable directory
-    for key_file in ssh_key_dir.glob('*'):
-        if key_file.is_file() and not key_file.name.endswith('.pub'):
-            ssh_command_parts.extend(['-i', str(key_file)])
-    
+
+    # If user_id provided, get SSH keys from their directory
+    if user_id:
+        ssh_key_dir = get_ssh_key_directory(user_id)
+        # Add all private keys from user's directory
+        for key_file in ssh_key_dir.glob('*'):
+            if key_file.is_file() and not key_file.name.endswith('.pub'):
+                ssh_command_parts.extend(['-i', str(key_file)])
+    else:
+        # Fallback: scan all user directories for SSH keys
+        base_ssh_dir = get_ssh_key_directory()
+        # Check if base directory has keys directly
+        for key_file in base_ssh_dir.glob('*'):
+            if key_file.is_file() and not key_file.name.endswith('.pub'):
+                ssh_command_parts.extend(['-i', str(key_file)])
+
+        # Also scan user subdirectories
+        for user_dir in base_ssh_dir.iterdir():
+            if user_dir.is_dir():
+                for key_file in user_dir.glob('*'):
+                    if key_file.is_file() and not key_file.name.endswith('.pub'):
+                        ssh_command_parts.extend(['-i', str(key_file)])
+
     env['GIT_SSH_COMMAND'] = ' '.join(ssh_command_parts)
     return env
 
@@ -2565,23 +2586,29 @@ async def get_agent_format_examples():
         400: {"model": ErrorResponse, "description": "Invalid repository URL"}
     }
 )
-async def validate_git_repository(request: GitValidationRequest):
+async def validate_git_repository(
+    request: GitValidationRequest,
+    user: User = Depends(get_current_user)
+):
     """
     Validate Git repository accessibility.
-    
+
     Checks if the repository can be accessed and returns basic information
     including the default branch if accessible.
-    
+
     - **git_repo**: Git repository URL to validate
+
+    Requires authentication. Uses the authenticated user's SSH keys for validation.
     """
     git_repo = request.git_repo.strip()
-    
+
     if not git_repo:
         raise HTTPException(status_code=400, detail="Git repository URL is required")
-    
+
     try:
         # Use git ls-remote to check accessibility without cloning
-        env = get_git_env()
+        # Pass user_id to load their SSH keys
+        env = get_git_env(user_id=user.id)
         
         # Get remote HEAD to check accessibility and default branch
         cmd = ["git", "ls-remote", "--symref", git_repo, "HEAD"]
@@ -2649,22 +2676,27 @@ async def validate_git_repository(request: GitValidationRequest):
         404: {"model": ErrorResponse, "description": "Repository not accessible"}
     }
 )
-async def get_git_branches(request: GitValidationRequest):
+async def get_git_branches(
+    request: GitValidationRequest,
+    user: User = Depends(get_current_user)
+):
     """
     Get all branches from a Git repository.
-    
+
     Fetches the list of available branches from the remote repository
     without cloning it locally.
-    
+
     - **git_repo**: Git repository URL to fetch branches from
+
+    Requires authentication. Uses the authenticated user's SSH keys.
     """
     git_repo = request.git_repo.strip()
-    
+
     if not git_repo:
         raise HTTPException(status_code=400, detail="Git repository URL is required")
-    
+
     try:
-        env = get_git_env()
+        env = get_git_env(user_id=user.id)
         
         # Get all remote branches
         cmd = ["git", "ls-remote", "--heads", git_repo]
