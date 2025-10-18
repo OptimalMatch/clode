@@ -71,6 +71,7 @@ import { useSearchParams } from 'react-router-dom';
 import api, { workflowApi, orchestrationDesignApi, orchestrationApi, StreamEvent, OrchestrationDesign, promptFileApi } from '../services/api';
 import { Workflow } from '../types';
 import ReactMarkdown from 'react-markdown';
+import Editor from '@monaco-editor/react';
 
 // Orchestration pattern types
 type OrchestrationPattern = 'sequential' | 'parallel' | 'hierarchical' | 'debate' | 'routing' | 'reflection';
@@ -140,7 +141,12 @@ const OrchestrationDesignerPage: React.FC = () => {
   // Auto-generation state
   const [autoGenerating, setAutoGenerating] = useState(false);
   const [autoGenerationComplete, setAutoGenerationComplete] = useState(false);
-  
+
+  // Prompt editor state
+  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [editingAgentPrompt, setEditingAgentPrompt] = useState('');
+
   // Drag and drop state
   const [isDragging, setIsDragging] = useState(false);
   const [draggedBlock, setDraggedBlock] = useState<string | null>(null);
@@ -692,6 +698,27 @@ const OrchestrationDesignerPage: React.FC = () => {
         agents: selectedBlock.data.agents.filter(agent => agent.id !== agentId)
       }
     });
+  };
+
+  // Prompt editor handlers
+  const openPromptEditor = (agentId: string, currentPrompt: string) => {
+    setEditingAgentId(agentId);
+    setEditingAgentPrompt(currentPrompt);
+    setPromptEditorOpen(true);
+  };
+
+  const closePromptEditor = () => {
+    // Save the changes before closing
+    if (editingAgentId && selectedBlock) {
+      updateAgent(editingAgentId, { system_prompt: editingAgentPrompt });
+    }
+    setPromptEditorOpen(false);
+    setEditingAgentId(null);
+    setEditingAgentPrompt('');
+  };
+
+  const handlePromptEditorChange = (value: string | undefined) => {
+    setEditingAgentPrompt(value || '');
   };
 
   // Delete block
@@ -3012,29 +3039,93 @@ Format your response as JSON:
           </Box>
         </Paper>
 
-        {/* Canvas */}
-        <Box
-          ref={canvasRef}
-          onMouseDown={(e) => {
-            // Start panning if clicking on canvas background (not on a block or button)
-            const target = e.target as HTMLElement;
-            if (target === canvasRef.current || target.closest('svg')) {
-              setIsPanning(true);
-              setPanStart({ x: e.clientX, y: e.clientY });
-              e.preventDefault();
-            }
-          }}
-          sx={{
-            flex: 1,
-            position: 'relative',
-            backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
-            backgroundImage: darkMode 
-              ? 'radial-gradient(circle, #333 1px, transparent 1px)'
-              : 'radial-gradient(circle, #ccc 1px, transparent 1px)',
-            backgroundSize: '20px 20px',
-            overflow: 'hidden',
-            cursor: isPanning ? 'grabbing' : 'grab',
-          }}
+        {/* Main Content Area with Canvas and Prompt Editor */}
+        <Box sx={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
+          {/* Prompt Editor Panel (Left Side) */}
+          {promptEditorOpen && (
+            <Paper
+              sx={{
+                width: drawerOpen ? 'calc(100% - 400px)' : '60%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
+                borderRight: `1px solid ${darkMode ? '#333' : '#e0e0e0'}`,
+                zIndex: 100,
+              }}
+            >
+              <Box sx={{
+                p: 2,
+                borderBottom: `1px solid ${darkMode ? '#333' : '#e0e0e0'}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <Typography variant="h6" sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+                  Edit System Prompt
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={closePromptEditor}
+                    startIcon={<Save />}
+                  >
+                    Save & Close
+                  </Button>
+                  <IconButton
+                    size="small"
+                    onClick={closePromptEditor}
+                    sx={{ color: darkMode ? '#ffffff' : 'inherit' }}
+                  >
+                    <Close />
+                  </IconButton>
+                </Box>
+              </Box>
+              <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                <Editor
+                  height="100%"
+                  defaultLanguage="markdown"
+                  value={editingAgentPrompt}
+                  onChange={handlePromptEditorChange}
+                  theme={darkMode ? 'vs-dark' : 'light'}
+                  options={{
+                    minimap: { enabled: true },
+                    fontSize: 14,
+                    wordWrap: 'on',
+                    lineNumbers: 'on',
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    padding: { top: 16, bottom: 16 },
+                  }}
+                />
+              </Box>
+            </Paper>
+          )}
+
+          {/* Canvas */}
+          <Box
+            ref={canvasRef}
+            onMouseDown={(e) => {
+              // Start panning if clicking on canvas background (not on a block or button)
+              const target = e.target as HTMLElement;
+              if (target === canvasRef.current || target.closest('svg')) {
+                setIsPanning(true);
+                setPanStart({ x: e.clientX, y: e.clientY });
+                e.preventDefault();
+              }
+            }}
+            sx={{
+              flex: 1,
+              position: 'relative',
+              backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
+              backgroundImage: darkMode
+                ? 'radial-gradient(circle, #333 1px, transparent 1px)'
+                : 'radial-gradient(circle, #ccc 1px, transparent 1px)',
+              backgroundSize: '20px 20px',
+              overflow: 'hidden',
+              cursor: isPanning ? 'grabbing' : 'grab',
+            }}
         >
           {renderConnections()}
           {renderBlocks()}
@@ -3061,6 +3152,7 @@ Format your response as JSON:
           )}
         </Box>
       </Box>
+      {/* End Main Content Area */}
 
       {/* Configuration Drawer */}
       <Drawer
@@ -3324,13 +3416,23 @@ Format your response as JSON:
                       rows={4}
                       label="System Prompt"
                       value={agent.system_prompt}
+                      onClick={() => openPromptEditor(agent.id, agent.system_prompt)}
                       onChange={(e) => updateAgent(agent.id, { system_prompt: e.target.value })}
-                      placeholder="Define the agent's role, personality, and instructions..."
+                      placeholder="Click to open full editor for system prompt..."
+                      helperText="Click to open full-screen editor with syntax highlighting"
                       sx={{
+                        cursor: 'pointer',
                         '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
                         '& .MuiOutlinedInput-root': {
                           color: darkMode ? '#ffffff' : undefined,
                           '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+                          '&:hover fieldset': {
+                            borderColor: darkMode ? '#888' : 'primary.main',
+                          },
+                        },
+                        '& .MuiFormHelperText-root': {
+                          color: darkMode ? '#888' : undefined,
+                          fontSize: '0.75rem',
                         }
                       }}
                     />
