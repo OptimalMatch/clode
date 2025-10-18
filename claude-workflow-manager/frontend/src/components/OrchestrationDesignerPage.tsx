@@ -2042,43 +2042,27 @@ Format your response as JSON:
 
   // Calculate actual block height based on content
   const calculateBlockHeight = (block: any) => {
-    // CardContent has default padding of 16px all sides (last child has no bottom padding)
-    // So: 16px top, content, 16px bottom = 32px padding total
-    const cardPadding = 32;
-
-    // Header: DragIndicator(24) + Typography(28) + IconButton(28) + mb:1(8) = ~88px
-    const headerHeight = 88;
-
-    // Pattern chip: height(24) + mb:1(8) = 32px
-    const chipHeight = 32;
-
-    // Divider: height(1) + my:1(8+8) = 17px
-    const dividerHeight = 17;
+    // Use a simplified approach based on actual measurements from DOM
+    // Base components (header, chip, divider, buttons, padding): ~165px
+    const baseHeight = 165;
 
     // Agent list section (varies by mode)
     const agentsCount = block.data.agents?.length || 1;
     let agentListHeight = 0;
 
     if (connectionMode === 'advanced') {
-      // Advanced mode: each agent is a Box with py:0.5(4+4) + mb:0.5(4) + content(~30px) = ~42px
-      agentListHeight = agentsCount * 42;
+      // Advanced mode: each agent row is approximately 32px
+      agentListHeight = agentsCount * 32;
     } else {
-      // Simple mode: Typography "X agents" with mb:1 = ~28px
-      agentListHeight = 28;
+      // Simple mode: just text showing agent count = ~20px
+      agentListHeight = 20;
     }
 
-    // Git repo chip (optional): if present, adds ~32px
-    const gitRepoHeight = block.data.git_repo ? 32 : 0;
+    // Git repo chip (optional): if present, adds ~28px
+    const gitRepoHeight = block.data.git_repo ? 28 : 0;
 
-    // Execution status (optional): if present, adds ~32px
-    const executionStatusHeight = 0; // Usually not present initially
-
-    // Buttons: Box with mt:2(16) + button height(~36) = ~52px
-    const buttonsHeight = 52;
-
-    // Total
-    return cardPadding + headerHeight + chipHeight + dividerHeight +
-           agentListHeight + gitRepoHeight + executionStatusHeight + buttonsHeight;
+    // Total height
+    return baseHeight + agentListHeight + gitRepoHeight;
   };
 
   // Helper function to calculate edge connection points based on relative positions
@@ -2509,9 +2493,7 @@ Format your response as JSON:
               position: 'absolute',
               left: block.position.x * zoom + panOffset.x,
               top: block.position.y * zoom + panOffset.y,
-              width: BLOCK_WIDTH,
-              transform: `scale(${zoom})`,
-              transformOrigin: 'top left',
+              width: 300,
               cursor: isDragging && draggedBlock === block.id ? 'grabbing' : 'grab',
               border: isSelected ? 3 : (isExecuting ? 3 : 1),
               borderColor: isExecuting ? '#ff9800' : (isSelected ? 'primary.main' : (hasResults ? '#4caf50' : (darkMode ? '#444' : 'divider'))),
