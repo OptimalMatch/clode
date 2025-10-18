@@ -123,9 +123,6 @@ jobs:
         DEPLOY_DIR="$HOME/claude-workflow-manager-deploy"
         mkdir -p $DEPLOY_DIR
 
-        # Fix ownership of deployment directory (in case it was created with wrong permissions)
-        sudo chown -R $USER:$USER $DEPLOY_DIR
-
         echo "DEPLOY_DIR=$DEPLOY_DIR" >> $GITHUB_ENV
         echo "✅ Deployment directory created at $DEPLOY_DIR"
 
@@ -142,21 +139,17 @@ jobs:
           fi
           cd ..
 
-          # Remove old deployment (use sudo only for file removal, as Docker may have created root-owned files)
+          # Remove old deployment
           echo "🗑️ Removing old deployment..."
-          sudo rm -rf claude-workflow-manager || true
+          rm -rf claude-workflow-manager || true
         fi
 
-        # Clean up unused Docker resources (no sudo needed if user is in docker group)
+        # Clean up unused Docker resources
         docker system prune -f || true
 
     - name: Deploy new version
       run: |
         echo "🚀 Deploying new version..."
-
-        # Ensure deployment directory is owned by current user
-        sudo chown -R $USER:$USER $DEPLOY_DIR
-
         cd $DEPLOY_DIR
 
         # Copy the claude-workflow-manager subdirectory from the repo
@@ -168,9 +161,6 @@ jobs:
           cp -r $GITHUB_WORKSPACE/voice-backend .
           cp -r $GITHUB_WORKSPACE/voice-mcp-server .
         fi
-
-        # Fix ownership to current user (important after Docker operations)
-        sudo chown -R $USER:$USER .
 
         echo "✅ Files deployed successfully"
 
