@@ -135,7 +135,7 @@ jobs:
         if [ -d "claude-workflow-manager" ]; then
           cd claude-workflow-manager
           if [ -f docker-compose.yml ]; then
-            docker compose down --remove-orphans --volumes || true
+            docker compose down --remove-orphans || true
           fi
           cd ..
 
