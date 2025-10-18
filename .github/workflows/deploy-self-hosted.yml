@@ -406,8 +406,8 @@ jobs:
         HOST_IP_FROM_ENV=$(grep "HOST_IP=" .env | cut -d'=' -f2)
         echo "Frontend: http://${HOST_IP_FROM_ENV}:3005"
         echo "Backend API: http://${HOST_IP_FROM_ENV}:8005"
-        echo "MongoDB: ${HOST_IP_FROM_ENV}:27018"
-        echo "Redis: ${HOST_IP_FROM_ENV}:6379"
+        echo "MongoDB: ${HOST_IP_FROM_ENV}:27020"
+        echo "Redis: ${HOST_IP_FROM_ENV}:6380"
 
         # Show voice services if enabled
         if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
