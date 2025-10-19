@@ -174,7 +174,9 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [resultsViewMode, setResultsViewMode] = useState<'formatted' | 'raw'>('formatted');
   const [enableStreaming, setEnableStreaming] = useState(true); // Enable streaming by default
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  
+  const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
+  const [executeInputData, setExecuteInputData] = useState('{}');
+
   // UI state
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' }>({
     open: false,
@@ -1257,7 +1259,7 @@ const OrchestrationDesignerPage: React.FC = () => {
   };
 
   // Execute orchestration workflow
-  const executeOrchestration = async () => {
+  const executeOrchestration = async (initialInputData?: string) => {
     if (blocks.length === 0) {
       setSnackbar({
         open: true,
@@ -1273,11 +1275,11 @@ const OrchestrationDesignerPage: React.FC = () => {
 
     setExecuting(true);
     const results = new Map<string, any>();
-    
+
     try {
       // Build execution graph
       const executionOrder = buildExecutionOrder(blocks, connections);
-      
+
       if (executionOrder.length === 0) {
         throw new Error('No executable blocks found. Check connections.');
       }
@@ -1289,7 +1291,9 @@ const OrchestrationDesignerPage: React.FC = () => {
       });
 
       // Execute blocks in order
-      for (const blockId of executionOrder) {
+      for (let i = 0; i < executionOrder.length; i++) {
+        const blockId = executionOrder[i];
+
         // Check if execution was aborted before processing next block
         if (controller.signal.aborted) {
           console.log('Execution aborted, stopping workflow');
@@ -1303,15 +1307,21 @@ const OrchestrationDesignerPage: React.FC = () => {
         setCurrentlyExecutingBlock(blockId);
 
         // Get inputs from connected blocks
-        const inputs = getBlockInputs(blockId, connections, results);
-        
+        let inputs = getBlockInputs(blockId, connections, results);
+
+        // For the first block, prepend the initial input data if provided
+        if (i === 0 && initialInputData && initialInputData.trim() !== '{}' && initialInputData.trim() !== '') {
+          const formattedInput = `Initial Input:\n${initialInputData}`;
+          inputs = inputs ? `${formattedInput}\n\n${inputs}` : formattedInput;
+        }
+
         // Execute the block
         const result = await executeBlock(block, inputs);
         results.set(blockId, result);
-        
+
         // Update execution results state
         setExecutionResults(new Map(results));
-        
+
         // Clear currently executing
         setCurrentlyExecutingBlock(null);
       }
@@ -2889,7 +2899,10 @@ Format your response as JSON:
             <Button
               variant="contained"
               startIcon={executing ? <CircularProgress size={20} /> : <PlayArrow />}
-              onClick={executeOrchestration}
+              onClick={() => {
+                setExecuteInputData('{}');
+                setExecuteDialogOpen(true);
+              }}
               disabled={executing || blocks.length === 0}
             >
               {executing ? 'Executing...' : 'Execute'}
@@ -4297,6 +4310,59 @@ Format your response as JSON:
             }}
           >
             {aiGenerating ? 'Generating...' : 'Generate Design'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Execute Dialog */}
+      <Dialog
+        open={executeDialogOpen}
+        onClose={() => setExecuteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        disableEnforceFocus
+        disableRestoreFocus
+      >
+        <DialogTitle sx={{ color: darkMode ? '#ffffff' : 'inherit' }}>
+          Execute Orchestration
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <TextField
+              label="Initial Input Data (JSON)"
+              fullWidth
+              multiline
+              rows={8}
+              value={executeInputData}
+              onChange={(e) => setExecuteInputData(e.target.value)}
+              placeholder='{"input": "Your task here", "context": "Any background info"}'
+              helperText="Optional JSON input to provide context to the first block. Will be prepended as 'Initial Input'"
+              sx={{
+                '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
+                '& .MuiOutlinedInput-root': {
+                  color: darkMode ? '#ffffff' : undefined,
+                  fontFamily: 'monospace',
+                  '& fieldset': { borderColor: darkMode ? '#555' : undefined },
+                },
+                '& .MuiFormHelperText-root': { color: darkMode ? '#888' : undefined },
+              }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExecuteDialogOpen(false)} sx={{ color: darkMode ? '#b0b0b0' : undefined }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setExecuteDialogOpen(false);
+              executeOrchestration(executeInputData);
+            }}
+            disabled={executing}
+            startIcon={<PlayArrow />}
+          >
+            Execute
           </Button>
         </DialogActions>
       </Dialog>
