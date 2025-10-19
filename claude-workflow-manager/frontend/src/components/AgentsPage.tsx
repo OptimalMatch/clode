@@ -314,6 +314,7 @@ const AgentsPage: React.FC = () => {
             <Select
               value={selectedPromptId}
               onChange={(e) => setSelectedPromptId(e.target.value)}
+              label="Select Prompt"
               displayEmpty
               renderValue={(selected) => {
                 if (selected === '') {
