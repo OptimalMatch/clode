@@ -1806,3 +1806,321 @@ class Database:
                 "period_start": period_start,
                 "period_end": period_end
             }
+    # Specification Designer Methods
+    async def create_specification(self, spec: 'Specification') -> str:
+        """Create a new specification"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        spec_dict = spec.dict()
+        spec_dict["created_at"] = datetime.utcnow()
+        spec_dict["updated_at"] = datetime.utcnow()
+        
+        result = await self.db.specifications.insert_one(spec_dict)
+        return str(result.inserted_id)
+    
+    async def get_specifications(self, user_id: Optional[str] = None) -> List[Dict]:
+        """Get all specifications, optionally filtered by user"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        query = {}
+        if user_id:
+            query["user_id"] = user_id
+        
+        cursor = self.db.specifications.find(query).sort("created_at", -1)
+        specs = []
+        async for spec in cursor:
+            spec["id"] = str(spec["_id"])
+            del spec["_id"]
+            specs.append(spec)
+        return specs
+    
+    async def get_specification(self, spec_id: str) -> Optional[Dict]:
+        """Get a single specification by ID"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        spec = await self.db.specifications.find_one({"_id": ObjectId(spec_id)})
+        
+        if spec:
+            spec["id"] = str(spec["_id"])
+            del spec["_id"]
+        
+        return spec
+    
+    async def update_specification(self, spec_id: str, update_data: Dict) -> bool:
+        """Update a specification"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        update_data["updated_at"] = datetime.utcnow()
+        
+        result = await self.db.specifications.update_one(
+            {"_id": ObjectId(spec_id)},
+            {"$set": update_data}
+        )
+        
+        return result.modified_count > 0
+    
+    async def delete_specification(self, spec_id: str) -> bool:
+        """Delete a specification and all its related data"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        
+        # Delete related features, modules, and phases
+        await self.db.features.delete_many({"spec_id": spec_id})
+        await self.db.modules.delete_many({"spec_id": spec_id})
+        await self.db.development_phases.delete_many({"spec_id": spec_id})
+        
+        # Delete the specification
+        result = await self.db.specifications.delete_one({"_id": ObjectId(spec_id)})
+        
+        return result.deleted_count > 0
+    
+    # Feature Methods
+    async def create_feature(self, feature: 'Feature') -> str:
+        """Create a new feature"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        feature_dict = feature.dict()
+        feature_dict["created_at"] = datetime.utcnow()
+        feature_dict["updated_at"] = datetime.utcnow()
+        
+        result = await self.db.features.insert_one(feature_dict)
+        return str(result.inserted_id)
+    
+    async def get_features(self, spec_id: str) -> List[Dict]:
+        """Get all features for a specification"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        cursor = self.db.features.find({"spec_id": spec_id}).sort("created_at", -1)
+        features = []
+        async for feature in cursor:
+            feature["id"] = str(feature["_id"])
+            del feature["_id"]
+            features.append(feature)
+        return features
+    
+    async def get_feature(self, feature_id: str) -> Optional[Dict]:
+        """Get a single feature by ID"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        feature = await self.db.features.find_one({"_id": ObjectId(feature_id)})
+        
+        if feature:
+            feature["id"] = str(feature["_id"])
+            del feature["_id"]
+        
+        return feature
+    
+    async def update_feature(self, feature_id: str, update_data: Dict) -> bool:
+        """Update a feature"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        update_data["updated_at"] = datetime.utcnow()
+        
+        result = await self.db.features.update_one(
+            {"_id": ObjectId(feature_id)},
+            {"$set": update_data}
+        )
+        
+        return result.modified_count > 0
+    
+    async def delete_feature(self, feature_id: str) -> bool:
+        """Delete a feature"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        result = await self.db.features.delete_one({"_id": ObjectId(feature_id)})
+        
+        return result.deleted_count > 0
+    
+    # Module Methods
+    async def create_module(self, module: 'Module') -> str:
+        """Create a new module"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        module_dict = module.dict()
+        
+        result = await self.db.modules.insert_one(module_dict)
+        return str(result.inserted_id)
+    
+    async def get_modules(self, spec_id: str) -> List[Dict]:
+        """Get all modules for a specification"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        cursor = self.db.modules.find({"spec_id": spec_id})
+        modules = []
+        async for module in cursor:
+            module["id"] = str(module["_id"])
+            del module["_id"]
+            modules.append(module)
+        return modules
+    
+    async def get_module(self, module_id: str) -> Optional[Dict]:
+        """Get a single module by ID"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        module = await self.db.modules.find_one({"_id": ObjectId(module_id)})
+        
+        if module:
+            module["id"] = str(module["_id"])
+            del module["_id"]
+        
+        return module
+    
+    async def update_module(self, module_id: str, update_data: Dict) -> bool:
+        """Update a module"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        
+        result = await self.db.modules.update_one(
+            {"_id": ObjectId(module_id)},
+            {"$set": update_data}
+        )
+        
+        return result.modified_count > 0
+    
+    async def delete_module(self, module_id: str) -> bool:
+        """Delete a module"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        result = await self.db.modules.delete_one({"_id": ObjectId(module_id)})
+        
+        return result.deleted_count > 0
+    
+    # Development Phase Methods
+    async def create_phase(self, phase: 'DevelopmentPhase') -> str:
+        """Create a new development phase"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        phase_dict = phase.dict()
+        
+        result = await self.db.development_phases.insert_one(phase_dict)
+        return str(result.inserted_id)
+    
+    async def get_phases(self, spec_id: str) -> List[Dict]:
+        """Get all development phases for a specification"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        cursor = self.db.development_phases.find({"spec_id": spec_id}).sort("start_date", 1)
+        phases = []
+        async for phase in cursor:
+            phase["id"] = str(phase["_id"])
+            del phase["_id"]
+            phases.append(phase)
+        return phases
+    
+    async def get_phase(self, phase_id: str) -> Optional[Dict]:
+        """Get a single phase by ID"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        phase = await self.db.development_phases.find_one({"_id": ObjectId(phase_id)})
+        
+        if phase:
+            phase["id"] = str(phase["_id"])
+            del phase["_id"]
+        
+        return phase
+    
+    async def update_phase(self, phase_id: str, update_data: Dict) -> bool:
+        """Update a development phase"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        
+        result = await self.db.development_phases.update_one(
+            {"_id": ObjectId(phase_id)},
+            {"$set": update_data}
+        )
+        
+        return result.modified_count > 0
+    
+    async def delete_phase(self, phase_id: str) -> bool:
+        """Delete a development phase"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        from bson import ObjectId
+        result = await self.db.development_phases.delete_one({"_id": ObjectId(phase_id)})
+        
+        return result.deleted_count > 0
+    
+    # Specification Analytics Methods
+    async def get_spec_analytics(self, spec_id: str) -> Dict:
+        """Get analytics for a specification"""
+        if self.db is None:
+            raise RuntimeError("Database not connected")
+        
+        # Get all features
+        features = await self.get_features(spec_id)
+        
+        # Calculate statistics
+        total_features = len(features)
+        features_by_status = {}
+        features_by_priority = {}
+        features_by_complexity = {}
+        total_estimated_hours = 0
+        total_actual_hours = 0
+        
+        for feature in features:
+            # Status counts
+            status = feature.get("status", "planned")
+            features_by_status[status] = features_by_status.get(status, 0) + 1
+            
+            # Priority counts
+            priority = feature.get("priority", "medium")
+            features_by_priority[priority] = features_by_priority.get(priority, 0) + 1
+            
+            # Complexity counts
+            complexity = feature.get("complexity", "moderate")
+            features_by_complexity[complexity] = features_by_complexity.get(complexity, 0) + 1
+            
+            # Hours
+            if feature.get("estimated_hours"):
+                total_estimated_hours += feature["estimated_hours"]
+            if feature.get("actual_hours"):
+                total_actual_hours += feature["actual_hours"]
+        
+        # Get modules
+        modules = await self.get_modules(spec_id)
+        
+        # Get phases
+        phases = await self.get_phases(spec_id)
+        
+        return {
+            "total_features": total_features,
+            "features_by_status": features_by_status,
+            "features_by_priority": features_by_priority,
+            "features_by_complexity": features_by_complexity,
+            "total_estimated_hours": total_estimated_hours,
+            "total_actual_hours": total_actual_hours,
+            "total_modules": len(modules),
+            "total_phases": len(phases),
+            "completion_percentage": (features_by_status.get("completed", 0) / total_features * 100) if total_features > 0 else 0
+        }

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Workflow, Prompt, ClaudeInstance, Subagent, InstanceLog, LogAnalytics, LogType } from '../types';
+import { Workflow, Prompt, ClaudeInstance, Subagent, InstanceLog, LogAnalytics, LogType, Specification, Feature, Module, DevelopmentPhase } from '../types';
 
 export interface OrchestrationDesignVersion {
   version: number;
@@ -1204,3 +1204,46 @@ export const fileEditorApi = {
 
 // Export the base axios instance as default for direct API calls
 export default api;
+// Specification Designer API
+export const specificationApi = {
+  getAll: () => api.get('/api/specifications'),
+  get: (specId: string) => api.get(`/api/specifications/${specId}`),
+  create: (spec: Partial<Specification>) => api.post('/api/specifications', spec),
+  update: (specId: string, spec: Partial<Specification>) => api.put(`/api/specifications/${specId}`, spec),
+  delete: (specId: string) => api.delete(`/api/specifications/${specId}`),
+  
+  // Features
+  getFeatures: (specId: string) => api.get(`/api/specifications/${specId}/features`),
+  createFeature: (specId: string, feature: Partial<Feature>) => api.post(`/api/specifications/${specId}/features`, feature),
+  updateFeature: (specId: string, featureId: string, feature: Partial<Feature>) => api.put(`/api/specifications/${specId}/features/${featureId}`, feature),
+  deleteFeature: (specId: string, featureId: string) => api.delete(`/api/specifications/${specId}/features/${featureId}`),
+  
+  // Modules
+  getModules: (specId: string) => api.get(`/api/specifications/${specId}/modules`),
+  createModule: (specId: string, module: Partial<Module>) => api.post(`/api/specifications/${specId}/modules`, module),
+  updateModule: (specId: string, moduleId: string, module: Partial<Module>) => api.put(`/api/specifications/${specId}/modules/${moduleId}`, module),
+  deleteModule: (specId: string, moduleId: string) => api.delete(`/api/specifications/${specId}/modules/${moduleId}`),
+  
+  // Phases
+  getPhases: (specId: string) => api.get(`/api/specifications/${specId}/phases`),
+  createPhase: (specId: string, phase: Partial<DevelopmentPhase>) => api.post(`/api/specifications/${specId}/phases`, phase),
+  updatePhase: (specId: string, phaseId: string, phase: Partial<DevelopmentPhase>) => api.put(`/api/specifications/${specId}/phases/${phaseId}`, phase),
+  deletePhase: (specId: string, phaseId: string) => api.delete(`/api/specifications/${specId}/phases/${phaseId}`),
+  
+  // AI Generation
+  aiGenerate: (specId: string, prompt: string, generateType: string, context?: any) => 
+    api.post(`/api/specifications/${specId}/ai-generate`, {
+      spec_id: specId,
+      prompt,
+      generate_type: generateType,
+      context
+    }),
+  
+  // Convert to Orchestration
+  toOrchestration: (specId: string, phaseId?: string, featureIds?: string[]) =>
+    api.post(`/api/specifications/${specId}/to-orchestration`, {
+      spec_id: specId,
+      phase_id: phaseId,
+      feature_ids: featureIds
+    }),
+};

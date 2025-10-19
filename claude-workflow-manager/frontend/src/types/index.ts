@@ -256,3 +256,101 @@ export interface UserUsageStats {
   period_end?: string;
   token_breakdown: TokenUsage;
 }
+// Specification Designer Types
+export type FeaturePriority = 'critical' | 'high' | 'medium' | 'low';
+export type FeatureStatus = 'planned' | 'in_progress' | 'completed' | 'blocked' | 'cancelled';
+export type FeatureComplexity = 'trivial' | 'simple' | 'moderate' | 'complex' | 'very_complex';
+
+export interface AcceptanceCriteria {
+  id: string;
+  description: string;
+  completed: boolean;
+}
+
+export interface TechnicalRequirement {
+  id: string;
+  category: string;
+  description: string;
+  priority: FeaturePriority;
+}
+
+export interface Feature {
+  id?: string;
+  spec_id?: string;
+  title: string;
+  description: string;
+  user_story?: string;
+  acceptance_criteria: AcceptanceCriteria[];
+  technical_requirements: TechnicalRequirement[];
+  dependencies: string[];
+  blocks: string[];
+  priority: FeaturePriority;
+  status: FeatureStatus;
+  complexity: FeatureComplexity;
+  estimated_hours?: number;
+  actual_hours?: number;
+  assigned_to?: string;
+  module?: string;
+  tags: string[];
+  created_at?: string;
+  updated_at?: string;
+  completed_at?: string;
+}
+
+export interface Module {
+  id?: string;
+  spec_id?: string;
+  name: string;
+  description: string;
+  responsibilities: string[];
+  interfaces: string[];
+  dependencies: string[];
+  technology_stack: string[];
+  estimated_features: number;
+  completed_features: number;
+}
+
+export interface DevelopmentPhase {
+  id?: string;
+  spec_id?: string;
+  name: string;
+  description: string;
+  feature_ids: string[];
+  start_date?: string;
+  target_date?: string;
+  actual_completion_date?: string;
+  status: string;
+}
+
+export interface SpecAnalytics {
+  total_features: number;
+  features_by_status: Record<string, number>;
+  features_by_priority: Record<string, number>;
+  features_by_complexity: Record<string, number>;
+  total_estimated_hours: number;
+  total_actual_hours: number;
+  total_modules: number;
+  total_phases: number;
+  completion_percentage: number;
+}
+
+export interface Specification {
+  id?: string;
+  user_id?: string;
+  name: string;
+  description: string;
+  overview: string;
+  target_users: string[];
+  business_goals: string[];
+  modules: Module[];
+  features: Feature[];
+  development_phases: DevelopmentPhase[];
+  technology_decisions: Record<string, string>;
+  constraints: string[];
+  assumptions: string[];
+  risks: Array<{risk: string; mitigation: string}>;
+  total_estimated_hours?: number;
+  created_at?: string;
+  updated_at?: string;
+  analytics?: SpecAnalytics;
+}

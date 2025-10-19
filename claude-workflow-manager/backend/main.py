@@ -6173,3 +6173,588 @@ async def update_workspace(workspace_id: str, data: dict, user: Optional[User] =
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+# ===========================
+# Specification Designer API
+# ===========================
+
+@app.post(
+    "/api/specifications",
+    response_model=IdResponse,
+    status_code=201,
+    summary="Create Specification",
+    description="Create a new application specification",
+    tags=["Specifications"]
+)
+async def create_specification(spec: SpecificationCreate, current_user: User = Depends(get_current_user)):
+    """Create a new specification"""
+    from models import Specification
+    
+    full_spec = Specification(
+        user_id=current_user.id,
+        name=spec.name,
+        description=spec.description,
+        overview=spec.overview,
+        target_users=spec.target_users,
+        business_goals=spec.business_goals,
+        modules=[],
+        features=[],
+        development_phases=[],
+        technology_decisions={},
+        constraints=[],
+        assumptions=[],
+        risks=[]
+    )
+    
+    spec_id = await db.create_specification(full_spec)
+    return {"id": spec_id}
+
+@app.get(
+    "/api/specifications",
+    summary="List Specifications",
+    description="Get all specifications for the current user",
+    tags=["Specifications"]
+)
+async def get_specifications(current_user: User = Depends(get_current_user)):
+    """Get all specifications"""
+    specs = await db.get_specifications(user_id=current_user.id)
+    
+    # Enrich with analytics
+    for spec in specs:
+        try:
+            analytics = await db.get_spec_analytics(spec["id"])
+            spec["analytics"] = analytics
+        except:
+            spec["analytics"] = {}
+    
+    return {"specifications": specs}
+
+@app.get(
+    "/api/specifications/{spec_id}",
+    summary="Get Specification",
+    description="Get a single specification with all details",
+    tags=["Specifications"]
+)
+async def get_specification(spec_id: str, current_user: User = Depends(get_current_user)):
+    """Get specification by ID"""
+    spec = await db.get_specification(spec_id)
+    
+    if not spec:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    if spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Get related data
+    spec["features"] = await db.get_features(spec_id)
+    spec["modules"] = await db.get_modules(spec_id)
+    spec["development_phases"] = await db.get_phases(spec_id)
+    spec["analytics"] = await db.get_spec_analytics(spec_id)
+    
+    return spec
+
+@app.put(
+    "/api/specifications/{spec_id}",
+    response_model=ApiResponse,
+    summary="Update Specification",
+    description="Update specification details",
+    tags=["Specifications"]
+)
+async def update_specification(
+    spec_id: str,
+    spec_update: SpecificationUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update specification"""
+    spec = await db.get_specification(spec_id)
+    
+    if not spec:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    if spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    update_data = {k: v for k, v in spec_update.dict(exclude_unset=True).items() if v is not None}
+    await db.update_specification(spec_id, update_data)
+    
+    return {"message": "Specification updated", "success": True}
+
+@app.delete(
+    "/api/specifications/{spec_id}",
+    response_model=ApiResponse,
+    summary="Delete Specification",
+    description="Delete a specification and all related data",
+    tags=["Specifications"]
+)
+async def delete_specification(spec_id: str, current_user: User = Depends(get_current_user)):
+    """Delete specification"""
+    spec = await db.get_specification(spec_id)
+    
+    if not spec:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    if spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    await db.delete_specification(spec_id)
+    
+    return {"message": "Specification deleted", "success": True}
+
+# Feature endpoints
+@app.post(
+    "/api/specifications/{spec_id}/features",
+    response_model=IdResponse,
+    status_code=201,
+    summary="Create Feature",
+    description="Add a feature to a specification",
+    tags=["Specifications"]
+)
+async def create_feature(
+    spec_id: str,
+    feature: FeatureCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new feature"""
+    from models import Feature
+    
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    full_feature = Feature(
+        spec_id=spec_id,
+        title=feature.title,
+        description=feature.description,
+        user_story=feature.user_story,
+        acceptance_criteria=[],
+        technical_requirements=[],
+        dependencies=[],
+        blocks=[],
+        priority=feature.priority,
+        status="planned",
+        complexity=feature.complexity,
+        module=feature.module,
+        tags=feature.tags
+    )
+    
+    feature_id = await db.create_feature(full_feature)
+    return {"id": feature_id}
+
+@app.get(
+    "/api/specifications/{spec_id}/features",
+    summary="List Features",
+    description="Get all features for a specification",
+    tags=["Specifications"]
+)
+async def get_features(spec_id: str, current_user: User = Depends(get_current_user)):
+    """Get all features"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    features = await db.get_features(spec_id)
+    return {"features": features}
+
+@app.put(
+    "/api/specifications/{spec_id}/features/{feature_id}",
+    response_model=ApiResponse,
+    summary="Update Feature",
+    description="Update a feature",
+    tags=["Specifications"]
+)
+async def update_feature(
+    spec_id: str,
+    feature_id: str,
+    feature_update: FeatureUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update feature"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    update_data = {k: v for k, v in feature_update.dict(exclude_unset=True).items() if v is not None}
+    await db.update_feature(feature_id, update_data)
+    
+    return {"message": "Feature updated", "success": True}
+
+@app.delete(
+    "/api/specifications/{spec_id}/features/{feature_id}",
+    response_model=ApiResponse,
+    summary="Delete Feature",
+    description="Delete a feature",
+    tags=["Specifications"]
+)
+async def delete_feature(
+    spec_id: str,
+    feature_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Delete feature"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    await db.delete_feature(feature_id)
+    
+    return {"message": "Feature deleted", "success": True}
+
+# Module endpoints
+@app.post(
+    "/api/specifications/{spec_id}/modules",
+    response_model=IdResponse,
+    status_code=201,
+    summary="Create Module",
+    description="Add a module to a specification",
+    tags=["Specifications"]
+)
+async def create_module(
+    spec_id: str,
+    module: ModuleCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new module"""
+    from models import Module
+    
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    full_module = Module(
+        spec_id=spec_id,
+        name=module.name,
+        description=module.description,
+        responsibilities=module.responsibilities,
+        interfaces=[],
+        dependencies=[],
+        technology_stack=module.technology_stack,
+        estimated_features=0,
+        completed_features=0
+    )
+    
+    module_id = await db.create_module(full_module)
+    return {"id": module_id}
+
+@app.get(
+    "/api/specifications/{spec_id}/modules",
+    summary="List Modules",
+    description="Get all modules for a specification",
+    tags=["Specifications"]
+)
+async def get_modules(spec_id: str, current_user: User = Depends(get_current_user)):
+    """Get all modules"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    modules = await db.get_modules(spec_id)
+    return {"modules": modules}
+
+@app.put(
+    "/api/specifications/{spec_id}/modules/{module_id}",
+    response_model=ApiResponse,
+    summary="Update Module",
+    description="Update a module",
+    tags=["Specifications"]
+)
+async def update_module(
+    spec_id: str,
+    module_id: str,
+    module_update: ModuleUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update module"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    update_data = {k: v for k, v in module_update.dict(exclude_unset=True).items() if v is not None}
+    await db.update_module(module_id, update_data)
+    
+    return {"message": "Module updated", "success": True}
+
+@app.delete(
+    "/api/specifications/{spec_id}/modules/{module_id}",
+    response_model=ApiResponse,
+    summary="Delete Module",
+    description="Delete a module",
+    tags=["Specifications"]
+)
+async def delete_module(
+    spec_id: str,
+    module_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Delete module"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    await db.delete_module(module_id)
+    
+    return {"message": "Module deleted", "success": True}
+
+# Development Phase endpoints
+@app.post(
+    "/api/specifications/{spec_id}/phases",
+    response_model=IdResponse,
+    status_code=201,
+    summary="Create Development Phase",
+    description="Add a development phase to a specification",
+    tags=["Specifications"]
+)
+async def create_phase(
+    spec_id: str,
+    phase: PhaseCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new development phase"""
+    from models import DevelopmentPhase
+    
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    full_phase = DevelopmentPhase(
+        spec_id=spec_id,
+        name=phase.name,
+        description=phase.description,
+        feature_ids=phase.feature_ids,
+        target_date=phase.target_date,
+        status="planned"
+    )
+    
+    phase_id = await db.create_phase(full_phase)
+    return {"id": phase_id}
+
+@app.get(
+    "/api/specifications/{spec_id}/phases",
+    summary="List Development Phases",
+    description="Get all development phases for a specification",
+    tags=["Specifications"]
+)
+async def get_phases(spec_id: str, current_user: User = Depends(get_current_user)):
+    """Get all phases"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    phases = await db.get_phases(spec_id)
+    return {"phases": phases}
+
+@app.put(
+    "/api/specifications/{spec_id}/phases/{phase_id}",
+    response_model=ApiResponse,
+    summary="Update Development Phase",
+    description="Update a development phase",
+    tags=["Specifications"]
+)
+async def update_phase(
+    spec_id: str,
+    phase_id: str,
+    phase_update: PhaseUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update phase"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    update_data = {k: v for k, v in phase_update.dict(exclude_unset=True).items() if v is not None}
+    await db.update_phase(phase_id, update_data)
+    
+    return {"message": "Phase updated", "success": True}
+
+@app.delete(
+    "/api/specifications/{spec_id}/phases/{phase_id}",
+    response_model=ApiResponse,
+    summary="Delete Development Phase",
+    description="Delete a development phase",
+    tags=["Specifications"]
+)
+async def delete_phase(
+    spec_id: str,
+    phase_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Delete phase"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    await db.delete_phase(phase_id)
+    
+    return {"message": "Phase deleted", "success": True}
+
+# AI-assisted generation endpoint
+@app.post(
+    "/api/specifications/{spec_id}/ai-generate",
+    summary="AI Generate Spec Elements",
+    description="Use AI to generate features, modules, or other spec elements",
+    tags=["Specifications", "AI"]
+)
+async def ai_generate_spec_elements(
+    spec_id: str,
+    request: AIGenerateSpecRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Use AI to generate specification elements"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    # Get API key for the user
+    api_key = await db.get_default_anthropic_api_key(current_user.id)
+    if not api_key:
+        api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    
+    if not api_key:
+        raise HTTPException(status_code=400, detail="No API key available")
+    
+    import anthropic
+    client = anthropic.Anthropic(api_key=api_key)
+    
+    # Build prompt based on generation type
+    system_prompt = f"""You are an expert software architect helping to write detailed specifications.
+The current specification is: {spec['name']}
+Overview: {spec['overview']}
+"""
+    
+    if request.generate_type == "features":
+        system_prompt += "\nGenerate a list of features in JSON format with title, description, user_story, priority, and complexity."
+    elif request.generate_type == "modules":
+        system_prompt += "\nGenerate a list of modules/components in JSON format with name, description, responsibilities, and technology_stack."
+    elif request.generate_type == "acceptance_criteria":
+        system_prompt += "\nGenerate acceptance criteria for a feature in JSON format as an array of {id, description} objects."
+    elif request.generate_type == "technical_requirements":
+        system_prompt += "\nGenerate technical requirements in JSON format as an array of {id, category, description, priority} objects."
+    
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            system=system_prompt,
+            messages=[{
+                "role": "user",
+                "content": request.prompt
+            }]
+        )
+        
+        response_text = message.content[0].text if message.content else ""
+        
+        # Try to parse JSON from response
+        import json
+        import re
+        
+        # Extract JSON from markdown code blocks if present
+        json_match = re.search(r'```(?:json)?\s*(\[.*?\]|\{.*?\})\s*```', response_text, re.DOTALL)
+        if json_match:
+            response_text = json_match.group(1)
+        
+        try:
+            generated_data = json.loads(response_text)
+        except:
+            # If not valid JSON, return raw text
+            generated_data = {"raw_response": response_text}
+        
+        return {
+            "generated_data": generated_data,
+            "raw_response": response_text,
+            "generate_type": request.generate_type
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+# Spec to Orchestration conversion endpoint
+@app.post(
+    "/api/specifications/{spec_id}/to-orchestration",
+    summary="Convert Spec to Orchestration",
+    description="Convert specification features to orchestration design",
+    tags=["Specifications", "Orchestration"]
+)
+async def spec_to_orchestration(
+    spec_id: str,
+    request: SpecToOrchestrationRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Convert specification to orchestration design"""
+    spec = await db.get_specification(spec_id)
+    if not spec or spec.get("user_id") != current_user.id:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    
+    # Get features to convert
+    if request.feature_ids:
+        features = []
+        for feature_id in request.feature_ids:
+            feature = await db.get_feature(feature_id)
+            if feature:
+                features.append(feature)
+    else:
+        features = await db.get_features(spec_id)
+    
+    # Create orchestration design
+    from models import OrchestrationDesign, OrchestrationBlock, Agent, AgentRole
+    import uuid
+    
+    blocks = []
+    
+    # Create an agent for each feature
+    y_offset = 50
+    for i, feature in enumerate(features):
+        agent_id = str(uuid.uuid4())
+        
+        # Build system prompt from feature details
+        system_prompt = f"""You are a specialized agent for implementing: {feature['title']}
+
+Description: {feature['description']}
+
+{'User Story: ' + feature['user_story'] if feature.get('user_story') else ''}
+
+Your task is to implement this feature following the acceptance criteria:
+"""
+        
+        if feature.get('acceptance_criteria'):
+            for criteria in feature['acceptance_criteria']:
+                system_prompt += f"\n- {criteria['description']}"
+        
+        if feature.get('technical_requirements'):
+            system_prompt += "\n\nTechnical Requirements:"
+            for req in feature['technical_requirements']:
+                system_prompt += f"\n- {req['category']}: {req['description']}"
+        
+        agent = Agent(
+            name=feature['title'].replace(' ', '_'),
+            system_prompt=system_prompt,
+            role=AgentRole.WORKER
+        )
+        
+        block = OrchestrationBlock(
+            id=agent_id,
+            type="agent",
+            agent=agent,
+            position={"x": 100, "y": y_offset + (i * 150)},
+            connections=[],
+            config={"feature_id": feature.get('id')}
+        )
+        
+        blocks.append(block)
+    
+    # Create the orchestration design
+    design = OrchestrationDesign(
+        user_id=current_user.id,
+        name=f"{spec['name']} - Implementation",
+        description=f"Auto-generated orchestration from specification: {spec['name']}",
+        blocks=blocks,
+        global_config={
+            "pattern": "sequential",
+            "source_spec_id": spec_id
+        }
+    )
+    
+    design_id = await db.create_orchestration_design(design)
+    
+    return {
+        "design_id": design_id,
+        "message": f"Created orchestration design with {len(blocks)} agents",
+        "feature_count": len(features)
+    }
