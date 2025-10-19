@@ -24,7 +24,7 @@ import {
 import {
   Add, PlayArrow, FolderOpen, SmartToy, Delete,
   CheckCircle, Error, Warning, VpnKey, DesignServices,
-  AutoFixHigh
+  AutoFixHigh, Code
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -269,6 +269,14 @@ const WorkflowsPage: React.FC = () => {
                 >
                   View Agents
                 </Button>
+                <IconButton
+                  size="small"
+                  onClick={() => navigate(`/code-editor?workflow=${workflow.id}&branch=${workflow.branch}`)}
+                  title="Open in Code Editor"
+                  color="primary"
+                >
+                  <Code />
+                </IconButton>
                 <IconButton
                   size="small"
                   onClick={() => navigate(`/design?workflow=${workflow.id}`)}

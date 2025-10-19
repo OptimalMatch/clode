@@ -445,23 +445,45 @@ const NewCodeEditorPage: React.FC = () => {
     loadOrchestrationDesigns();
     loadAvailableModels();
     configureMonacoThemes();
-    
+
     // Apply default vs-dark theme colors on mount
-    applyThemeColors('vs-dark', { 
-      colors: { 
-        'editor.background': '#1e1e1e', 
-        'editor.foreground': '#d4d4d4', 
-        'sideBar.background': '#252526', 
-        'activityBar.background': '#333333', 
-        'statusBar.background': '#007acc', 
-        'titleBar.activeBackground': '#3c3c3c' 
-      } 
+    applyThemeColors('vs-dark', {
+      colors: {
+        'editor.background': '#1e1e1e',
+        'editor.foreground': '#d4d4d4',
+        'sideBar.background': '#252526',
+        'activityBar.background': '#333333',
+        'statusBar.background': '#007acc',
+        'titleBar.activeBackground': '#3c3c3c'
+      }
     });
-    
+
     return () => {
       stopChangesPolling();
     };
   }, []);
+
+  // Handle URL parameters for pre-selecting workflow and branch
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const workflowId = params.get('workflow');
+    const branch = params.get('branch');
+
+    if (workflowId && workflows.length > 0) {
+      const workflow = workflows.find(w => w.id === workflowId);
+      if (workflow && workflowId !== selectedWorkflow) {
+        handleWorkflowChange(workflowId);
+
+        // If a branch is specified and different from current, set it after workflow loads
+        if (branch) {
+          // Set branch after a short delay to ensure workflow is initialized
+          setTimeout(() => {
+            setSelectedBranch(branch);
+          }, 500);
+        }
+      }
+    }
+  }, [location.search, workflows]);
   
   // Auto-scroll chat to bottom
   useEffect(() => {
