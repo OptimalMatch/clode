@@ -4338,6 +4338,7 @@ Format your response as JSON:
               placeholder='{"input": "Your task here", "context": "Any background info"}'
               helperText="Optional JSON input to provide context to the first block. Will be prepended as 'Initial Input'"
               sx={{
+                mb: 2,
                 '& .MuiInputLabel-root': { color: darkMode ? '#b0b0b0' : undefined },
                 '& .MuiOutlinedInput-root': {
                   color: darkMode ? '#ffffff' : undefined,
@@ -4347,6 +4348,50 @@ Format your response as JSON:
                 '& .MuiFormHelperText-root': { color: darkMode ? '#888' : undefined },
               }}
             />
+
+            <Box sx={{
+              p: 2,
+              backgroundColor: darkMode ? '#0a0a0a' : '#f5f5f5',
+              borderRadius: 1,
+              border: `1px solid ${darkMode ? '#333' : '#e0e0e0'}`
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="caption" sx={{ color: darkMode ? '#888' : 'text.secondary', fontWeight: 600 }}>
+                  Example:
+                </Typography>
+                <Button
+                  size="small"
+                  onClick={() => setExecuteInputData(JSON.stringify({
+                    "input": "Analyze customer feedback from Q4 2024",
+                    "context": "Focus on pricing and feature requests",
+                    "format": "Executive summary with actionable insights"
+                  }, null, 2))}
+                  sx={{
+                    textTransform: 'none',
+                    fontSize: '0.75rem',
+                    color: darkMode ? '#667eea' : 'primary.main'
+                  }}
+                >
+                  Use This Example
+                </Button>
+              </Box>
+              <Box component="pre" sx={{
+                m: 0,
+                p: 1,
+                fontSize: '0.75rem',
+                fontFamily: 'monospace',
+                color: darkMode ? '#b0b0b0' : 'text.primary',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                overflow: 'auto'
+              }}>
+{`{
+  "input": "Analyze customer feedback from Q4 2024",
+  "context": "Focus on pricing and feature requests",
+  "format": "Executive summary with actionable insights"
+}`}
+              </Box>
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>
