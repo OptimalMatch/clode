@@ -151,6 +151,7 @@ const OrchestrationDesignerPage: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [draggedBlock, setDraggedBlock] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [draggedPatternType, setDraggedPatternType] = useState<string | null>(null); // Track pattern being dragged from sidebar
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionSource, setConnectionSource] = useState<string | null>(null);
   const [connectionSourceAgent, setConnectionSourceAgent] = useState<string | null>(null);
@@ -480,22 +481,29 @@ const OrchestrationDesignerPage: React.FC = () => {
   ];
 
   // Add a new orchestration block to the canvas
-  const addBlock = (patternType: OrchestrationPattern) => {
+  const addBlock = (patternType: OrchestrationPattern, customPosition?: { x: number; y: number }) => {
     const pattern = patterns.find(p => p.id === patternType);
-    
-    // Better layout: 3 columns, with wrapping
-    const col = blocks.length % 3;
-    const row = Math.floor(blocks.length / 3);
-    const blockWidth = 350;
-    const blockHeight = 400;
-    
+
+    // Calculate position: use custom position if provided, otherwise auto-layout
+    let position: { x: number; y: number };
+    if (customPosition) {
+      position = customPosition;
+    } else {
+      // Better layout: 3 columns, with wrapping
+      const col = blocks.length % 3;
+      const row = Math.floor(blocks.length / 3);
+      const blockWidth = 350;
+      const blockHeight = 400;
+      position = {
+        x: 100 + col * blockWidth,
+        y: 100 + row * blockHeight
+      };
+    }
+
     const newBlock: OrchestrationBlock = {
       id: `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       type: patternType,
-      position: { 
-        x: 100 + col * blockWidth, 
-        y: 100 + row * blockHeight 
-      },
+      position,
       data: {
         label: pattern?.name || patternType,
         agents: [
@@ -585,6 +593,43 @@ const OrchestrationDesignerPage: React.FC = () => {
       setIsPanning(false);
     }, 10);
   }, []);
+
+  // Handle pattern drag from sidebar
+  const handlePatternDragStart = (e: React.DragEvent, patternId: string) => {
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('application/pattern', patternId);
+    setDraggedPatternType(patternId);
+  };
+
+  const handlePatternDragEnd = () => {
+    setDraggedPatternType(null);
+  };
+
+  // Handle pattern drop on canvas
+  const handleCanvasDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const patternId = e.dataTransfer.getData('application/pattern');
+
+    if (!patternId || !canvasRef.current) return;
+
+    // Calculate drop position in canvas coordinates
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Convert screen coordinates to canvas coordinates (accounting for zoom and pan)
+    const canvasX = (mouseX - panOffset.x) / zoom;
+    const canvasY = (mouseY - panOffset.y) / zoom;
+
+    // Add the block at the drop position
+    addBlock(patternId as OrchestrationPattern, { x: canvasX, y: canvasY });
+    setDraggedPatternType(null);
+  };
+
+  const handleCanvasDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
 
   useEffect(() => {
     if (isDragging || isPanning) {
@@ -2942,13 +2987,18 @@ Format your response as JSON:
             {patterns.map(pattern => (
               <ListItem
                 key={pattern.id}
+                draggable
+                onDragStart={(e) => handlePatternDragStart(e, pattern.id)}
+                onDragEnd={handlePatternDragEnd}
                 sx={{
                   mb: 1,
                   border: 1,
                   borderColor: darkMode ? '#444' : 'divider',
                   borderRadius: 1,
-                  cursor: 'pointer',
+                  cursor: draggedPatternType === pattern.id ? 'grabbing' : 'grab',
                   backgroundColor: darkMode ? '#2d2d2d' : 'transparent',
+                  opacity: draggedPatternType === pattern.id ? 0.5 : 1,
+                  transition: 'opacity 0.2s',
                   '&:hover': {
                     backgroundColor: darkMode ? '#404040' : 'action.hover',
                     borderColor: 'primary.main',
@@ -3158,6 +3208,8 @@ Format your response as JSON:
                 e.preventDefault();
               }
             }}
+            onDrop={handleCanvasDrop}
+            onDragOver={handleCanvasDragOver}
             sx={{
               flex: 1,
               position: 'relative',
