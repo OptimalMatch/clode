@@ -310,12 +310,13 @@ const AgentsPage: React.FC = () => {
         <DialogTitle>Spawn New Agent</DialogTitle>
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Select Prompt</InputLabel>
+            <InputLabel shrink>Select Prompt</InputLabel>
             <Select
               value={selectedPromptId}
               onChange={(e) => setSelectedPromptId(e.target.value)}
               label="Select Prompt"
               displayEmpty
+              notched
               renderValue={(selected) => {
                 if (selected === '') {
                   return <em>No prompt (interactive mode)</em>;
