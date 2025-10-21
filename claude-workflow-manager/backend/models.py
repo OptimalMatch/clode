@@ -377,6 +377,17 @@ class OrchestrationDesign(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+class OrchestrationDesignVersion(BaseModel):
+    """Version snapshot of an orchestration design"""
+    version: int
+    name: str
+    description: str
+    blocks: List[Dict[str, Any]]
+    connections: List[Dict[str, Any]]
+    git_repos: List[Dict[str, Any]] = []
+    saved_at: datetime
+    saved_by: Optional[str] = None
+
 # User authentication models
 class User(BaseModel):
     id: Optional[str] = None
