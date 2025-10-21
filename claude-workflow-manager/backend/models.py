@@ -158,6 +158,20 @@ class LogListResponse(BaseModel):
     logs: List[InstanceLog]
     total: int
 
+class LogAnalytics(BaseModel):
+    """Analytics data for instance logs"""
+    instance_id: str
+    total_interactions: int
+    total_tokens: int
+    token_breakdown: Optional['TokenUsage'] = None
+    total_cost_usd: Optional[float] = None
+    total_execution_time_ms: int
+    error_count: int
+    subagents_used: List[str]
+    interaction_timeline: List[Dict[str, Any]]
+    average_response_time_ms: float
+    success_rate: float
+
 class ApiResponse(BaseModel):
     message: str
     success: bool = True
@@ -397,6 +411,8 @@ class UserResponse(BaseModel):
 
 class ModelInfo(BaseModel):
     """Information about an LLM model"""
+    model_config = {'protected_namespaces': ()}  # Suppress Pydantic warning
+    
     id: str
     name: str
     provider: str
@@ -515,6 +531,18 @@ class ClaudeProfileResponse(BaseModel):
 class ClaudeProfileListResponse(BaseModel):
     """List response for Claude profiles"""
     profiles: List[ClaudeProfileResponse]
+
+class ClaudeAuthProfile(BaseModel):
+    """Claude authentication profile (full model for database storage)"""
+    id: str
+    user_id: str
+    profile_name: str
+    user_email: str
+    credentials_json: str
+    created_at: datetime
+    updated_at: datetime
+    last_used_at: Optional[datetime] = None
+    auth_method: str  # "max-plan" or "terminal-oauth"
 
 class ClaudeAuthProfileListResponse(BaseModel):
     """List response for Claude auth profiles (alias for compatibility)"""
