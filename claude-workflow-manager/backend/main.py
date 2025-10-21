@@ -38,7 +38,10 @@ from models import (
     DynamicRoutingRequest, OrchestrationResult, OrchestrationDesign,
     Deployment, ExecutionLog, ScheduleConfig, AnthropicApiKey,
     AnthropicApiKeyCreate, AnthropicApiKeyResponse, AnthropicApiKeyListResponse,
-    AnthropicApiKeyTestResponse, UserUsageStats, TokenUsage
+    AnthropicApiKeyTestResponse, UserUsageStats, TokenUsage,
+    SpecificationCreate, FeatureCreate, FeatureUpdate, ModuleCreate,
+    ModuleUpdate, PhaseCreate, PhaseUpdate, AIGenerateSpecRequest,
+    SpecToOrchestrationRequest
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
