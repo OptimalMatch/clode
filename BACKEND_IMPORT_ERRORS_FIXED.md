@@ -156,11 +156,39 @@ docker logs claude-workflow-backend -f
 # INFO: Uvicorn running on http://0.0.0.0:8000
 ```
 
+## Update: Additional Missing Model
+
+After deploying commit `58f73d5`, another missing model was discovered:
+
+### Missing Model: `OrchestrationDesignVersion`
+
+This model was imported by `database.py` but was missing from `models.py`.
+
+**Fix Applied (Commit 3a712ec):**
+
+```python
+class OrchestrationDesignVersion(BaseModel):
+    """Version snapshot of an orchestration design"""
+    version: int
+    name: str
+    description: str
+    blocks: List[Dict[str, Any]]
+    connections: List[Dict[str, Any]]
+    git_repos: List[Dict[str, Any]] = []
+    saved_at: datetime
+    saved_by: Optional[str] = None
+```
+
+This model is used for storing version history of orchestration designs.
+
 ## Summary
 
 **Issue**: Backend failing to start due to missing model imports  
 **Cause**: Models accidentally removed during Spec Designer implementation  
-**Fix**: Re-added all 33+ missing model definitions to `models.py`  
+**Fix**: Re-added all 34+ missing model definitions to `models.py`  
+**Commits**: 
+- `58f73d5` - Re-added LogAnalytics, ClaudeAuthProfile, and 31 other models
+- `3a712ec` - Added OrchestrationDesignVersion model
 **Status**: ✅ Fixed, ready to deploy  
 **Impact**: Backend will now start successfully (takes 60-90 seconds)
 
