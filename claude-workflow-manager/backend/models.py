@@ -145,6 +145,19 @@ class ListResponse(BaseModel):
 class WorkflowListResponse(BaseModel):
     workflows: List[Workflow]
 
+class PromptListResponse(BaseModel):
+    prompts: List[Prompt]
+
+class InstanceListResponse(BaseModel):
+    instances: List[ClaudeInstance]
+
+class SubagentListResponse(BaseModel):
+    subagents: List[Subagent]
+
+class LogListResponse(BaseModel):
+    logs: List[InstanceLog]
+    total: int
+
 class ApiResponse(BaseModel):
     message: str
     success: bool = True
@@ -184,6 +197,47 @@ class ExecutePromptRequest(BaseModel):
     git_repo: str
     start_sequence: Optional[int] = None
     end_sequence: Optional[int] = None
+
+class InterruptInstanceRequest(BaseModel):
+    """Request model for interrupting instance execution"""
+    reason: Optional[str] = "User requested interruption"
+
+class DetectSubagentsRequest(BaseModel):
+    """Request model for detecting subagents in prompts"""
+    prompt_id: str
+
+class SyncToRepoRequest(BaseModel):
+    """Request model for syncing prompts to repository"""
+    workflow_id: str
+    prompt_ids: Optional[List[str]] = None
+
+class ImportRepoPromptsRequest(BaseModel):
+    """Request model for importing prompts from repository"""
+    workflow_id: str
+    force_overwrite: bool = False
+
+class AgentFormatExamplesResponse(BaseModel):
+    """Response with agent format examples"""
+    examples: List[Dict[str, Any]]
+
+class GitValidationRequest(BaseModel):
+    """Request to validate a Git repository"""
+    git_repo: str
+    branch: str = "main"
+    ssh_key_id: Optional[str] = None
+
+class GitValidationResponse(BaseModel):
+    """Response from Git validation"""
+    accessible: bool
+    message: str
+    branches: Optional[List[str]] = None
+    default_branch: Optional[str] = None
+
+class GitBranchesResponse(BaseModel):
+    """Response with Git branches"""
+    branches: List[str]
+    default_branch: str
+    current_branch: Optional[str] = None
 
 class AgentRole(str, Enum):
     MANAGER = "manager"
@@ -254,6 +308,39 @@ class RoutingRequest(BaseModel):
     use_isolated_workspaces: bool = False
     model: Optional[str] = None
 
+class OrchestrationAgent(BaseModel):
+    """Agent for orchestration (alias for compatibility)"""
+    name: str
+    system_prompt: str
+    role: AgentRole = AgentRole.WORKER
+
+class SequentialPipelineRequest(BaseModel):
+    """Sequential pipeline request (alias for compatibility)"""
+    agents: List[Agent]
+    task: str
+    workflow_id: Optional[str] = None
+    git_repo: Optional[str] = None
+    use_isolated_workspaces: bool = False
+    model: Optional[str] = None
+
+class DynamicRoutingRequest(BaseModel):
+    """Dynamic routing request (alias for compatibility)"""
+    router_agent: Agent
+    specialist_agents: List[Agent]
+    task: str
+    workflow_id: Optional[str] = None
+    git_repo: Optional[str] = None
+    use_isolated_workspaces: bool = False
+    model: Optional[str] = None
+
+class OrchestrationResult(BaseModel):
+    """Result from orchestration execution"""
+    success: bool
+    result: Any
+    execution_time_ms: Optional[int] = None
+    agent_outputs: Optional[Dict[str, str]] = None
+    error: Optional[str] = None
+
 # Orchestration Design models (for Designer page)
 class OrchestrationBlock(BaseModel):
     """A block in the orchestration designer canvas"""
@@ -297,11 +384,41 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+class TokenResponse(BaseModel):
+    """Token response (alias for compatibility)"""
+    access_token: str
+    token_type: str = "bearer"
+
 class UserResponse(BaseModel):
     id: str
     username: str
     email: str
     created_at: datetime
+
+class ModelInfo(BaseModel):
+    """Information about an LLM model"""
+    id: str
+    name: str
+    provider: str
+    context_window: int
+    max_output_tokens: int
+    supports_tools: bool
+    supports_vision: bool
+
+class AvailableModelsResponse(BaseModel):
+    """Response with available models"""
+    models: List[ModelInfo]
+    default_model: str
+
+class ModelSettingsRequest(BaseModel):
+    """Request to update model settings"""
+    default_model: str
+
+class ModelSettingsResponse(BaseModel):
+    """Response after updating model settings"""
+    success: bool
+    default_model: str
+    message: str
 
 class UserUsageStats(BaseModel):
     """User-level usage statistics for dashboard"""
@@ -399,6 +516,40 @@ class ClaudeProfileListResponse(BaseModel):
     """List response for Claude profiles"""
     profiles: List[ClaudeProfileResponse]
 
+class ClaudeAuthProfileListResponse(BaseModel):
+    """List response for Claude auth profiles (alias for compatibility)"""
+    profiles: List[ClaudeProfileResponse]
+
+class ClaudeLoginSessionRequest(BaseModel):
+    """Request to create a Claude login session"""
+    profile_name: str
+
+class ClaudeLoginSessionResponse(BaseModel):
+    """Response with Claude login session details"""
+    session_id: str
+    login_url: str
+    expires_at: datetime
+
+class ClaudeAuthTokenRequest(BaseModel):
+    """Request with Claude authentication token"""
+    session_id: str
+    token: str
+
+class ClaudeProfileSelection(BaseModel):
+    """Claude profile selection"""
+    profile_id: str
+    profile_name: str
+
+class ClaudeProfileSelectionRequest(BaseModel):
+    """Request to select a Claude profile"""
+    profile_id: str
+
+class ClaudeProfileSelectionResponse(BaseModel):
+    """Response after profile selection"""
+    success: bool
+    message: str
+    profile: Optional[ClaudeProfileResponse] = None
+
 # Deployment models
 class ScheduleConfig(BaseModel):
     """Configuration for scheduled executions"""
@@ -491,6 +642,29 @@ class SSHKeyResponse(BaseModel):
     is_default: bool
     created_at: datetime
     last_used_at: Optional[datetime] = None
+
+class SSHKeyListResponse(BaseModel):
+    """List of SSH keys"""
+    keys: List[SSHKeyResponse]
+
+class SSHKeyGenerationRequest(BaseModel):
+    """Request to generate a new SSH key"""
+    key_name: str
+    passphrase: Optional[str] = None
+    is_default: bool = False
+
+class GitConnectionTestRequest(BaseModel):
+    """Request to test Git connection with SSH key"""
+    git_repo: str
+    ssh_key_id: str
+    branch: str = "main"
+
+class SSHKeyInfo(BaseModel):
+    """SSH key information"""
+    id: str
+    key_name: str
+    fingerprint: str
+    public_key: str
 
 # Specification Designer models (NEW!)
 class FeaturePriority(str, Enum):
