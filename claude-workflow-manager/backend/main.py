@@ -39,7 +39,7 @@ from models import (
     Deployment, ExecutionLog, ScheduleConfig, AnthropicApiKey,
     AnthropicApiKeyCreate, AnthropicApiKeyResponse, AnthropicApiKeyListResponse,
     AnthropicApiKeyTestResponse, UserUsageStats, TokenUsage,
-    SpecificationCreate, FeatureCreate, FeatureUpdate, ModuleCreate,
+    SpecificationCreate, SpecificationUpdate, FeatureCreate, FeatureUpdate, ModuleCreate,
     ModuleUpdate, PhaseCreate, PhaseUpdate, AIGenerateSpecRequest,
     SpecToOrchestrationRequest
 )
