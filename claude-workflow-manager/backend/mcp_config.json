@@ -4,6 +4,16 @@
       "command": "nc",
       "args": ["YOUR_SERVER_IP", "8002"],
       "cwd": "/tmp"
+    },
+    "voice-interaction": {
+      "command": "nc",
+      "args": ["YOUR_SERVER_IP", "14302"],
+      "cwd": "/tmp"
+    },
+    "image-processing": {
+      "command": "nc",
+      "args": ["YOUR_SERVER_IP", "14402"],
+      "cwd": "/tmp"
     }
   }
 }

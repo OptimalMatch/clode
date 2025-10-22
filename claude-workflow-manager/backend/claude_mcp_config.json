@@ -4,6 +4,16 @@
       "command": "nc",
       "args": ["claude-workflow-mcp", "8002"],
       "description": "Claude Workflow Manager - Access workflows, orchestration patterns, and multi-agent tools"
+    },
+    "voice-interaction": {
+      "command": "nc",
+      "args": ["claude-workflow-voice-mcp-http", "8001"],
+      "description": "Voice Interaction - Speech-to-text and text-to-speech capabilities using Whisper and Picovoice Orca"
+    },
+    "image-processing": {
+      "command": "nc",
+      "args": ["claude-workflow-image-mcp-http", "8002"],
+      "description": "Image Processing - OCR and document text extraction using Google Cloud Vision API"
     }
   }
 }
