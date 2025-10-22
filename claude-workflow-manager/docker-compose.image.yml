@@ -48,7 +48,7 @@ services:
       - image-backend
     stdin_open: true
     tty: true
-    command: ["python", "server.py"]
+    command: ["python", "server_multi_transport.py"]
 
   # Image MCP Server HTTP transport (for remote access)
   image-mcp-server-http:
@@ -65,13 +65,16 @@ services:
     environment:
       - IMAGE_API_URL=http://image-backend:8001
       - API_TIMEOUT=60
+      - MCP_TRANSPORT=http
+      - MCP_HTTP_PORT=8002
+      - MCP_HTTP_HOST=0.0.0.0
     networks:
       - claude-network
     depends_on:
       - image-backend
     stdin_open: true
     tty: true
-    command: ["python", "server.py"]
+    command: ["python", "server_multi_transport.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
       interval: 30s
