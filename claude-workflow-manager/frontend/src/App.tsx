@@ -28,6 +28,7 @@ import NewCodeEditorPage from './components/NewCodeEditorPage';
 import LegacyModernizationPage from './components/LegacyModernizationPage';
 import UsageDashboard from './components/UsageDashboard';
 import VoiceDemoPage from './components/VoiceDemoPage';
+import ImageDemoPage from './components/ImageDemoPage';
 
 const queryClient = new QueryClient();
 
@@ -78,6 +79,7 @@ function App() {
                 <Route path="/new-code-editor" element={<NewCodeEditorPage />} />
                 <Route path="/legacy-modernization" element={<ProtectedRoute><ModernLayout><LegacyModernizationPage /></ModernLayout></ProtectedRoute>} />
                 <Route path="/voice-demo" element={<ProtectedRoute><ModernLayout><VoiceDemoPage /></ModernLayout></ProtectedRoute>} />
+                <Route path="/image-demo" element={<ProtectedRoute><ModernLayout><ImageDemoPage /></ModernLayout></ProtectedRoute>} />
                 <Route path="/agents/:workflowId" element={<ProtectedRoute><ModernLayout><AgentsPage /></ModernLayout></ProtectedRoute>} />
                 <Route path="/multi-agent" element={<ModernLayout><MultiAgentView /></ModernLayout>} />
               </Routes>
