@@ -348,6 +348,16 @@ class MultiAgentOrchestrator:
                         "type": "http",
                         "url": "http://claude-workflow-mcp:8003/mcp",
                         "headers": {}
+                    },
+                    "image-processing": {
+                        "type": "http",
+                        "url": "http://image-mcp-server-http:8002/mcp",
+                        "headers": {}
+                    },
+                    "voice-interaction": {
+                        "type": "http",
+                        "url": "http://voice-mcp-server-http:8001/mcp",
+                        "headers": {}
                     }
                 },
                 allowed_tools=[
