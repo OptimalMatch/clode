@@ -123,7 +123,8 @@ class Agent:
         tool_keywords = [
             'file', 'bash', 'command', 'execute', 'run code', 'terminal',
             'search web', 'fetch', 'download', 'upload', 'create file', 'read file',
-            'write file', 'edit file', 'directory', 'folder', 'script'
+            'write file', 'edit file', 'directory', 'folder', 'script',
+            'mcp', 'tool', 'mcp__', 'extract_text', 'transcribe', 'synthesize'
         ]
         prompt_lower = self.system_prompt.lower()
         return any(keyword in prompt_lower for keyword in tool_keywords)
