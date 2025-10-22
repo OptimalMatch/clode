@@ -462,6 +462,89 @@ async def http_call_tool_sse(request: Request):
     return EventSourceResponse(event_generator())
 
 
+@http_app.post("/mcp")
+async def handle_mcp_request(request: Request):
+    """
+    Unified MCP endpoint for Claude Agent SDK compatibility.
+
+    Handles MCP protocol requests similar to the workflow MCP server.
+    Supports tools/list and tools/call methods.
+    """
+    try:
+        body = await request.json()
+        method = body.get("method")
+        params = body.get("params", {})
+
+        if method == "tools/list":
+            # List all available tools
+            tools = await list_tools()
+            return {
+                "jsonrpc": "2.0",
+                "result": {
+                    "tools": [
+                        {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "inputSchema": tool.inputSchema
+                        }
+                        for tool in tools
+                    ]
+                }
+            }
+
+        elif method == "tools/call":
+            # Call a specific tool
+            tool_name = params.get("name")
+            arguments = params.get("arguments", {})
+
+            if not tool_name:
+                return {
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32602,
+                        "message": "Tool name is required"
+                    }
+                }
+
+            # Call the tool
+            result = await call_tool(tool_name, arguments)
+
+            # Format result for MCP protocol
+            content = []
+            for item in result:
+                if hasattr(item, 'text'):
+                    content.append({
+                        "type": "text",
+                        "text": item.text
+                    })
+
+            return {
+                "jsonrpc": "2.0",
+                "result": {
+                    "content": content
+                }
+            }
+
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32601,
+                    "message": f"Method not found: {method}"
+                }
+            }
+
+    except Exception as e:
+        logger.error(f"Error in MCP request handler: {e}")
+        return {
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32603,
+                "message": str(e)
+            }
+        }
+
+
 # ==================== Server Startup ====================
 
 async def run_stdio_server():
