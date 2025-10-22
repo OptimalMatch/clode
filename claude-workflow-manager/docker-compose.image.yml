@@ -1,0 +1,83 @@
+# Image Processing Docker Compose Configuration
+# Extends the base docker-compose.yml with image/document OCR services
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.image.yml up
+
+services:
+  # Image Processing Backend API - OCR and Document Processing
+  image-backend:
+    build:
+      context: ../image-backend
+      dockerfile: Dockerfile
+    container_name: claude-workflow-image-backend
+    restart: always
+    ports:
+      - "14400:8001"
+    cpus: 2.0
+    mem_limit: 4g
+    mem_reservation: 2g
+    environment:
+      - GOOGLE_CREDENTIALS_PATH=/app/google-credentials.json
+    volumes:
+      # Mount credentials from deployment directory (created by GitHub Actions from secret)
+      - ./google-credentials.json:/app/google-credentials.json:ro
+      # Development volume mount (commented out for production)
+      # - ../image-backend:/app:ro
+    networks:
+      - claude-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Image MCP Server (stdio transport)
+  image-mcp-server:
+    build:
+      context: ../image-mcp-server
+      dockerfile: Dockerfile
+    container_name: claude-workflow-image-mcp
+    restart: always
+    environment:
+      - IMAGE_API_URL=http://image-backend:8001
+      - API_TIMEOUT=60
+      - MCP_TRANSPORT=stdio
+    networks:
+      - claude-network
+    depends_on:
+      - image-backend
+    stdin_open: true
+    tty: true
+    command: ["python", "server.py"]
+
+  # Image MCP Server HTTP transport (for remote access)
+  image-mcp-server-http:
+    build:
+      context: ../image-mcp-server
+      dockerfile: Dockerfile
+    container_name: claude-workflow-image-mcp-http
+    restart: always
+    ports:
+      - "14402:8002"
+    cpus: 1.0
+    mem_limit: 1g
+    mem_reservation: 512m
+    environment:
+      - IMAGE_API_URL=http://image-backend:8001
+      - API_TIMEOUT=60
+    networks:
+      - claude-network
+    depends_on:
+      - image-backend
+    stdin_open: true
+    tty: true
+    command: ["python", "server.py"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  claude-network:
+    external: true

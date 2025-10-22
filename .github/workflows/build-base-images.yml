@@ -21,6 +21,10 @@ on:
       - 'voice-backend/requirements.txt'
       - 'voice-mcp-server/Dockerfile*'
       - 'voice-mcp-server/requirements.txt'
+      - 'image-backend/Dockerfile*'
+      - 'image-backend/requirements.txt'
+      - 'image-mcp-server/Dockerfile*'
+      - 'image-mcp-server/requirements.txt'
       - '.github/workflows/build-base-images.yml'
     branches:
       - main
@@ -60,6 +64,12 @@ jobs:
           - name: "voice-mcp-server"
             dockerfile: "voice-mcp-server/Dockerfile"
             context: "voice-mcp-server"
+          - name: "image-backend"
+            dockerfile: "image-backend/Dockerfile"
+            context: "image-backend"
+          - name: "image-mcp-server"
+            dockerfile: "image-mcp-server/Dockerfile"
+            context: "image-mcp-server"
 
     steps:
     - name: Checkout repository
@@ -179,7 +189,7 @@ jobs:
         echo "🧹 Cleaning up old base images..."
         
         # Keep last 5 versions of each base image
-        for service in backend-base terminal-base frontend-base voice-backend voice-mcp-server; do
+        for service in backend-base terminal-base frontend-base voice-backend voice-mcp-server image-backend image-mcp-server; do
           echo "Cleaning $service images..."
           docker images --format "table {{.Repository}}:{{.Tag}}\t{{.CreatedAt}}" \
             | grep "claude-workflow-$service" \

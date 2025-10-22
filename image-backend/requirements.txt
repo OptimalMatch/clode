@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+python-multipart
+google-cloud-vision
+PyPDF2
+python-magic
+requests
+pydantic
