@@ -361,11 +361,22 @@ class MultiAgentOrchestrator:
                     }
                 },
                 allowed_tools=[
+                    # Workflow Manager tools
                     "mcp__workflow-manager__editor_browse_directory",
                     "mcp__workflow-manager__editor_read_file",
                     "mcp__workflow-manager__editor_create_change",
                     "mcp__workflow-manager__editor_get_changes",
-                    "mcp__workflow-manager__editor_search_files"
+                    "mcp__workflow-manager__editor_search_files",
+                    # Image Processing tools
+                    "mcp__image-processing__extract_text_from_image",
+                    "mcp__image-processing__extract_text_from_url",
+                    "mcp__image-processing__extract_text_from_pdf",
+                    "mcp__image-processing__check_image_api_health",
+                    # Voice Interaction tools
+                    "mcp__voice-interaction__transcribe_audio",
+                    "mcp__voice-interaction__synthesize_speech",
+                    "mcp__voice-interaction__voice_conversation",
+                    "mcp__voice-interaction__check_voice_api_health"
                 ],
                 max_turns=10
             )
