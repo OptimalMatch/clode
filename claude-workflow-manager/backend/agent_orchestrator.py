@@ -473,8 +473,8 @@ class MultiAgentOrchestrator:
           - Text-only agents: Anthropic SDK (true token-level streaming)
           - Tool-using agents: Claude Agent SDK (full tool capabilities)
         """
-        is_max_plan = self._is_max_plan_mode()
-        
+        is_max_plan = await self._is_max_plan_mode()
+
         if is_max_plan:
             # Max Plan: Use Claude Agent SDK for all agents (no token streaming available)
             logger.info(f"Agent {agent.name}: Using Claude Agent SDK (Max Plan mode)")
