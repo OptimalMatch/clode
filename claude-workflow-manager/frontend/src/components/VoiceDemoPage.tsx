@@ -25,7 +25,7 @@ import {
   CheckCircle,
   Error as ErrorIcon,
 } from '@mui/icons-material';
-import { orchestrationApi, StreamEvent } from '../services/api';
+import { orchestrationApi, StreamEvent, OrchestrationAgent } from '../services/api';
 
 interface VoiceExecutionState {
   status: 'idle' | 'recording' | 'transcribing' | 'processing' | 'synthesizing' | 'playing' | 'completed' | 'error';
@@ -124,7 +124,7 @@ const VoiceDemoPage: React.FC = () => {
 
       // Execute the voice conversation orchestration
       // We'll use the sequential execution API
-      const agents = [
+      const agents: OrchestrationAgent[] = [
         {
           name: 'Voice Listener',
           system_prompt: `You are a Voice Listener agent. Your job is to transcribe user audio input to text.
@@ -145,8 +145,7 @@ Args: {
 }
 
 Return the transcribed text clearly.`,
-          role: 'specialist',
-          use_tools: true
+          role: 'specialist'
         },
         {
           name: 'Conversation Handler',
@@ -160,8 +159,7 @@ YOUR ROLE:
 - Keep responses concise (2-3 sentences max) for voice output
 
 Be conversational and natural, as this will be spoken aloud!`,
-          role: 'specialist',
-          use_tools: false
+          role: 'specialist'
         },
         {
           name: 'Voice Speaker',
@@ -177,8 +175,7 @@ Args: {
 }
 
 Return the audio data that can be played in the browser.`,
-          role: 'specialist',
-          use_tools: true
+          role: 'specialist'
         }
       ];
 
