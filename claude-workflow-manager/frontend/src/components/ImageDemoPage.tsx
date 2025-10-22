@@ -43,10 +43,7 @@ const ImageDemoPage: React.FC = () => {
   const [agentOutputs, setAgentOutputs] = useState<{ [key: string]: string }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const processFile = (file: File) => {
     // Validate file type
     if (!file.type.startsWith('image/')) {
       setState({ status: 'error', error: 'Please select an image file (PNG, JPG, etc.)' });
@@ -71,14 +68,17 @@ const ImageDemoPage: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+  };
+
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     const file = event.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      const fakeEvent = {
-        target: { files: [file] }
-      } as React.ChangeEvent<HTMLInputElement>;
-      handleFileSelect(fakeEvent);
+    if (file) {
+      processFile(file);
     }
   };
 
