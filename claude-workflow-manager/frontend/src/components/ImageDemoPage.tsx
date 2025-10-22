@@ -350,7 +350,7 @@ FORMATTING GUIDELINES:
                   </IconButton>
                 </Box>
                 <Typography variant="body2" sx={{ mt: 2 }}>
-                  {state.imageFile?.name} ({(state.imageFile?.size || 0) / 1024 / 1024).toFixed(2)} MB)
+                  {state.imageFile?.name} ({((state.imageFile?.size || 0) / 1024 / 1024).toFixed(2)} MB)
                 </Typography>
                 <Button
                   variant="contained"
