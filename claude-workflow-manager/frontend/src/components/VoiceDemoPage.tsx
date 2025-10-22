@@ -185,25 +185,28 @@ Return the audio data that can be played in the browser.`,
       // Execute orchestration with streaming
       let currentAgent = '';
 
-      await orchestrationApi.executeSequential(
-        agents.map((a, i) => ({ ...a, id: `agent-${i+1}` })),
-        task,
-        async (event: StreamEvent) => {
-          if (event.type === 'agent_start') {
-            currentAgent = event.agent_name;
+      await orchestrationApi.executeSequentialStream(
+        {
+          task: task,
+          agents: agents,
+          agent_sequence: agents.map(a => a.name),
+        },
+        (event: StreamEvent) => {
+          if (event.type === 'start' && event.agent) {
+            currentAgent = event.agent;
             setAgentOutputs(prev => ({ ...prev, [currentAgent]: '' }));
-          } else if (event.type === 'agent_output' && currentAgent) {
+          } else if (event.type === 'chunk' && currentAgent && event.data) {
             setAgentOutputs(prev => ({
               ...prev,
               [currentAgent]: (prev[currentAgent] || '') + event.data
             }));
 
             // Extract transcription and response
-            if (currentAgent === 'Voice Listener' && event.data) {
+            if (currentAgent === 'Voice Listener') {
               setState(prev => ({ ...prev, transcription: event.data }));
-            } else if (currentAgent === 'Conversation Handler' && event.data) {
+            } else if (currentAgent === 'Conversation Handler') {
               setState(prev => ({ ...prev, response: event.data }));
-            } else if (currentAgent === 'Voice Speaker' && event.data) {
+            } else if (currentAgent === 'Voice Speaker') {
               // Look for base64 audio data in the response
               const audioMatch = event.data.match(/[A-Za-z0-9+/]{100,}={0,2}/);
               if (audioMatch) {
