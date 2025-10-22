@@ -163,7 +163,7 @@ jobs:
         fi
 
         # Copy image processing services if Google credentials are available
-        if [[ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]]; then
+        if [[ "${{ secrets.GOOGLE_CLOUD_CREDENTIALS != '' }}" == "true" ]]; then
           echo "🖼️  Copying image processing services..."
           cp -r $GITHUB_WORKSPACE/image-backend .
           cp -r $GITHUB_WORKSPACE/image-mcp-server .
@@ -248,7 +248,7 @@ jobs:
         fi
 
         # Create Google Cloud credentials file if secret is available
-        if [[ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]]; then
+        if [[ "${{ secrets.GOOGLE_CLOUD_CREDENTIALS != '' }}" == "true" ]]; then
           echo "🖼️  Creating Google Cloud credentials file..."
           echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > google-credentials.json
           echo "✅ Google Cloud credentials file created"
@@ -295,7 +295,7 @@ jobs:
         fi
 
         # Add image services if available
-        if [[ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]]; then
+        if [[ "${{ secrets.GOOGLE_CLOUD_CREDENTIALS != '' }}" == "true" ]]; then
           SERVICES="$SERVICES image-backend image-mcp-server"
         fi
 
@@ -337,7 +337,7 @@ jobs:
             docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-voice-mcp-server:$BASE_IMAGE_TAG" || true
           fi
 
-          if [[ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]]; then
+          if [[ "${{ secrets.GOOGLE_CLOUD_CREDENTIALS != '' }}" == "true" ]]; then
             docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-image-backend:$BASE_IMAGE_TAG" || true
             docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-image-mcp-server:$BASE_IMAGE_TAG" || true
           fi
@@ -358,7 +358,7 @@ jobs:
           fi
 
           # Add image processing services if Google credentials are available
-          if [[ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]]; then
+          if [[ "${{ secrets.GOOGLE_CLOUD_CREDENTIALS != '' }}" == "true" ]]; then
             echo "🖼️  Including image processing services in deployment..."
             COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.image.yml"
           fi
@@ -392,7 +392,7 @@ jobs:
           fi
 
           # Add image processing services if Google credentials are available
-          if [[ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]]; then
+          if [[ "${{ secrets.GOOGLE_CLOUD_CREDENTIALS != '' }}" == "true" ]]; then
             echo "🖼️  Including image processing services in deployment..."
             COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.image.yml"
           fi
@@ -460,7 +460,7 @@ jobs:
         fi
 
         # Show image processing services if enabled
-        if [[ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]]; then
+        if [[ "${{ secrets.GOOGLE_CLOUD_CREDENTIALS != '' }}" == "true" ]]; then
           echo ""
           echo "🖼️  Image Processing Services:"
           echo "Image Backend API: http://${HOST_IP_FROM_ENV}:14400"
