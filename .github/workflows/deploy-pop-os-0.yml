@@ -1,8 +1,7 @@
 name: Deploy to pop-os-0
 
 on:
-  push:
-    branches: [ main, develop ]
+  # Manual trigger only - no automatic deployment on push
   workflow_dispatch:
     inputs:
       environment:
