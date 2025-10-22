@@ -169,6 +169,13 @@ jobs:
           cp -r $GITHUB_WORKSPACE/voice-backend .
           cp -r $GITHUB_WORKSPACE/voice-mcp-server .
         fi
+
+        # Copy image processing services if Google credentials are available
+        if [ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]; then
+          echo "🖼️  Copying image processing services..."
+          cp -r $GITHUB_WORKSPACE/image-backend .
+          cp -r $GITHUB_WORKSPACE/image-mcp-server .
+        fi
         
         # Fix ownership to current user (important after Docker operations)
         sudo chown -R $USER:$USER .
@@ -231,6 +238,9 @@ jobs:
         PICOVOICE_ACCESS_KEY=${{ secrets.PICOVOICE_ACCESS_KEY || '' }}
         REACT_APP_VOICE_API_URL=http://$FINAL_HOST_IP:14300
 
+        # Image Processing Services Configuration (optional)
+        REACT_APP_IMAGE_API_URL=http://$FINAL_HOST_IP:14400
+
         # Deployment metadata
         DEPLOYMENT_ENV=$DEPLOYMENT_ENV
         DEPLOYMENT_TIME=$DEPLOYMENT_TIME
@@ -246,6 +256,16 @@ jobs:
           echo "🎤 Voice services will be enabled (Picovoice key found)"
         else
           echo "ℹ️  Voice services will be skipped (no Picovoice key)"
+        fi
+
+        # Create Google Cloud credentials file if secret is available
+        if [ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]; then
+          echo "🖼️  Creating Google Cloud credentials file..."
+          echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > google-credentials.json
+          echo "✅ Google Cloud credentials file created"
+          echo "🖼️  Image processing services will be enabled"
+        else
+          echo "ℹ️  Image processing services will be skipped (no Google credentials)"
         fi
 
     - name: Log in to Container Registry
@@ -277,7 +297,20 @@ jobs:
         echo "🔍 Checking for pre-built base images..."
         BASE_IMAGES_AVAILABLE=true
 
-        for service in backend-base terminal-base frontend-base voice-backend voice-mcp-server; do
+        # Define core services
+        SERVICES="backend-base terminal-base frontend-base"
+
+        # Add voice services if available
+        if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
+          SERVICES="$SERVICES voice-backend voice-mcp-server"
+        fi
+
+        # Add image services if available
+        if [ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]; then
+          SERVICES="$SERVICES image-backend image-mcp-server"
+        fi
+
+        for service in $SERVICES; do
           IMAGE="ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-$service:$BASE_IMAGE_TAG"
           if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
             echo "❌ Base image not found: $IMAGE"
@@ -309,8 +342,16 @@ jobs:
           docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-backend-base:$BASE_IMAGE_TAG" || true
           docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-terminal-base:$BASE_IMAGE_TAG" || true
           docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-frontend-base:$BASE_IMAGE_TAG" || true
-          docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-voice-backend:$BASE_IMAGE_TAG" || true
-          docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-voice-mcp-server:$BASE_IMAGE_TAG" || true
+
+          if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
+            docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-voice-backend:$BASE_IMAGE_TAG" || true
+            docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-voice-mcp-server:$BASE_IMAGE_TAG" || true
+          fi
+
+          if [ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]; then
+            docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-image-backend:$BASE_IMAGE_TAG" || true
+            docker pull "ghcr.io/$REPO_OWNER_LOWERCASE/claude-workflow-image-mcp-server:$BASE_IMAGE_TAG" || true
+          fi
           
           # Check if force rebuild is requested
           if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
@@ -325,6 +366,12 @@ jobs:
           if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
             echo "🎤 Including voice services in deployment..."
             COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.voice.yml"
+          fi
+
+          # Add image processing services if Google credentials are available
+          if [ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]; then
+            echo "🖼️  Including image processing services in deployment..."
+            COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.image.yml"
           fi
 
           if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
@@ -353,6 +400,12 @@ jobs:
           if [ -n "${{ secrets.PICOVOICE_ACCESS_KEY }}" ]; then
             echo "🎤 Including voice services in deployment..."
             COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.voice.yml"
+          fi
+
+          # Add image processing services if Google credentials are available
+          if [ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]; then
+            echo "🖼️  Including image processing services in deployment..."
+            COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.image.yml"
           fi
 
           docker compose $COMPOSE_FILES build --no-cache --parallel
@@ -415,6 +468,14 @@ jobs:
           echo "🎤 Voice Services:"
           echo "Voice Backend API: http://${HOST_IP_FROM_ENV}:14300"
           echo "Voice MCP HTTP: http://${HOST_IP_FROM_ENV}:14302"
+        fi
+
+        # Show image processing services if enabled
+        if [ -n "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" ]; then
+          echo ""
+          echo "🖼️  Image Processing Services:"
+          echo "Image Backend API: http://${HOST_IP_FROM_ENV}:14400"
+          echo "Image MCP HTTP: http://${HOST_IP_FROM_ENV}:14402"
         fi
 
     - name: Send deployment notification
