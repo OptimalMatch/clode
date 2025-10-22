@@ -8,9 +8,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy MCP server code
 COPY server.py .
+COPY server_multi_transport.py .
 
 # Make it executable
-RUN chmod +x server.py
+RUN chmod +x server.py server_multi_transport.py
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
