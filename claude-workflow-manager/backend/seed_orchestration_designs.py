@@ -19,7 +19,8 @@ SAMPLE_DESIGN_NAMES = [
     "Fast Code Editor",
     "Parallel Code Editor",
     "Legacy Application Modernization",
-    "Voice Conversation Assistant"
+    "Voice Conversation Assistant",
+    "Document OCR Processor"
 ]
 
 async def seed_sample_designs(force=False, silent=False, db=None, only_missing=False):
@@ -1463,8 +1464,154 @@ Your output completes the voice conversation loop: Listen → Think → Speak"""
         }
     )
 
+    # Design 14: Document OCR Processor
+    design14 = OrchestrationDesign(
+        name="Document OCR Processor",
+        description="Demonstrates image MCP integration with agents that can extract text from images, PDFs, and URLs using OCR. Uses extract_text_from_image and related tools.",
+        blocks=[
+            {
+                "id": "block-1",
+                "type": "sequential",
+                "position": {"x": 50, "y": 50},
+                "data": {
+                    "label": "Document Processing Pipeline",
+                    "agents": [
+                        {
+                            "id": "agent-1",
+                            "name": "Image Analyzer",
+                            "system_prompt": """You are an Image Analyzer agent. Your job is to extract text from images using OCR.
+
+CRITICAL TOOL USAGE:
+====================
+You have access to the image-processing MCP server with these tools:
+- mcp__image-processing__extract_text_from_image
+- mcp__image-processing__extract_text_from_url
+- mcp__image-processing__extract_text_from_pdf
+- mcp__image-processing__check_image_api_health
+
+YOUR PRIMARY TASK:
+==================
+When you receive image data, use the appropriate extraction tool:
+
+Tool: mcp__image-processing__extract_text_from_image
+Args: {
+  "image_data": "<base64_encoded_image>",
+  "language_hints": ["en"]  // optional
+}
+
+The image_data will be provided in the task input as a base64-encoded image.
+
+WORKFLOW:
+=========
+1. Check if image_data, image_url, or pdf_data is provided in the task
+2. Select the appropriate tool:
+   - extract_text_from_image for base64 images
+   - extract_text_from_url for URLs
+   - extract_text_from_pdf for PDF documents
+3. Call the tool with the provided data
+4. Return the extracted text with confidence scores
+5. If no data provided, explain what you're waiting for
+
+EXAMPLE:
+========
+Input: { "image_data": "iVBORw0KGgoAAAANS..." }
+Action: Call mcp__image-processing__extract_text_from_image
+Output: "Extracted text: [text content]\nConfidence: 95%"
+
+Remember: Your output will be passed to the next agent for analysis.""",
+                            "role": "specialist"
+                        },
+                        {
+                            "id": "agent-2",
+                            "name": "Content Analyzer",
+                            "system_prompt": """You are a Content Analyzer agent. You receive extracted text from the Image Analyzer and provide insights.
+
+YOUR ROLE:
+==========
+- Receive the extracted text from the Image Analyzer agent
+- Analyze the content structure and meaning
+- Identify key information (dates, names, amounts, entities)
+- Summarize the document purpose
+- Provide actionable insights
+
+IMPORTANT:
+==========
+- You DO NOT use image processing tools yourself
+- Focus on understanding and analyzing the extracted text
+- Your analysis will be formatted by the next agent
+- Be thorough but concise in your analysis
+
+EXAMPLE FLOW:
+=============
+Input from previous agent: "Extracted text: Invoice #12345\nDate: 2024-10-22\nAmount: $450.00"
+Your task: Analyze the content
+Your output: "Document Type: Invoice\nKey Details: Invoice number 12345, dated October 22, 2024, for $450.00\nPurpose: Financial record of transaction"
+
+Keep it informative and structured!""",
+                            "role": "specialist"
+                        },
+                        {
+                            "id": "agent-3",
+                            "name": "Report Formatter",
+                            "system_prompt": """You are a Report Formatter agent. Your job is to format the analysis into a user-friendly report.
+
+YOUR ROLE:
+==========
+- Receive the content analysis from the previous agent
+- Format it into a clear, readable report
+- Use markdown formatting for structure
+- Include sections: Summary, Key Findings, Details
+- Highlight important information
+
+FORMATTING GUIDELINES:
+=====================
+- Use headers (##, ###) for sections
+- Use bullet points for lists
+- Use **bold** for emphasis
+- Keep it scannable and easy to read
+- Add emoji indicators for visual clarity
+
+EXAMPLE:
+========
+Input: "Document Type: Invoice\nKey Details: Invoice #12345..."
+Your output:
+```
+## 📄 Document Analysis Report
+
+### Summary
+Invoice document processed successfully
+
+### 🔍 Key Findings
+- **Document Type**: Invoice
+- **Invoice Number**: #12345
+- **Date**: October 22, 2024
+- **Amount**: $450.00
+
+### Details
+This is a financial transaction record...
+```
+
+Your formatted report is the final output for the user.""",
+                            "role": "specialist"
+                        }
+                    ],
+                    "task": "Process document: extract text using OCR, analyze content, and format a comprehensive report"
+                }
+            }
+        ],
+        connections=[],
+        git_repos=[],
+        metadata={
+            "category": "Image Processing",
+            "difficulty": "Intermediate",
+            "requires_mcp": ["image-processing"],
+            "demo_compatible": True,
+            "description": "This design showcases the image MCP server integration. The Image Analyzer extracts text via OCR, Content Analyzer identifies key information, and Report Formatter creates a user-friendly document summary."
+        }
+    )
+
     # Insert all designs
-    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8, design9, design10, design11, design12, design13]
+    all_sample_designs = [design1, design2, design3, design4, design5, design6, design7, design8, design9, design10, design11, design12, design13, design14]
     
     # Filter to only missing designs if requested
     if only_missing:
@@ -1511,6 +1658,7 @@ Your output completes the voice conversation loop: Listen → Think → Speak"""
         print(" 11. Parallel Code Editor - 5-agent parallel batch execution (20+ tasks)")
         print(" 12. Legacy Application Modernization - AI-powered legacy app modernization planner")
         print(" 13. Voice Conversation Assistant - 🎤 Voice MCP integration demo (Listen → Think → Speak)")
+        print(" 14. Document OCR Processor - 📄 Image MCP integration demo (Extract → Analyze → Format)")
         print("\n💡 Next steps:")
         print("  1. Start the backend server (if not already running)")
         print("  2. Open the Orchestration Designer in the UI")

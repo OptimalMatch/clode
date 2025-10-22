@@ -31,6 +31,7 @@ import {
   AutoAwesome,
   Assessment,
   Mic,
+  DocumentScanner,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -45,7 +46,7 @@ interface ModernLayoutProps {
   aiAssistantOpen?: boolean;
 }
 
-type PrimaryNavView = 'workflows' | 'multi-agent' | 'orchestration' | 'orchestration-designer' | 'deployments' | 'editor' | 'design' | 'prompts' | 'subagents' | 'claude-auth' | 'ssh-keys' | 'settings' | 'legacy-modernization' | 'voice-demo';
+type PrimaryNavView = 'workflows' | 'multi-agent' | 'orchestration' | 'orchestration-designer' | 'deployments' | 'editor' | 'design' | 'prompts' | 'subagents' | 'claude-auth' | 'ssh-keys' | 'settings' | 'legacy-modernization' | 'voice-demo' | 'image-demo';
 
 const ModernLayout: React.FC<ModernLayoutProps> = ({ 
   children,
@@ -97,6 +98,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
     if (location.pathname.includes('/code-editor')) return 'editor';
     if (location.pathname.includes('/legacy-modernization')) return 'legacy-modernization';
     if (location.pathname.includes('/voice-demo')) return 'voice-demo';
+    if (location.pathname.includes('/image-demo')) return 'image-demo';
     if (location.pathname.includes('/design')) return 'design';
     if (location.pathname.includes('/prompts')) return 'prompts';
     if (location.pathname.includes('/subagents')) return 'subagents';
@@ -133,6 +135,9 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
         break;
       case 'voice-demo':
         navigate('/voice-demo');
+        break;
+      case 'image-demo':
+        navigate('/image-demo');
         break;
       case 'design':
         navigate('/design');
@@ -280,6 +285,19 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({
               }}
             >
               <Mic sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Document OCR Demo 📄">
+            <IconButton
+              size="small"
+              onClick={() => handleNavClick('image-demo')}
+              sx={{
+                color: primaryNavView === 'image-demo' ? '#6495ed' : 'rgba(255, 255, 255, 0.7)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
+              }}
+            >
+              <DocumentScanner sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
 
