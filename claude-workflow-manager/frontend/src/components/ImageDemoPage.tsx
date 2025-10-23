@@ -163,11 +163,9 @@ ${extractedText}
         ],
         agents: [
           {
-            id: 'formatter',
             name: 'Document Formatter',
             role: 'specialist',
-            system_prompt: 'You are an expert at analyzing document layouts and reformatting extracted text to match the original visual structure. You pay close attention to indentation, spacing, and formatting.',
-            use_tools: false
+            system_prompt: 'You are an expert at analyzing document layouts and reformatting extracted text to match the original visual structure. You pay close attention to indentation, spacing, and formatting.'
           }
         ]
       });
