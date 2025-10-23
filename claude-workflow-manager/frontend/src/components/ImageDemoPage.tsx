@@ -69,7 +69,42 @@ const MermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
     }
   }, [chart]);
 
-  return <div ref={containerRef} style={{ textAlign: 'center', padding: '20px' }} />;
+  return (
+    <div style={{ margin: '20px 0' }}>
+      {/* Raw Mermaid Code */}
+      <div style={{ marginBottom: '16px' }}>
+        <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
+          Mermaid Code:
+        </Typography>
+        <pre style={{
+          backgroundColor: 'rgba(0, 0, 0, 0.3)',
+          padding: '16px',
+          borderRadius: '8px',
+          overflow: 'auto',
+          fontSize: '0.875rem',
+          margin: 0
+        }}>
+          <code>{chart}</code>
+        </pre>
+      </div>
+
+      {/* Rendered Diagram */}
+      <div>
+        <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
+          Rendered Diagram:
+        </Typography>
+        <div
+          ref={containerRef}
+          style={{
+            textAlign: 'center',
+            padding: '20px',
+            backgroundColor: 'rgba(0, 0, 0, 0.2)',
+            borderRadius: '8px'
+          }}
+        />
+      </div>
+    </div>
+  );
 };
 
 const ImageDemoPage: React.FC = () => {
