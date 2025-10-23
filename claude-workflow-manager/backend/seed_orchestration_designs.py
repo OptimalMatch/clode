@@ -1491,31 +1491,36 @@ You have access to the image-processing MCP server with these tools:
 
 YOUR PRIMARY TASK:
 ==================
-When you receive image data, use the appropriate extraction tool:
+When you receive image data in the task, extract the COMPLETE base64 string and pass it to the tool.
+
+CRITICAL: The task will contain "image_data: <base64_string>". You MUST use the ENTIRE base64 string, not a truncated version.
 
 Tool: mcp__image-processing__extract_text_from_image
 Args: {
-  "image_data": "<base64_encoded_image>",
+  "image_data": "<FULL_BASE64_STRING_FROM_TASK>",
   "language_hints": ["en"]  // optional
 }
-
-The image_data will be provided in the task input as a base64-encoded image.
 
 WORKFLOW:
 =========
 1. Check if image_data, image_url, or pdf_data is provided in the task
 2. Select the appropriate tool:
-   - extract_text_from_image for base64 images
+   - extract_text_from_image for base64 images (use COMPLETE base64 string)
    - extract_text_from_url for URLs
    - extract_text_from_pdf for PDF documents
 3. Call the tool with the provided data
 4. Return the extracted text with confidence scores
 5. If no data provided, explain what you're waiting for
 
+IMPORTANT:
+- DO NOT truncate the image_data - use the complete base64 string from the task
+- The image_data will be very long (100,000+ characters) - this is normal
+- Pass the entire string to the tool, not just the first 100 characters
+
 EXAMPLE:
 ========
-Input: { "image_data": "iVBORw0KGgoAAAANS..." }
-Action: Call mcp__image-processing__extract_text_from_image
+Input task: "image_data: iVBORw0KGgoAAAANS..." (imagine this continues for 100,000+ chars)
+Action: Call mcp__image-processing__extract_text_from_image with the FULL string
 Output: "Extracted text: [text content]\nConfidence: 95%"
 
 Remember: Your output will be passed to the next agent for analysis.""",

@@ -123,13 +123,21 @@ You have access to the image-processing MCP server with these tools:
 
 YOUR PRIMARY TASK:
 ==================
-When you receive image data, use the extract_text_from_image tool:
+When you receive image data in the task, extract the COMPLETE base64 string and pass it to the tool.
 
+CRITICAL: The task will contain "image_data: <base64_string>". You MUST use the ENTIRE base64 string, not a truncated version.
+
+Example tool call structure:
 Tool: mcp__image-processing__extract_text_from_image
 Args: {
-  "image_data": "${base64Image.substring(0, 100)}...",
+  "image_data": "<FULL_BASE64_STRING_FROM_TASK>",
   "language_hints": ["en"]
 }
+
+IMPORTANT:
+- DO NOT truncate the image_data - use the complete base64 string from the task
+- The image_data will be very long (100,000+ characters) - this is normal
+- Pass the entire string to the tool, not just the first 100 characters
 
 Return the extracted text clearly with any confidence scores if available.`,
           role: 'specialist'
