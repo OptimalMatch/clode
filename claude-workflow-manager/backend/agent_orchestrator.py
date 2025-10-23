@@ -4,7 +4,7 @@ Implements 5 key patterns for agent collaboration
 Uses Claude Agent SDK for Max Plan compatibility
 """
 
-from claude_agent_sdk import query, ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
+from claude_agent_sdk import query, ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock, SystemMessage, UserMessage, ResultMessage
 import anthropic
 from typing import List, Dict, Optional, Callable, Any, AsyncIterator, Awaitable
 import json
@@ -399,14 +399,13 @@ class MultiAgentOrchestrator:
                 options=options
             ):
                 # Handle different message types from SDK (typed objects, not dicts)
-                # Check message type using hasattr and getattr
-                msg_type = getattr(msg, 'type', None)
+                # Use isinstance() to check message class types
                 msg_class = msg.__class__.__name__
 
                 # Log ALL message types to understand SDK behavior
-                print(f"📨 SDK Message: type={msg_type}, class={msg_class}", flush=True)
+                print(f"📨 SDK Message: class={msg_class}", flush=True)
 
-                if msg_type == "system":
+                if isinstance(msg, SystemMessage):
                     # System message (e.g., init, MCP status)
                     subtype = getattr(msg, 'subtype', None)
                     print(f"   System message subtype: {subtype}", flush=True)
@@ -427,7 +426,7 @@ class MultiAgentOrchestrator:
                         # Log all system message content for debugging
                         msg_dict = {k: str(v)[:200] for k, v in msg.__dict__.items() if not k.startswith('_')}
                         print(f"   System message content: {msg_dict}", flush=True)
-                
+
                 elif isinstance(msg, AssistantMessage):
                     # Extract text from assistant messages
                     for block in msg.content:
