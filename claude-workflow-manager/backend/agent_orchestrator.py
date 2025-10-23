@@ -391,7 +391,7 @@ class MultiAgentOrchestrator:
             
             # Use query() with HTTP MCP server configuration
             logger.info(f"🚀 Starting agent execution for '{agent.name}'")
-            logger.info(f"   Task: {task[:100]}..." if len(task) > 100 else f"   Task: {task}")
+            logger.info(f"   Message: {full_message[:100]}..." if len(full_message) > 100 else f"   Message: {full_message}")
 
             async for msg in query(
                 prompt=generate_prompt(),
