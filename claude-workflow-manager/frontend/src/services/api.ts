@@ -463,7 +463,8 @@ export interface OrchestrationAgent {
 }
 
 export interface SequentialPipelineRequest {
-  task: string;
+  task?: string;  // Legacy: simple text task
+  task_content?: Array<{type: string; text?: string; source?: any}>;  // New: multi-modal content blocks
   agents: OrchestrationAgent[];
   agent_sequence: string[];
   model?: string;
