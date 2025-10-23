@@ -173,7 +173,7 @@ ${extractedText}
 
       console.log('[ImageDemo] Agent Response:', agentResponse);
 
-      const formattedText = agentResponse.aggregated_result || agentResponse.result || '';
+      const formattedText = agentResponse.result || '';
 
       setState(prev => ({
         ...prev,
