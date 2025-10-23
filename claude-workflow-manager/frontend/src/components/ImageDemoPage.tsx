@@ -103,123 +103,34 @@ const ImageDemoPage: React.FC = () => {
       console.log('[ImageDemo] Step 1: Base64 length before sending:', base64Image.length, 'chars');
       console.log('[ImageDemo] Step 1: Base64 preview:', base64Image.substring(0, 50) + '...');
 
-      // Create task with base64 image data
-      const task = `IMAGE_DATA_START\n${base64Image}\nIMAGE_DATA_END`;
-      console.log('[ImageDemo] Step 1: Task length:', task.length, 'chars');
-
-      // Define agents for document processing
-      const agents: OrchestrationAgent[] = [
-        {
-          name: 'Image Analyzer',
-          system_prompt: `Extract base64 image data from between IMAGE_DATA_START and IMAGE_DATA_END markers.
-
-CRITICAL INSTRUCTIONS:
-1. Find the base64 string between the markers
-2. IMMEDIATELY call mcp__image-processing__extract_text_from_image with {"image_data": "<the base64 string>"}
-3. DO NOT output, echo, or repeat the base64 data in your response
-4. DO NOT explain what you're doing first
-5. Just call the tool silently
-
-The base64 data is large (~130KB) - never try to output it or you'll hit token limits.`,
-          role: 'specialist'
+      // Call OCR API directly
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('/api/ocr/extract', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
-        {
-          name: 'Content Analyzer',
-          system_prompt: `You are a Content Analyzer agent. You receive extracted text from the Image Analyzer and provide insights.
+        body: JSON.stringify({ image_data: base64Image })
+      });
 
-YOUR ROLE:
-==========
-- Receive the extracted text from the Image Analyzer agent
-- Analyze the content structure and meaning
-- Identify key information (dates, names, amounts, entities)
-- Summarize the document purpose
-- Provide actionable insights
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'OCR extraction failed');
+      }
 
-IMPORTANT:
-==========
-- You DO NOT use image processing tools yourself
-- Focus on understanding and analyzing the extracted text
-- Your analysis will be formatted by the next agent
-- Be thorough but concise in your analysis`,
-          role: 'specialist'
-        },
-        {
-          name: 'Report Formatter',
-          system_prompt: `You are a Report Formatter agent. Your job is to format the analysis into a user-friendly report.
+      const result = await response.json();
+      console.log('[ImageDemo] OCR Result:', result);
 
-YOUR ROLE:
-==========
-- Receive the content analysis from the previous agent
-- Format it into a clear, readable markdown report
-- Use markdown formatting for structure
-- Include sections: Summary, Key Findings, Details
-- Highlight important information
+      // Extract text from result
+      const extractedText = result.result?.pages?.[0]?.full_text || '';
 
-FORMATTING GUIDELINES:
-=====================
-- Use headers (##, ###) for sections
-- Use bullet points for lists
-- Use **bold** for emphasis
-- Keep it scannable and easy to read
-- Add emoji indicators for visual clarity`,
-          role: 'specialist'
-        }
-      ];
-
-      // Execute orchestration with streaming
-      let currentAgent = '';
-      let extractedTextBuffer = '';
-      let analysisBuffer = '';
-
-      await orchestrationApi.executeSequentialStream(
-        {
-          task: task,
-          agents: agents,
-          agent_sequence: agents.map(a => a.name),
-        },
-        (event: StreamEvent) => {
-          if (event.type === 'start' && event.agent) {
-            currentAgent = event.agent;
-            setAgentOutputs(prev => ({ ...prev, [currentAgent]: '' }));
-
-            // Update status based on agent
-            if (currentAgent === 'Image Analyzer') {
-              setState(prev => ({ ...prev, status: 'extracting' }));
-            } else if (currentAgent === 'Content Analyzer') {
-              setState(prev => ({ ...prev, status: 'analyzing' }));
-            } else if (currentAgent === 'Report Formatter') {
-              setState(prev => ({ ...prev, status: 'formatting' }));
-            }
-          } else if (event.type === 'chunk' && currentAgent && event.data) {
-            setAgentOutputs(prev => ({
-              ...prev,
-              [currentAgent]: (prev[currentAgent] || '') + event.data
-            }));
-
-            // Buffer outputs for final display
-            if (currentAgent === 'Image Analyzer') {
-              extractedTextBuffer += event.data;
-              setState(prev => ({ ...prev, extractedText: extractedTextBuffer }));
-            } else if (currentAgent === 'Content Analyzer') {
-              analysisBuffer += event.data;
-              setState(prev => ({ ...prev, analysis: analysisBuffer }));
-            } else if (currentAgent === 'Report Formatter') {
-              setState(prev => ({
-                ...prev,
-                formattedReport: (prev.formattedReport || '') + event.data
-              }));
-            }
-          } else if (event.type === 'complete') {
-            setState(prev => ({ ...prev, status: 'completed' }));
-          } else if (event.type === 'error') {
-            setState(prev => ({
-              ...prev,
-              status: 'error',
-              error: event.error || 'Processing failed'
-            }));
-          }
-        }
-      );
+      setState(prev => ({
+        ...prev,
+        status: 'completed',
+        extractedText,
+        formattedReport: `## OCR Extraction Complete\n\n**Extracted Text:**\n\n${extractedText || '*(No text found)*'}`
+      }));
 
     } catch (error: any) {
       console.error('Error processing image:', error);

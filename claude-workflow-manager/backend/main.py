@@ -6175,6 +6175,45 @@ async def update_workspace(workspace_id: str, data: dict, user: Optional[User] =
         print(f"Error updating workspace: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ==================== OCR / Image Processing ====================
+
+@app.post(
+    "/api/ocr/extract",
+    summary="Extract Text from Image",
+    description="Extract text from base64-encoded image using Google Cloud Vision OCR",
+    tags=["OCR"]
+)
+async def extract_text_from_image(
+    image_data: str = Body(..., description="Base64-encoded image data"),
+    user: Optional[User] = Depends(get_current_user_or_internal)
+):
+    """Extract text from base64-encoded image using Google Cloud Vision OCR"""
+    try:
+        import httpx
+
+        # Call image-backend API
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "http://image-backend:8001/api/ocr/base64",
+                json={"image_data": image_data}
+            )
+            response.raise_for_status()
+            result = response.json()
+
+        return result
+    except httpx.HTTPStatusError as e:
+        print(f"Image backend error: {e.response.status_code} - {e.response.text}")
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Image processing failed: {e.response.text}"
+        )
+    except httpx.RequestError as e:
+        print(f"Request error: {e}")
+        raise HTTPException(status_code=503, detail="Image backend service unavailable")
+    except Exception as e:
+        print(f"Error extracting text from image: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
