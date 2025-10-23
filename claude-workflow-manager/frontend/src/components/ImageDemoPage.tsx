@@ -103,7 +103,8 @@ const ImageDemoPage: React.FC = () => {
       console.log('[ImageDemo] Step 1: Base64 length before sending:', base64Image.length, 'chars');
       console.log('[ImageDemo] Step 1: Base64 preview:', base64Image.substring(0, 50) + '...');
 
-      // Call OCR API directly
+      // Step 1: Call OCR API to extract text
+      console.log('[ImageDemo] Step 1: Extracting text with OCR...');
       const response = await api.post('/api/ocr/extract', {
         image_data: base64Image
       });
@@ -116,9 +117,70 @@ const ImageDemoPage: React.FC = () => {
 
       setState(prev => ({
         ...prev,
+        status: 'analyzing',
+        extractedText
+      }));
+
+      // Step 2: Use agent to reformat text with correct indentation
+      console.log('[ImageDemo] Step 2: Analyzing image layout with agent...');
+
+      const agentResponse = await orchestrationApi.parallelAggregate({
+        task_content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: state.imageFile.type,
+              data: base64Image
+            }
+          },
+          {
+            type: 'text',
+            text: `You are analyzing a document image and its OCR-extracted text.
+
+The OCR extraction is good at recognizing text but loses formatting and indentation information.
+
+**Your task:**
+1. Look at the image carefully to understand the visual indentation and structure
+2. Take the extracted text below and reformat it to match the exact indentation you see in the image
+3. Pay attention to:
+   - Nested YAML/configuration structure
+   - Spaces vs tabs (use 2 spaces for indentation)
+   - Alignment of keys and values
+   - Line breaks and grouping
+
+**OCR Extracted Text:**
+\`\`\`
+${extractedText}
+\`\`\`
+
+**Instructions:**
+- Output ONLY the reformatted text in a markdown code block
+- Match the indentation exactly as shown in the image
+- Preserve all text content from the OCR
+- Use proper spacing for readability`
+          }
+        ],
+        agents: [
+          {
+            id: 'formatter',
+            name: 'Document Formatter',
+            role: 'specialist',
+            system_prompt: 'You are an expert at analyzing document layouts and reformatting extracted text to match the original visual structure. You pay close attention to indentation, spacing, and formatting.',
+            use_tools: false
+          }
+        ]
+      });
+
+      console.log('[ImageDemo] Agent Response:', agentResponse.data);
+
+      const formattedText = agentResponse.data.aggregated_result || agentResponse.data.result || '';
+
+      setState(prev => ({
+        ...prev,
         status: 'completed',
-        extractedText,
-        formattedReport: `## OCR Extraction Complete\n\n**Extracted Text:**\n\n${extractedText || '*(No text found)*'}`
+        analysis: formattedText,
+        formattedReport: `## Document Analysis Complete\n\n**Reformatted Text (with correct indentation):**\n\n${formattedText}\n\n---\n\n**Original OCR Extraction:**\n\n\`\`\`\n${extractedText}\n\`\`\``
       }));
 
     } catch (error: any) {
@@ -164,7 +226,7 @@ const ImageDemoPage: React.FC = () => {
           📄 Document OCR Demo
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Demonstrates image MCP integration: Extract → Analyze → Format
+          OCR text extraction + AI-powered formatting to preserve document structure
         </Typography>
       </Box>
 
@@ -178,10 +240,10 @@ const ImageDemoPage: React.FC = () => {
             <StepLabel>Extract Text (OCR)</StepLabel>
           </Step>
           <Step>
-            <StepLabel>Analyze Content</StepLabel>
+            <StepLabel>AI Format Analysis</StepLabel>
           </Step>
           <Step>
-            <StepLabel>Format Report</StepLabel>
+            <StepLabel>Complete</StepLabel>
           </Step>
         </Stepper>
       </Paper>
@@ -280,8 +342,8 @@ const ImageDemoPage: React.FC = () => {
         <Paper sx={{ p: 3, mb: 3, textAlign: 'center' }}>
           <CircularProgress size={80} sx={{ mb: 2 }} />
           <Typography variant="h6">
-            {state.status === 'extracting' && 'Extracting text from image...'}
-            {state.status === 'analyzing' && 'Analyzing content...'}
+            {state.status === 'extracting' && 'Extracting text from image with OCR...'}
+            {state.status === 'analyzing' && 'Reformatting text with AI agent...'}
             {state.status === 'formatting' && 'Formatting report...'}
           </Typography>
         </Paper>
@@ -425,10 +487,11 @@ const ImageDemoPage: React.FC = () => {
       {/* Info Alert */}
       <Alert severity="info" sx={{ mt: 3 }}>
         <Typography variant="body2">
-          This demo showcases the image MCP integration with Claude agents.
-          The Image Analyzer agent uses <code>mcp__image-processing__extract_text_from_image</code> to perform OCR,
-          the Content Analyzer processes the extracted text,
-          and the Report Formatter agent creates a user-friendly markdown report.
+          <strong>Two-Step OCR + AI Formatting:</strong><br/>
+          1. <strong>OCR Extraction:</strong> Uses Google Cloud Vision API to extract text from the image<br/>
+          2. <strong>AI Reformatting:</strong> Claude agent analyzes both the image and extracted text to reconstruct proper indentation and formatting<br/>
+          <br/>
+          This demonstrates how Claude's vision capabilities can be combined with OCR to preserve document structure that OCR alone often loses.
         </Typography>
       </Alert>
     </Box>
