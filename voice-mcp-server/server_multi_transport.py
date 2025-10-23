@@ -468,14 +468,58 @@ async def handle_mcp_request(request: Request):
     Unified MCP endpoint for Claude Agent SDK compatibility.
 
     Handles MCP protocol requests similar to the workflow MCP server.
-    Supports tools/list and tools/call methods.
+    Supports full MCP protocol including initialization handshake.
     """
     try:
         body = await request.json()
         method = body.get("method")
         params = body.get("params", {})
+        msg_id = body.get("id")
 
-        if method == "tools/list":
+        logger.info(f"📥 HTTP MCP Request: {method}")
+
+        if method == "initialize":
+            # Respond with proper MCP initialize response
+            return {
+                "jsonrpc": "2.0",
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": {},
+                        "prompts": {},
+                        "resources": {},
+                        "logging": {}
+                    },
+                    "serverInfo": {
+                        "name": "voice-interaction-mcp",
+                        "version": "1.0.0"
+                    }
+                },
+                "id": msg_id
+            }
+
+        elif method == "notifications/initialized":
+            # This is a notification, no response needed
+            logger.info("🎯 HTTP MCP Client initialized successfully")
+            return {"jsonrpc": "2.0", "result": None}
+
+        elif method == "resources/list":
+            # No resources provided by this server
+            return {
+                "jsonrpc": "2.0",
+                "result": {"resources": []},
+                "id": msg_id
+            }
+
+        elif method == "prompts/list":
+            # No prompts provided by this server
+            return {
+                "jsonrpc": "2.0",
+                "result": {"prompts": []},
+                "id": msg_id
+            }
+
+        elif method == "tools/list":
             # List all available tools
             tools = await list_tools()
             return {
@@ -489,7 +533,8 @@ async def handle_mcp_request(request: Request):
                         }
                         for tool in tools
                     ]
-                }
+                },
+                "id": msg_id
             }
 
         elif method == "tools/call":
@@ -503,7 +548,8 @@ async def handle_mcp_request(request: Request):
                     "error": {
                         "code": -32602,
                         "message": "Tool name is required"
-                    }
+                    },
+                    "id": msg_id
                 }
 
             # Call the tool
@@ -522,7 +568,8 @@ async def handle_mcp_request(request: Request):
                 "jsonrpc": "2.0",
                 "result": {
                     "content": content
-                }
+                },
+                "id": msg_id
             }
 
         else:
@@ -531,7 +578,8 @@ async def handle_mcp_request(request: Request):
                 "error": {
                     "code": -32601,
                     "message": f"Method not found: {method}"
-                }
+                },
+                "id": msg_id
             }
 
     except Exception as e:
