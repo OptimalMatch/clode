@@ -3413,7 +3413,9 @@ async def execute_sequential_pipeline(
         
         # Execute pipeline
         start_time = datetime.now()
-        result = await orchestrator.sequential_pipeline(request.task, request.agent_sequence)
+        # Use task_content if provided (multi-modal), otherwise fall back to task (legacy)
+        task_input = request.task_content if request.task_content else request.task
+        result = await orchestrator.sequential_pipeline(task_input, request.agent_sequence)
         end_time = datetime.now()
         duration_ms = int((end_time - start_time).total_seconds() * 1000)
         
