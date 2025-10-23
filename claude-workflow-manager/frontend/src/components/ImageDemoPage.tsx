@@ -24,9 +24,8 @@ import {
   Error as ErrorIcon,
   Description,
 } from '@mui/icons-material';
-import { orchestrationApi, StreamEvent, OrchestrationAgent } from '../services/api';
+import api, { orchestrationApi, StreamEvent, OrchestrationAgent } from '../services/api';
 import ReactMarkdown from 'react-markdown';
-import axios from 'axios';
 
 interface ImageProcessingState {
   status: 'idle' | 'uploading' | 'extracting' | 'analyzing' | 'formatting' | 'completed' | 'error';
@@ -105,16 +104,9 @@ const ImageDemoPage: React.FC = () => {
       console.log('[ImageDemo] Step 1: Base64 preview:', base64Image.substring(0, 50) + '...');
 
       // Call OCR API directly
-      const token = localStorage.getItem('access_token');
-      const response = await axios.post('/api/ocr/extract',
-        { image_data: base64Image },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
+      const response = await api.post('/api/ocr/extract', {
+        image_data: base64Image
+      });
 
       const result = response.data;
       console.log('[ImageDemo] OCR Result:', result);
