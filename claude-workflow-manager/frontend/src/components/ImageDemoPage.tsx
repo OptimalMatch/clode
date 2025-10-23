@@ -138,34 +138,46 @@ const ImageDemoPage: React.FC = () => {
             type: 'text',
             text: `You are analyzing a document image and its OCR-extracted text.
 
-The OCR extraction is good at recognizing text but loses formatting and indentation information.
+**First, determine the document type:**
+1. Look at the image carefully
+2. Identify if it contains:
+   - **Diagrams**: Flowcharts, architecture diagrams, sequence diagrams, entity relationships, process flows, etc.
+   - **Text/Code**: Configuration files, code snippets, YAML, JSON, structured text, etc.
 
-**Your task:**
-1. Look at the image carefully to understand the visual indentation and structure
-2. Take the extracted text below and reformat it to match the exact indentation you see in the image
-3. Pay attention to:
-   - Nested YAML/configuration structure
-   - Spaces vs tabs (use 2 spaces for indentation)
-   - Alignment of keys and values
-   - Line breaks and grouping
+**If the image contains a DIAGRAM:**
+- Analyze the visual structure, boxes, arrows, relationships, and flow
+- Create a Mermaid diagram that accurately represents the visual structure
+- Use appropriate Mermaid syntax (flowchart, sequence, class, ER, etc.)
+- Output in a \`\`\`mermaid code block
 
-**OCR Extracted Text:**
+**If the image contains TEXT/CODE:**
+- Analyze the visual indentation and structure
+- Reformat the extracted text to match the exact indentation you see in the image
+- Pay attention to:
+  - Nested YAML/configuration structure
+  - Spaces vs tabs (use 2 spaces for indentation)
+  - Alignment of keys and values
+  - Line breaks and grouping
+- Output in an appropriate code block with language identifier
+
+**OCR Extracted Text (for reference):**
 \`\`\`
 ${extractedText}
 \`\`\`
 
 **Instructions:**
-- Output ONLY the reformatted text in a markdown code block
-- Match the indentation exactly as shown in the image
-- Preserve all text content from the OCR
-- Use proper spacing for readability`
+- First state what type of content you detected (diagram or text/code)
+- Then output ONLY the reformatted content in a markdown code block
+- For diagrams: Use Mermaid syntax
+- For text/code: Match the exact indentation and formatting from the image
+- Preserve all content from the image`
           }
         ],
         agents: [
           {
             name: 'Document Formatter',
             role: 'specialist',
-            system_prompt: 'You are an expert at analyzing document layouts and reformatting extracted text to match the original visual structure. You pay close attention to indentation, spacing, and formatting.'
+            system_prompt: 'You are an expert at analyzing document images and converting them to structured formats. For diagrams (flowcharts, architecture diagrams, sequences, etc.), you create accurate Mermaid syntax representations. For text and code documents, you reformat the content to match the original visual structure with proper indentation, spacing, and formatting. You excel at detecting document types and choosing the appropriate output format.'
           }
         ],
         agent_sequence: ['Document Formatter']
