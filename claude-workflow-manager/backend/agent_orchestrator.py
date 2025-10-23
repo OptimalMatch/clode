@@ -416,18 +416,31 @@ class MultiAgentOrchestrator:
 
                     if subtype == "init":
                         print("   📋 Init message received - checking MCP server status", flush=True)
-                        # Check MCP server status
+
+                        # Check the 'data' attribute - this likely contains MCP server info
+                        data = getattr(msg, 'data', None)
+                        print(f"   SystemMessage.data type: {type(data)}", flush=True)
+                        if data:
+                            if isinstance(data, dict):
+                                print(f"   SystemMessage.data keys: {list(data.keys())}", flush=True)
+                                print(f"   SystemMessage.data content: {str(data)[:500]}", flush=True)
+                            else:
+                                print(f"   SystemMessage.data: {str(data)[:500]}", flush=True)
+
+                        # Check MCP server status (try both mcp_servers and data)
                         mcp_servers = getattr(msg, 'mcp_servers', [])
+                        if not mcp_servers and data and isinstance(data, dict):
+                            mcp_servers = data.get('mcp_servers', [])
+
                         print(f"   Found {len(mcp_servers)} MCP server status entries", flush=True)
 
                         if len(mcp_servers) == 0:
                             # DEBUG: Check if servers are in a different attribute
                             print(f"   ⚠️ WARNING: No MCP servers found in init message!", flush=True)
-                            print(f"   Available attributes: {[k for k in msg.__dict__.keys() if not k.startswith('_')]}", flush=True)
 
                         for mcp in mcp_servers:
-                            status = getattr(mcp, 'status', 'unknown')
-                            name = getattr(mcp, 'name', 'unknown')
+                            status = getattr(mcp, 'status', 'unknown') if hasattr(mcp, 'status') else mcp.get('status', 'unknown')
+                            name = getattr(mcp, 'name', 'unknown') if hasattr(mcp, 'name') else mcp.get('name', 'unknown')
                             print(f"   ✅ MCP Server '{name}': {status}", flush=True)
                             if status != "connected":
                                 logger.warning(f"⚠️ MCP Server '{name}' failed to connect: {status}")
