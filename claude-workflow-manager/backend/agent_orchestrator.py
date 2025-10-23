@@ -339,49 +339,60 @@ class MultiAgentOrchestrator:
             tool_calls_seen = []
             
             # Create ClaudeAgentOptions with MCP server configuration
+            mcp_servers_config = {
+                "workflow-manager": {
+                    "type": "http",
+                    "url": "http://claude-workflow-mcp:8003/mcp",
+                    "headers": {}
+                },
+                "image-processing": {
+                    "type": "http",
+                    "url": "http://image-mcp-server-http:8002/mcp",
+                    "headers": {}
+                },
+                "voice-interaction": {
+                    "type": "http",
+                    "url": "http://voice-mcp-server-http:8001/mcp",
+                    "headers": {}
+                }
+            }
+
+            allowed_tools_list = [
+                # Workflow Manager tools
+                "mcp__workflow-manager__editor_browse_directory",
+                "mcp__workflow-manager__editor_read_file",
+                "mcp__workflow-manager__editor_create_change",
+                "mcp__workflow-manager__editor_get_changes",
+                "mcp__workflow-manager__editor_search_files",
+                # Image Processing tools
+                "mcp__image-processing__extract_text_from_image",
+                "mcp__image-processing__extract_text_from_url",
+                "mcp__image-processing__extract_text_from_pdf",
+                "mcp__image-processing__check_image_api_health",
+                # Voice Interaction tools
+                "mcp__voice-interaction__transcribe_audio",
+                "mcp__voice-interaction__synthesize_speech",
+                "mcp__voice-interaction__voice_conversation",
+                "mcp__voice-interaction__check_voice_api_health"
+            ]
+
+            logger.info(f"🔧 Configuring agent '{agent.name}' with {len(mcp_servers_config)} MCP servers")
+            logger.info(f"   MCP Servers: {list(mcp_servers_config.keys())}")
+            logger.info(f"   Allowed Tools ({len(allowed_tools_list)}): {allowed_tools_list[:3]}...")
+
             options = ClaudeAgentOptions(
                 system_prompt=agent.system_prompt,
                 cwd=self.cwd or "/tmp",
                 permission_mode='bypassPermissions',
-                mcp_servers={
-                    "workflow-manager": {
-                        "type": "http",
-                        "url": "http://claude-workflow-mcp:8003/mcp",
-                        "headers": {}
-                    },
-                    "image-processing": {
-                        "type": "http",
-                        "url": "http://image-mcp-server-http:8002/mcp",
-                        "headers": {}
-                    },
-                    "voice-interaction": {
-                        "type": "http",
-                        "url": "http://voice-mcp-server-http:8001/mcp",
-                        "headers": {}
-                    }
-                },
-                allowed_tools=[
-                    # Workflow Manager tools
-                    "mcp__workflow-manager__editor_browse_directory",
-                    "mcp__workflow-manager__editor_read_file",
-                    "mcp__workflow-manager__editor_create_change",
-                    "mcp__workflow-manager__editor_get_changes",
-                    "mcp__workflow-manager__editor_search_files",
-                    # Image Processing tools
-                    "mcp__image-processing__extract_text_from_image",
-                    "mcp__image-processing__extract_text_from_url",
-                    "mcp__image-processing__extract_text_from_pdf",
-                    "mcp__image-processing__check_image_api_health",
-                    # Voice Interaction tools
-                    "mcp__voice-interaction__transcribe_audio",
-                    "mcp__voice-interaction__synthesize_speech",
-                    "mcp__voice-interaction__voice_conversation",
-                    "mcp__voice-interaction__check_voice_api_health"
-                ],
+                mcp_servers=mcp_servers_config,
+                allowed_tools=allowed_tools_list,
                 max_turns=10
             )
             
             # Use query() with HTTP MCP server configuration
+            logger.info(f"🚀 Starting agent execution for '{agent.name}'")
+            logger.info(f"   Task: {task[:100]}..." if len(task) > 100 else f"   Task: {task}")
+
             async for msg in query(
                 prompt=generate_prompt(),
                 options=options
@@ -390,23 +401,32 @@ class MultiAgentOrchestrator:
                 # Check message type using hasattr and getattr
                 msg_type = getattr(msg, 'type', None)
                 msg_class = msg.__class__.__name__
-                
-                # Debug: Log ALL message types to understand SDK behavior
-                logger.debug(f"📨 SDK Message: type={msg_type}, class={msg_class}")
+
+                # Log ALL message types at INFO level to understand SDK behavior
+                logger.info(f"📨 SDK Message: type={msg_type}, class={msg_class}")
                 
                 if msg_type == "system":
                     # System message (e.g., init, MCP status)
                     subtype = getattr(msg, 'subtype', None)
+                    logger.info(f"   System message subtype: {subtype}")
+
                     if subtype == "init":
+                        logger.info("   📋 Init message received - checking MCP server status")
                         # Check MCP server status
                         mcp_servers = getattr(msg, 'mcp_servers', [])
+                        logger.info(f"   Found {len(mcp_servers)} MCP server status entries")
+
                         for mcp in mcp_servers:
                             status = getattr(mcp, 'status', 'unknown')
                             name = getattr(mcp, 'name', 'unknown')
                             print(f"   MCP Server '{name}': {status}")
-                            logger.info(f"   MCP Server '{name}': {status}")
+                            logger.info(f"   ✅ MCP Server '{name}': {status}")
                             if status != "connected":
                                 logger.warning(f"⚠️ MCP Server '{name}' failed to connect: {status}")
+                    else:
+                        # Log all system message content for debugging
+                        msg_dict = {k: str(v)[:200] for k, v in msg.__dict__.items() if not k.startswith('_')}
+                        logger.info(f"   System message content: {msg_dict}")
                 
                 elif isinstance(msg, AssistantMessage):
                     # Extract text from assistant messages
