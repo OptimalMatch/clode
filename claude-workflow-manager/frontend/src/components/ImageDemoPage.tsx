@@ -99,8 +99,13 @@ const ImageDemoPage: React.FC = () => {
       // Convert image to base64 (remove data URL prefix)
       const base64Image = state.imagePreview.split(',')[1];
 
+      // VALIDATION: Log base64 length
+      console.log('[ImageDemo] Step 1: Base64 length before sending:', base64Image.length, 'chars');
+      console.log('[ImageDemo] Step 1: Base64 preview:', base64Image.substring(0, 50) + '...');
+
       // Create task with image data
       const task = `image_data: ${base64Image}`;
+      console.log('[ImageDemo] Step 1: Task length:', task.length, 'chars');
 
       // Define agents for document processing
       const agents: OrchestrationAgent[] = [

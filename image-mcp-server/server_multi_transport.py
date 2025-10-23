@@ -215,6 +215,11 @@ async def handle_extract_text_image(arguments: dict) -> Sequence[TextContent]:
     image_data = arguments.get("image_data")
     language_hints = arguments.get("language_hints")
 
+    # VALIDATION: Log image_data length received by MCP server
+    if image_data:
+        logger.info(f"[VALIDATION] Step 3: MCP server received image_data length: {len(image_data)} chars")
+        logger.info(f"[VALIDATION] Step 3: Image data preview: {image_data[:50]}...")
+
     if not image_data:
         return [TextContent(
             type="text",

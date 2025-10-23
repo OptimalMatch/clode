@@ -1195,6 +1195,13 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
         print(f"🚀 sequential_pipeline_stream CALLED with {len(agent_sequence)} agents")
         print(f"   Agent sequence: {agent_sequence}")
         print(f"   Task: {task[:100]}...")
+        # VALIDATION: Log full task length
+        print(f"   [VALIDATION] Step 2: Task length received: {len(task)} chars", flush=True)
+        if "image_data:" in task:
+            image_data_start = task.find("image_data:") + len("image_data:")
+            image_data = task[image_data_start:].strip()
+            print(f"   [VALIDATION] Step 2: Extracted image_data length: {len(image_data)} chars", flush=True)
+            print(f"   [VALIDATION] Step 2: Image data preview: {image_data[:50]}...", flush=True)
         logger.info(f"Starting STREAMING SEQUENTIAL PIPELINE with {len(agent_sequence)} agents")
         
         results = {}
