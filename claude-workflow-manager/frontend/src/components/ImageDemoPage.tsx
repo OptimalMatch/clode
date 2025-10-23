@@ -173,7 +173,8 @@ ${extractedText}
 
       console.log('[ImageDemo] Agent Response:', agentResponse);
 
-      const formattedText = agentResponse.result || '';
+      // Extract the final_result from the nested result object
+      const formattedText = agentResponse.result?.final_result || agentResponse.result || '';
 
       setState(prev => ({
         ...prev,
