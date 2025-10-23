@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import api, { orchestrationApi, StreamEvent, OrchestrationAgent } from '../services/api';
 import ReactMarkdown from 'react-markdown';
+import mermaid from 'mermaid';
 
 interface ImageProcessingState {
   status: 'idle' | 'uploading' | 'extracting' | 'analyzing' | 'formatting' | 'completed' | 'error';
@@ -37,6 +38,39 @@ interface ImageProcessingState {
   error?: string;
   executionId?: string;
 }
+
+// Mermaid component for rendering diagrams
+const MermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      // Initialize mermaid with configuration
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        securityLevel: 'loose',
+      });
+
+      // Generate a unique ID for this diagram
+      const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+
+      // Render the diagram
+      mermaid.render(id, chart).then(({ svg }) => {
+        if (containerRef.current) {
+          containerRef.current.innerHTML = svg;
+        }
+      }).catch((error) => {
+        console.error('Mermaid rendering error:', error);
+        if (containerRef.current) {
+          containerRef.current.innerHTML = `<pre style="color: #ff6b6b;">Error rendering diagram: ${error.message}</pre>`;
+        }
+      });
+    }
+  }, [chart]);
+
+  return <div ref={containerRef} style={{ textAlign: 'center', padding: '20px' }} />;
+};
 
 const ImageDemoPage: React.FC = () => {
   const [state, setState] = useState<ImageProcessingState>({ status: 'idle' });
@@ -427,7 +461,40 @@ ${extractedText}
                     '& p': { mb: 1 },
                   }}
                 >
-                  <ReactMarkdown>{state.formattedReport}</ReactMarkdown>
+                  <ReactMarkdown
+                    components={{
+                      code({ node, inline, className, children, ...props }) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        const language = match ? match[1] : '';
+                        const codeContent = String(children).replace(/\n$/, '');
+
+                        // Render Mermaid diagrams
+                        if (language === 'mermaid' && !inline) {
+                          return <MermaidDiagram chart={codeContent} />;
+                        }
+
+                        // Default code block rendering
+                        return !inline ? (
+                          <pre style={{
+                            backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                            padding: '16px',
+                            borderRadius: '8px',
+                            overflow: 'auto'
+                          }}>
+                            <code className={className} {...props}>
+                              {children}
+                            </code>
+                          </pre>
+                        ) : (
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        );
+                      }
+                    }}
+                  >
+                    {state.formattedReport}
+                  </ReactMarkdown>
                 </Box>
               </CardContent>
             </Card>
