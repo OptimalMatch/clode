@@ -459,9 +459,20 @@ class OrchestrationAgent(BaseModel):
     role: AgentRole = AgentRole.WORKER
     use_tools: Optional[bool] = None  # None = auto-detect from system prompt
 
+class ImageContent(BaseModel):
+    """Image content block"""
+    type: str = "image"
+    source: Dict[str, str]  # {type: "base64", media_type: "image/png", data: "<base64>"}
+
+class TextContent(BaseModel):
+    """Text content block"""
+    type: str = "text"
+    text: str
+
 class SequentialPipelineRequest(BaseModel):
     """Request for sequential pipeline execution"""
-    task: str
+    task: Optional[str] = None  # Backward compatibility: simple text task
+    task_content: Optional[List[Dict[str, Any]]] = None  # New: multi-modal content blocks
     agents: List[OrchestrationAgent]
     agent_sequence: List[str]  # Order of agent names
     model: Optional[str] = None

@@ -98,33 +98,41 @@ const ImageDemoPage: React.FC = () => {
     try {
       // Convert image to base64 (remove data URL prefix)
       const base64Image = state.imagePreview.split(',')[1];
+      const mediaType = state.imageFile.type; // e.g., "image/png", "image/jpeg"
 
       // VALIDATION: Log base64 length
       console.log('[ImageDemo] Step 1: Base64 length before sending:', base64Image.length, 'chars');
+      console.log('[ImageDemo] Step 1: Media type:', mediaType);
       console.log('[ImageDemo] Step 1: Base64 preview:', base64Image.substring(0, 50) + '...');
 
-      // Create task with image data
-      const task = `image_data: ${base64Image}`;
-      console.log('[ImageDemo] Step 1: Task length:', task.length, 'chars');
+      // Create multi-modal task content with image block
+      const taskContent = [
+        {
+          type: 'text',
+          text: 'Extract text from this image using OCR. You can see the image below. Call the mcp__image-processing__extract_text_from_image tool to extract text from it.'
+        },
+        {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mediaType,
+            data: base64Image
+          }
+        }
+      ];
+      console.log('[ImageDemo] Step 1: Task content blocks:', taskContent.length);
 
       // Define agents for document processing
       const agents: OrchestrationAgent[] = [
         {
           name: 'Image Analyzer',
-          system_prompt: `You are an OCR agent. When you receive a task with image_data, you must call the mcp__image-processing__extract_text_from_image tool.
+          system_prompt: `You are an Image Analyzer agent. You will receive an image that you can see visually. Your job is to call the mcp__image-processing__extract_text_from_image tool to extract text from the image using OCR.
 
-TASK FORMAT:
-The task contains: "image_data: <base64_string>"
-
-YOUR ONLY ACTION:
-1. Extract the ENTIRE base64 string after "image_data: "
-2. Call mcp__image-processing__extract_text_from_image with the COMPLETE base64 string
-3. Return the extracted text from the tool result
-
-CRITICAL:
-- Use the ENTIRE base64 string (100,000+ chars is normal)
-- DO NOT output the base64 data in your text response
-- Call the tool, then return only the extracted text result`,
+IMPORTANT:
+- You can SEE the image - it's provided as an image content block
+- Call the tool immediately to extract text
+- The tool expects the base64 image data from the image block you received
+- DO NOT try to output the image data as text`,
           role: 'specialist'
         },
         {
@@ -177,7 +185,7 @@ FORMATTING GUIDELINES:
 
       await orchestrationApi.executeSequentialStream(
         {
-          task: task,
+          task_content: taskContent,
           agents: agents,
           agent_sequence: agents.map(a => a.name),
         },

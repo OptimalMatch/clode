@@ -4598,9 +4598,14 @@ async def execute_sequential_pipeline_stream(
             async def execute_orchestration():
                 try:
                     print(f"🎬 execute_orchestration STARTING")
-                    print(f"   Task: {request.task[:100]}...")
+                    # Use task_content if provided (multi-modal), otherwise fall back to task (legacy)
+                    task_input = request.task_content if request.task_content else request.task
+                    if isinstance(task_input, list):
+                        print(f"   Task (multi-modal): {len(task_input)} content blocks")
+                    else:
+                        print(f"   Task: {task_input[:100] if task_input else 'None'}...")
                     print(f"   Agent sequence: {request.agent_sequence}")
-                    result = await orchestrator.sequential_pipeline_stream(request.task, request.agent_sequence, stream_callback)
+                    result = await orchestrator.sequential_pipeline_stream(task_input, request.agent_sequence, stream_callback)
                     print(f"🏁 execute_orchestration COMPLETE")
                     await event_queue.put({'type': '__complete__', 'result': result})
                 except Exception as e:

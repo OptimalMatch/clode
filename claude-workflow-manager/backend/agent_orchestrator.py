@@ -6,7 +6,7 @@ Uses Claude Agent SDK for Max Plan compatibility
 
 from claude_agent_sdk import query, ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock, SystemMessage, UserMessage, ResultMessage
 import anthropic
-from typing import List, Dict, Optional, Callable, Any, AsyncIterator, Awaitable
+from typing import List, Dict, Optional, Callable, Any, AsyncIterator, Awaitable, Union
 import json
 from datetime import datetime
 from enum import Enum
@@ -276,13 +276,28 @@ class MultiAgentOrchestrator:
             logger.error(f"Error calling Claude (streaming) for agent {agent.name}: {e}", exc_info=True)
             raise Exception(f"Agent {agent.name} failed: {str(e)}")
     
-    async def _call_claude_with_tools(self, agent: Agent, message: str, context: Optional[str] = None,
+    async def _call_claude_with_tools(self, agent: Agent, message: Union[str, List[Dict[str, Any]]], context: Optional[str] = None,
                                       stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
-        """Call Claude via Agent SDK query() with HTTP MCP server"""
-        full_message = message
-        if context:
-            full_message = f"Context:\n{context}\n\nTask:\n{message}"
-        
+        """Call Claude via Agent SDK query() with HTTP MCP server
+
+        Args:
+            message: Either a string (legacy) or list of content blocks (multi-modal)
+        """
+        # Handle multi-modal vs text content
+        if isinstance(message, str):
+            # Legacy string message
+            full_message = message
+            if context:
+                full_message = f"Context:\n{context}\n\nTask:\n{message}"
+            message_content = full_message
+        else:
+            # Multi-modal content blocks
+            if context:
+                # Prepend context as a text block
+                message_content = [{"type": "text", "text": f"Context:\n{context}"}] + message
+            else:
+                message_content = message
+
         try:
             # Set API key in environment for Claude CLI to use
             api_key = await self._get_api_key()
@@ -331,7 +346,7 @@ class MultiAgentOrchestrator:
                     "type": "user",
                     "message": {
                         "role": "user",
-                        "content": full_message
+                        "content": message_content  # Can be string or list of content blocks
                     }
                 }
             
@@ -565,18 +580,23 @@ class MultiAgentOrchestrator:
             logger.info(f"Agent {agent.name}: Using Anthropic SDK (token streaming)")
             return await self._call_claude_streaming(agent, message, context, stream_callback)
     
-    async def send_message(self, from_agent: str, to_agent: str, message: str, 
+    async def send_message(self, from_agent: str, to_agent: str, message: Union[str, List[Dict[str, Any]]],
                           message_type: MessageType = MessageType.TASK,
                           stream_callback: Optional[Callable[[str, str], None]] = None) -> str:
-        """Send a message from one agent to another"""
+        """Send a message from one agent to another
+
+        Args:
+            message: Either a string (legacy) or list of content blocks (multi-modal)
+        """
         if to_agent not in self.agents:
             raise ValueError(f"Agent {to_agent} not found")
-        
-        # Log message
-        msg = Message(from_agent, to_agent, message, message_type)
+
+        # Log message (convert to string for logging if multi-modal)
+        message_str = message if isinstance(message, str) else f"<multi-modal content with {len(message)} blocks>"
+        msg = Message(from_agent, to_agent, message_str, message_type)
         self.message_log.append(msg)
         self.shared_memory.append(msg.to_dict())
-        
+
         # Get response from target agent
         target = self.agents[to_agent]
         # For sequential pipeline, make it clear this is input content
@@ -585,11 +605,11 @@ class MultiAgentOrchestrator:
         else:
             context = f"The following is output from the previous agent ({from_agent}). This is your input content to work with:"
         response = await self._call_claude(target, message, context, stream_callback)
-        
+
         # Log response
         response_msg = Message(to_agent, from_agent, response, MessageType.RESPONSE)
         self.message_log.append(response_msg)
-        
+
         return response
     
     # PATTERN 1: SEQUENTIAL PIPELINE
@@ -1189,21 +1209,37 @@ Format as JSON: {{"selected_agents": ["agent1", "agent2"], "reasoning": "why"}}"
         }
     
     # STREAMING VERSIONS OF PATTERNS
-    async def sequential_pipeline_stream(self, task: str, agent_sequence: List[str],
+    async def sequential_pipeline_stream(self, task: Union[str, List[Dict[str, Any]]], agent_sequence: List[str],
                                         stream_callback: Callable[[str, str, str], None]) -> Dict[str, Any]:
-        """Sequential pipeline with streaming support"""
+        """Sequential pipeline with streaming support
+
+        Args:
+            task: Either a string (legacy) or list of content blocks (multi-modal)
+            agent_sequence: List of agent names to execute in order
+            stream_callback: Callback for streaming output
+        """
         print(f"🚀 sequential_pipeline_stream CALLED with {len(agent_sequence)} agents")
         print(f"   Agent sequence: {agent_sequence}")
-        print(f"   Task: {task[:100]}...")
-        # VALIDATION: Log full task length
-        print(f"   [VALIDATION] Step 2: Task length received: {len(task)} chars", flush=True)
-        if "image_data:" in task:
-            image_data_start = task.find("image_data:") + len("image_data:")
-            image_data = task[image_data_start:].strip()
-            print(f"   [VALIDATION] Step 2: Extracted image_data length: {len(image_data)} chars", flush=True)
-            print(f"   [VALIDATION] Step 2: Image data preview: {image_data[:50]}...", flush=True)
+
+        # Handle both string and content block formats
+        if isinstance(task, str):
+            print(f"   Task (string): {task[:100]}...")
+            print(f"   [VALIDATION] Step 2: Task length received: {len(task)} chars", flush=True)
+            if "image_data:" in task:
+                image_data_start = task.find("image_data:") + len("image_data:")
+                image_data = task[image_data_start:].strip()
+                print(f"   [VALIDATION] Step 2: Extracted image_data length: {len(image_data)} chars", flush=True)
+                print(f"   [VALIDATION] Step 2: Image data preview: {image_data[:50]}...", flush=True)
+        else:
+            print(f"   Task (multi-modal): {len(task)} content blocks")
+            for i, block in enumerate(task):
+                if block.get('type') == 'image':
+                    print(f"   - Block {i}: image ({block.get('source', {}).get('media_type', 'unknown')})")
+                elif block.get('type') == 'text':
+                    print(f"   - Block {i}: text ({len(block.get('text', ''))} chars)")
+
         logger.info(f"Starting STREAMING SEQUENTIAL PIPELINE with {len(agent_sequence)} agents")
-        
+
         results = {}
         current_input = task
         steps = []
