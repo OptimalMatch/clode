@@ -410,11 +410,20 @@ class MultiAgentOrchestrator:
                     subtype = getattr(msg, 'subtype', None)
                     print(f"   System message subtype: {subtype}", flush=True)
 
+                    # DEBUG: Log ALL attributes to understand structure
+                    msg_attrs = [attr for attr in dir(msg) if not attr.startswith('_')]
+                    print(f"   SystemMessage attributes: {msg_attrs[:10]}...", flush=True)
+
                     if subtype == "init":
                         print("   📋 Init message received - checking MCP server status", flush=True)
                         # Check MCP server status
                         mcp_servers = getattr(msg, 'mcp_servers', [])
                         print(f"   Found {len(mcp_servers)} MCP server status entries", flush=True)
+
+                        if len(mcp_servers) == 0:
+                            # DEBUG: Check if servers are in a different attribute
+                            print(f"   ⚠️ WARNING: No MCP servers found in init message!", flush=True)
+                            print(f"   Available attributes: {[k for k in msg.__dict__.keys() if not k.startswith('_')]}", flush=True)
 
                         for mcp in mcp_servers:
                             status = getattr(mcp, 'status', 'unknown')
@@ -452,17 +461,14 @@ class MultiAgentOrchestrator:
                         else:
                             # Log unknown block types for investigation
                             logger.debug(f"  ❓ Unknown block type: {block_type} ({block_class})")
-                
-                elif msg_type == "tool_use" or msg_class == "ToolUseMessage":
-                    # Some SDKs send tool use as separate messages
-                    tool_name = getattr(msg, 'name', getattr(msg, 'tool_name', 'unknown'))
-                    tool_input = getattr(msg, 'input', getattr(msg, 'arguments', {}))
-                    tool_calls_seen.append(tool_name)
-                    print(f"🔨 Agent {agent.name} called tool: {tool_name}")
-                    logger.info(f"🔨 Agent {agent.name} called tool: {tool_name}")
-                    logger.info(f"   Args: {tool_input}")
-                
-                elif msg_type == "result":
+
+                elif isinstance(msg, UserMessage):
+                    # UserMessage typically contains tool results or user input
+                    # No action needed for now, just continue
+                    pass
+
+                elif isinstance(msg, ResultMessage):
+                    # ResultMessage contains the final result
                     # Final result
                     subtype = getattr(msg, 'subtype', None)
                     if subtype == "success":
