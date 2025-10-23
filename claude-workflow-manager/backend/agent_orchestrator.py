@@ -376,9 +376,10 @@ class MultiAgentOrchestrator:
                 "mcp__voice-interaction__check_voice_api_health"
             ]
 
-            logger.info(f"🔧 Configuring agent '{agent.name}' with {len(mcp_servers_config)} MCP servers")
-            logger.info(f"   MCP Servers: {list(mcp_servers_config.keys())}")
-            logger.info(f"   Allowed Tools ({len(allowed_tools_list)}): {allowed_tools_list[:3]}...")
+            print(f"🔧 Configuring agent '{agent.name}' with {len(mcp_servers_config)} MCP servers")
+            print(f"   MCP Servers: {list(mcp_servers_config.keys())}")
+            print(f"   Allowed Tools ({len(allowed_tools_list)}): {allowed_tools_list[:3]}...")
+            logger.warning(f"🔧 Configuring agent '{agent.name}' with {len(mcp_servers_config)} MCP servers")
 
             options = ClaudeAgentOptions(
                 system_prompt=agent.system_prompt,
@@ -390,8 +391,8 @@ class MultiAgentOrchestrator:
             )
             
             # Use query() with HTTP MCP server configuration
-            logger.info(f"🚀 Starting agent execution for '{agent.name}'")
-            logger.info(f"   Message: {full_message[:100]}..." if len(full_message) > 100 else f"   Message: {full_message}")
+            print(f"🚀 Starting agent execution for '{agent.name}'")
+            print(f"   Message: {full_message[:100]}..." if len(full_message) > 100 else f"   Message: {full_message}")
 
             async for msg in query(
                 prompt=generate_prompt(),
@@ -402,31 +403,30 @@ class MultiAgentOrchestrator:
                 msg_type = getattr(msg, 'type', None)
                 msg_class = msg.__class__.__name__
 
-                # Log ALL message types at INFO level to understand SDK behavior
-                logger.info(f"📨 SDK Message: type={msg_type}, class={msg_class}")
+                # Log ALL message types to understand SDK behavior
+                print(f"📨 SDK Message: type={msg_type}, class={msg_class}")
                 
                 if msg_type == "system":
                     # System message (e.g., init, MCP status)
                     subtype = getattr(msg, 'subtype', None)
-                    logger.info(f"   System message subtype: {subtype}")
+                    print(f"   System message subtype: {subtype}")
 
                     if subtype == "init":
-                        logger.info("   📋 Init message received - checking MCP server status")
+                        print("   📋 Init message received - checking MCP server status")
                         # Check MCP server status
                         mcp_servers = getattr(msg, 'mcp_servers', [])
-                        logger.info(f"   Found {len(mcp_servers)} MCP server status entries")
+                        print(f"   Found {len(mcp_servers)} MCP server status entries")
 
                         for mcp in mcp_servers:
                             status = getattr(mcp, 'status', 'unknown')
                             name = getattr(mcp, 'name', 'unknown')
-                            print(f"   MCP Server '{name}': {status}")
-                            logger.info(f"   ✅ MCP Server '{name}': {status}")
+                            print(f"   ✅ MCP Server '{name}': {status}")
                             if status != "connected":
                                 logger.warning(f"⚠️ MCP Server '{name}' failed to connect: {status}")
                     else:
                         # Log all system message content for debugging
                         msg_dict = {k: str(v)[:200] for k, v in msg.__dict__.items() if not k.startswith('_')}
-                        logger.info(f"   System message content: {msg_dict}")
+                        print(f"   System message content: {msg_dict}")
                 
                 elif isinstance(msg, AssistantMessage):
                     # Extract text from assistant messages
