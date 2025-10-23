@@ -1479,55 +1479,26 @@ Your output completes the voice conversation loop: Listen → Think → Speak"""
                         {
                             "id": "agent-1",
                             "name": "Image Analyzer",
-                            "system_prompt": """You are an Image Analyzer agent. Your job is to extract text from images using OCR.
+                            "system_prompt": """You are an OCR agent. When you receive a task with image_data, image_url, or pdf_data, you must call the appropriate tool.
 
-CRITICAL INSTRUCTIONS:
-======================
-1. The task contains "image_data: <very_long_base64_string>"
-2. Extract the COMPLETE base64 string from the task
-3. IMMEDIATELY call the tool - DO NOT echo or repeat the base64 data in your response
-4. Keep your text output brief - only describe the action, not the data
+AVAILABLE TOOLS:
+- mcp__image-processing__extract_text_from_image (for base64 image data)
+- mcp__image-processing__extract_text_from_url (for image URLs)
+- mcp__image-processing__extract_text_from_pdf (for PDF data)
 
-CRITICAL TOOL USAGE:
-====================
-You have access to the image-processing MCP server with these tools:
-- mcp__image-processing__extract_text_from_image
-- mcp__image-processing__extract_text_from_url
-- mcp__image-processing__extract_text_from_pdf
-- mcp__image-processing__check_image_api_health
+TASK FORMAT:
+The task may contain: "image_data: <base64_string>" OR "image_url: <url>" OR "pdf_data: <base64_string>"
 
-YOUR PRIMARY TASK:
-==================
-Step 1: Find the image_data in the task (starts with "image_data: ")
-Step 2: Extract the ENTIRE base64 string after "image_data: "
-Step 3: Call the tool with the COMPLETE string
+YOUR ONLY ACTION:
+1. Identify which data type is provided
+2. Extract the ENTIRE data string (for base64, this is 100,000+ chars - use it all)
+3. Call the appropriate tool with the COMPLETE data
+4. Return the extracted text from the tool result
 
-Tool to call: mcp__image-processing__extract_text_from_image
-Tool arguments: {
-  "image_data": "<PUT_FULL_BASE64_STRING_HERE>",
-  "language_hints": ["en"]
-}
-
-WORKFLOW:
-=========
-1. Check if image_data, image_url, or pdf_data is provided in the task
-2. Select the appropriate tool:
-   - extract_text_from_image for base64 images (use COMPLETE base64 string)
-   - extract_text_from_url for URLs
-   - extract_text_from_pdf for PDF documents
-3. Call the tool with the provided data
-4. Return the extracted text with confidence scores
-5. If no data provided, explain what you're waiting for
-
-CRITICAL RULES:
-===============
-✅ DO: Call the tool with the complete base64 string
-✅ DO: Keep your text response brief (e.g., "Extracting text from image...")
-❌ DO NOT: Repeat or echo the base64 data in your text response
-❌ DO NOT: Truncate the image_data - use the entire string (100,000+ chars is normal)
-❌ DO NOT: Try to describe the image data - just call the tool
-
-After calling the tool, summarize the extracted text result and pass it to the next agent.""",
+CRITICAL:
+- Use the ENTIRE data string (do not truncate)
+- DO NOT output the data in your text response
+- Call the tool, then return only the extracted text result""",
                             "role": "specialist"
                         },
                         {

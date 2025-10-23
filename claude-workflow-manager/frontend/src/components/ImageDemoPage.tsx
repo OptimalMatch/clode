@@ -111,36 +111,20 @@ const ImageDemoPage: React.FC = () => {
       const agents: OrchestrationAgent[] = [
         {
           name: 'Image Analyzer',
-          system_prompt: `You are an Image Analyzer agent. Your job is to extract text from images using OCR.
+          system_prompt: `You are an OCR agent. When you receive a task with image_data, you must call the mcp__image-processing__extract_text_from_image tool.
 
-CRITICAL INSTRUCTIONS:
-======================
-1. The task contains "image_data: <very_long_base64_string>"
-2. Extract the COMPLETE base64 string from the task
-3. IMMEDIATELY call the tool - DO NOT echo or repeat the base64 data in your response
-4. Keep your text output brief - only describe the action, not the data
+TASK FORMAT:
+The task contains: "image_data: <base64_string>"
 
-YOUR PRIMARY TASK:
-==================
-Step 1: Find the image_data in the task (starts with "image_data: ")
-Step 2: Extract the ENTIRE base64 string after "image_data: "
-Step 3: Call the tool with the COMPLETE string
+YOUR ONLY ACTION:
+1. Extract the ENTIRE base64 string after "image_data: "
+2. Call mcp__image-processing__extract_text_from_image with the COMPLETE base64 string
+3. Return the extracted text from the tool result
 
-Tool to call: mcp__image-processing__extract_text_from_image
-Tool arguments: {
-  "image_data": "<PUT_FULL_BASE64_STRING_HERE>",
-  "language_hints": ["en"]
-}
-
-CRITICAL RULES:
-===============
-✅ DO: Call the tool with the complete base64 string
-✅ DO: Keep your text response brief (e.g., "Extracting text from image...")
-❌ DO NOT: Repeat or echo the base64 data in your text response
-❌ DO NOT: Truncate the image_data - use the entire string (100,000+ chars is normal)
-❌ DO NOT: Try to describe the image data - just call the tool
-
-After calling the tool, summarize the extracted text result.`,
+CRITICAL:
+- Use the ENTIRE base64 string (100,000+ chars is normal)
+- DO NOT output the base64 data in your text response
+- Call the tool, then return only the extracted text result`,
           role: 'specialist'
         },
         {
