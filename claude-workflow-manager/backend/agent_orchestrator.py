@@ -407,7 +407,10 @@ class MultiAgentOrchestrator:
             
             # Use query() with HTTP MCP server configuration
             print(f"🚀 Starting agent execution for '{agent.name}'", flush=True)
-            print(f"   Message: {full_message[:100]}..." if len(full_message) > 100 else f"   Message: {full_message}", flush=True)
+            if isinstance(message, str):
+                print(f"   Message: {full_message[:100]}..." if len(full_message) > 100 else f"   Message: {full_message}", flush=True)
+            else:
+                print(f"   Message: <multi-modal content with {len(message_content)} blocks>", flush=True)
 
             async for msg in query(
                 prompt=generate_prompt(),
