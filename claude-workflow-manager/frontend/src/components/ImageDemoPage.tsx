@@ -171,9 +171,9 @@ ${extractedText}
         agent_sequence: ['Document Formatter']
       });
 
-      console.log('[ImageDemo] Agent Response:', agentResponse.data);
+      console.log('[ImageDemo] Agent Response:', agentResponse);
 
-      const formattedText = agentResponse.data.aggregated_result || agentResponse.data.result || '';
+      const formattedText = agentResponse.aggregated_result || agentResponse.result || '';
 
       setState(prev => ({
         ...prev,
