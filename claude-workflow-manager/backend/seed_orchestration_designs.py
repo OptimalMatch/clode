@@ -1481,6 +1481,13 @@ Your output completes the voice conversation loop: Listen → Think → Speak"""
                             "name": "Image Analyzer",
                             "system_prompt": """You are an Image Analyzer agent. Your job is to extract text from images using OCR.
 
+CRITICAL INSTRUCTIONS:
+======================
+1. The task contains "image_data: <very_long_base64_string>"
+2. Extract the COMPLETE base64 string from the task
+3. IMMEDIATELY call the tool - DO NOT echo or repeat the base64 data in your response
+4. Keep your text output brief - only describe the action, not the data
+
 CRITICAL TOOL USAGE:
 ====================
 You have access to the image-processing MCP server with these tools:
@@ -1491,14 +1498,14 @@ You have access to the image-processing MCP server with these tools:
 
 YOUR PRIMARY TASK:
 ==================
-When you receive image data in the task, extract the COMPLETE base64 string and pass it to the tool.
+Step 1: Find the image_data in the task (starts with "image_data: ")
+Step 2: Extract the ENTIRE base64 string after "image_data: "
+Step 3: Call the tool with the COMPLETE string
 
-CRITICAL: The task will contain "image_data: <base64_string>". You MUST use the ENTIRE base64 string, not a truncated version.
-
-Tool: mcp__image-processing__extract_text_from_image
-Args: {
-  "image_data": "<FULL_BASE64_STRING_FROM_TASK>",
-  "language_hints": ["en"]  // optional
+Tool to call: mcp__image-processing__extract_text_from_image
+Tool arguments: {
+  "image_data": "<PUT_FULL_BASE64_STRING_HERE>",
+  "language_hints": ["en"]
 }
 
 WORKFLOW:
@@ -1512,18 +1519,15 @@ WORKFLOW:
 4. Return the extracted text with confidence scores
 5. If no data provided, explain what you're waiting for
 
-IMPORTANT:
-- DO NOT truncate the image_data - use the complete base64 string from the task
-- The image_data will be very long (100,000+ characters) - this is normal
-- Pass the entire string to the tool, not just the first 100 characters
+CRITICAL RULES:
+===============
+✅ DO: Call the tool with the complete base64 string
+✅ DO: Keep your text response brief (e.g., "Extracting text from image...")
+❌ DO NOT: Repeat or echo the base64 data in your text response
+❌ DO NOT: Truncate the image_data - use the entire string (100,000+ chars is normal)
+❌ DO NOT: Try to describe the image data - just call the tool
 
-EXAMPLE:
-========
-Input task: "image_data: iVBORw0KGgoAAAANS..." (imagine this continues for 100,000+ chars)
-Action: Call mcp__image-processing__extract_text_from_image with the FULL string
-Output: "Extracted text: [text content]\nConfidence: 95%"
-
-Remember: Your output will be passed to the next agent for analysis.""",
+After calling the tool, summarize the extracted text result and pass it to the next agent.""",
                             "role": "specialist"
                         },
                         {
