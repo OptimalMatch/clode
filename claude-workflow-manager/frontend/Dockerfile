@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy package files and install dependencies (this can be cached)
+# Force cache bust for new dependencies: 2025-10-23
 COPY package*.json ./
 RUN npm install
 
