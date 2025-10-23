@@ -38,7 +38,7 @@ from models import (
     DynamicRoutingRequest, OrchestrationResult, OrchestrationDesign,
     Deployment, ExecutionLog, ScheduleConfig, AnthropicApiKey,
     AnthropicApiKeyCreate, AnthropicApiKeyResponse, AnthropicApiKeyListResponse,
-    AnthropicApiKeyTestResponse, UserUsageStats, TokenUsage
+    AnthropicApiKeyTestResponse, UserUsageStats, TokenUsage, OcrExtractRequest
 )
 from claude_manager import ClaudeCodeManager
 from database import Database
@@ -6184,7 +6184,7 @@ async def update_workspace(workspace_id: str, data: dict, user: Optional[User] =
     tags=["OCR"]
 )
 async def extract_text_from_image(
-    image_data: str = Body(..., description="Base64-encoded image data"),
+    request: OcrExtractRequest,
     user: Optional[User] = Depends(get_current_user_or_internal)
 ):
     """Extract text from base64-encoded image using Google Cloud Vision OCR"""
@@ -6195,7 +6195,7 @@ async def extract_text_from_image(
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 "http://image-backend:8001/api/ocr/base64",
-                json={"image_data": image_data}
+                json={"image_data": request.image_data}
             )
             response.raise_for_status()
             result = response.json()

@@ -653,3 +653,7 @@ class UserUsageStats(BaseModel):
     period_start: Optional[datetime] = None  # For time-based filtering
     period_end: Optional[datetime] = None
     token_breakdown: TokenUsage
+
+class OcrExtractRequest(BaseModel):
+    """Request model for OCR text extraction from base64 image"""
+    image_data: str
