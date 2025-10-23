@@ -124,7 +124,7 @@ const ImageDemoPage: React.FC = () => {
       // Step 2: Use agent to reformat text with correct indentation
       console.log('[ImageDemo] Step 2: Analyzing image layout with agent...');
 
-      const agentResponse = await orchestrationApi.executeParallel({
+      const agentResponse = await orchestrationApi.executeSequential({
         task_content: [
           {
             type: 'image',
@@ -167,7 +167,8 @@ ${extractedText}
             role: 'specialist',
             system_prompt: 'You are an expert at analyzing document layouts and reformatting extracted text to match the original visual structure. You pay close attention to indentation, spacing, and formatting.'
           }
-        ]
+        ],
+        agent_sequence: ['Document Formatter']
       });
 
       console.log('[ImageDemo] Agent Response:', agentResponse.data);
