@@ -185,15 +185,35 @@ async def process_image_base64(request: ImageBase64Request):
 
     temp_path = None
     try:
+        # Log incoming data for debugging
+        logger.info(f"Received base64 data length: {len(request.image_data)} chars")
+        logger.info(f"Base64 data starts with: {request.image_data[:50]}...")
+
         # Decode base64 image
         image_bytes = base64.b64decode(request.image_data)
+        logger.info(f"Decoded image bytes length: {len(image_bytes)} bytes")
+
+        # Log image format signature
+        if len(image_bytes) >= 4:
+            signature = image_bytes[:4]
+            logger.info(f"Image signature (first 4 bytes): {signature.hex()}")
+            if signature[:3] == b'\x89PNG':
+                logger.info("Detected PNG format")
+            elif signature[:2] == b'\xff\xd8':
+                logger.info("Detected JPEG format")
+            elif signature == b'GIF8':
+                logger.info("Detected GIF format")
+            else:
+                logger.warning(f"Unknown image format, signature: {signature}")
 
         # Save to temporary file
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.tmp')
         temp_path = temp_file.name
+        logger.info(f"Temporary file path: {temp_path}")
 
         with open(temp_path, 'wb') as f:
-            f.write(image_bytes)
+            bytes_written = f.write(image_bytes)
+        logger.info(f"Wrote {bytes_written} bytes to temporary file")
 
         # Extract text
         result = await vision_handler.extract_text(
