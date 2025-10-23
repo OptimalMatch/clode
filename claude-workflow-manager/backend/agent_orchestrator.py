@@ -451,15 +451,17 @@ class MultiAgentOrchestrator:
 
                 elif isinstance(msg, AssistantMessage):
                     # Extract text from assistant messages
+                    print(f"💬 AssistantMessage with {len(msg.content)} block(s)", flush=True)
                     for block in msg.content:
                         block_type = getattr(block, 'type', None)
                         block_class = block.__class__.__name__
-                        
+
                         # Debug: Log all block types
                         logger.debug(f"  📦 Block: type={block_type}, class={block_class}")
-                        
+
                         if isinstance(block, TextBlock):
                             text = block.text
+                            print(f"   📝 Text: {text[:150]}..." if len(text) > 150 else f"   📝 Text: {text}", flush=True)
                             reply_parts.append(text)
                             if stream_callback:
                                 await stream_callback(agent.name, text)
@@ -468,11 +470,13 @@ class MultiAgentOrchestrator:
                             tool_name = getattr(block, 'name', 'unknown')
                             tool_input = getattr(block, 'input', {})
                             tool_calls_seen.append(tool_name)
-                            print(f"🔨 Agent {agent.name} called tool: {tool_name}")
+                            print(f"🔨 Agent {agent.name} called tool: {tool_name}", flush=True)
+                            print(f"   Args: {str(tool_input)[:200]}", flush=True)
                             logger.info(f"🔨 Agent {agent.name} called tool: {tool_name}")
                             logger.info(f"   Args: {tool_input}")
                         else:
                             # Log unknown block types for investigation
+                            print(f"  ❓ Unknown block type: {block_type} ({block_class})", flush=True)
                             logger.debug(f"  ❓ Unknown block type: {block_type} ({block_class})")
 
                 elif isinstance(msg, UserMessage):
@@ -484,13 +488,27 @@ class MultiAgentOrchestrator:
                     # ResultMessage contains the final result
                     # Final result
                     subtype = getattr(msg, 'subtype', None)
+                    print(f"📊 ResultMessage subtype: {subtype}", flush=True)
+
+                    # Log all attributes to understand structure
+                    msg_attrs = [attr for attr in dir(msg) if not attr.startswith('_')]
+                    print(f"   ResultMessage attributes: {msg_attrs[:15]}...", flush=True)
+
                     if subtype == "success":
                         result_text = getattr(msg, 'result', "")
+                        print(f"✅ Success result: {result_text[:200]}..." if len(str(result_text)) > 200 else f"✅ Success result: {result_text}", flush=True)
                         if result_text and result_text not in reply_parts:
                             reply_parts.append(result_text)
                     elif subtype == "error_during_execution":
                         error = getattr(msg, 'error', 'Unknown error')
+                        print(f"❌ Execution error: {error}", flush=True)
                         logger.error(f"❌ Execution error: {error}")
+                    else:
+                        # Log any other subtype
+                        print(f"   Unexpected ResultMessage subtype: {subtype}", flush=True)
+                        result_data = getattr(msg, 'data', None)
+                        if result_data:
+                            print(f"   ResultMessage.data: {str(result_data)[:300]}", flush=True)
                 
                 else:
                     # Log any unhandled message types
