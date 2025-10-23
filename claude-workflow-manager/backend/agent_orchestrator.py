@@ -292,6 +292,7 @@ class MultiAgentOrchestrator:
             message_content = full_message
         else:
             # Multi-modal content blocks
+            full_message = f"<multi-modal content with {len(message)} blocks>"
             if context:
                 # Prepend context as a text block
                 message_content = [{"type": "text", "text": f"Context:\n{context}"}] + message
