@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import { orchestrationApi, StreamEvent, OrchestrationAgent } from '../services/api';
 import ReactMarkdown from 'react-markdown';
+import axios from 'axios';
 
 interface ImageProcessingState {
   status: 'idle' | 'uploading' | 'extracting' | 'analyzing' | 'formatting' | 'completed' | 'error';
@@ -105,21 +106,17 @@ const ImageDemoPage: React.FC = () => {
 
       // Call OCR API directly
       const token = localStorage.getItem('access_token');
-      const response = await fetch('/api/ocr/extract', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ image_data: base64Image })
-      });
+      const response = await axios.post('/api/ocr/extract',
+        { image_data: base64Image },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'OCR extraction failed');
-      }
-
-      const result = await response.json();
+      const result = response.data;
       console.log('[ImageDemo] OCR Result:', result);
 
       // Extract text from result
